@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "proofs-rs",
+  "compatibility_date": "2026-08-25",
+  "main": "./workers/app.ts",
+  "observability": {
+    "enabled": true
+  },
+  "upload_source_maps": true,
+  "vars": {
+    "APP_ORIGIN": "https://proofs-rs.proofs-rs.workers.dev",
+    "GITHUB_CLIENT_ID": "Ov23li4lPapVzX23fEMj"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "proofs-rs-db",
+      "database_id": "dbd41955-b3d0-4bc3-ac32-701f62bee07f",
+      "migrations_dir": "migrations"
+    }
+  ]
+}

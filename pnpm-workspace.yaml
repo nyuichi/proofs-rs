@@ -1,0 +1,5 @@
+# Native packages used by Vite and the local Cloudflare runtime.
+allowBuilds:
+  esbuild: true
+  sharp: true
+  workerd: true
