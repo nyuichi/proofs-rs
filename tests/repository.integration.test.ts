@@ -108,6 +108,51 @@ describe("D1 publication repository", () => {
     ]);
   });
 
+  it("persists immutable publication labels in publisher order for reads and lists", async () => {
+    const publisher = await upsertPublisher(db, "1004", "labels-user", new Date("2026-08-26T00:00:00.000Z"));
+    const created = await createPublication({
+      db,
+      publisherId: publisher.id,
+      metadata: parsePublicationMetadata({
+        ...metadata(1),
+        labels: ["  complete-api  ", "No-Panic", "memory safety"],
+      }),
+      sarif: sarif(1),
+      now: new Date("2026-08-26T01:00:00.000Z"),
+    });
+
+    const expected = [
+      {
+        publication_id: created,
+        position: 0,
+        display_name: "complete-api",
+        normalized_name: "complete-api",
+      },
+      {
+        publication_id: created,
+        position: 1,
+        display_name: "No-Panic",
+        normalized_name: "no-panic",
+      },
+      {
+        publication_id: created,
+        position: 2,
+        display_name: "memory safety",
+        normalized_name: "memory safety",
+      },
+    ];
+    expect((await getPublication(db, created))?.labels).toEqual(expected);
+    expect((await listPublications(db)).publications[0]?.labels).toEqual(expected);
+    expect(
+      await db
+        .prepare(
+          "SELECT publication_id, position, display_name, normalized_name FROM publication_labels WHERE publication_id = ? ORDER BY position",
+        )
+        .bind(created)
+        .all(),
+    ).toMatchObject({ results: expected });
+  });
+
   it("orders newest first and returns a stable cursor for the next page", async () => {
     const publisher = await upsertPublisher(db, "1002", "bob", new Date("2026-08-26T00:00:00.000Z"));
     const older = await createPublication({

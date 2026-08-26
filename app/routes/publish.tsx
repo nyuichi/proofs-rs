@@ -1,5 +1,6 @@
 import { env } from "cloudflare:workers";
 import { data, Form, redirect, useActionData, useNavigation } from "react-router";
+import { useState, type KeyboardEvent } from "react";
 import { z } from "zod";
 
 import type { Route } from "./+types/publish";
@@ -12,6 +13,10 @@ import {
   PublicationRateLimitError,
 } from "../lib/repository.server";
 import { parsePublicationMetadata } from "../lib/metadata";
+import {
+  MAX_PUBLICATION_LABEL_LENGTH,
+  MAX_PUBLICATION_LABELS,
+} from "../lib/publication-labels";
 import { parseSarif, SarifValidationError } from "../lib/sarif";
 
 const FIELD_NAMES = [
@@ -24,6 +29,7 @@ const FIELD_NAMES = [
   "verification_repository",
   "verification_commit",
   "verification_path",
+  "labels",
   "sarif",
 ] as const;
 
@@ -39,10 +45,22 @@ function stringValue(formData: FormData, name: string): string {
   return typeof value === "string" ? value : "";
 }
 
+function labelValues(formData: FormData): string[] {
+  return formData
+    .getAll("labels")
+    .filter((value): value is string => typeof value === "string")
+    .flatMap((value) => value.split(","))
+    .map((value) => value.trim())
+    .filter((value) => value.length > 0);
+}
+
 function valuesFromFormData(formData: FormData): PublishValues {
-  return Object.fromEntries(
-    FIELD_NAMES.map((name) => [name, stringValue(formData, name)]),
-  ) as PublishValues;
+  return {
+    ...Object.fromEntries(
+      FIELD_NAMES.map((name) => [name, stringValue(formData, name)]),
+    ),
+    labels: labelValues(formData).join(", "),
+  } as PublishValues;
 }
 
 function validationErrors(error: unknown): Record<string, string> {
@@ -91,6 +109,7 @@ export async function action({ request }: Route.ActionArgs) {
       verification_repository: values.verification_repository,
       verification_commit: values.verification_commit,
       verification_path: values.verification_path,
+      labels: labelValues(formData),
     });
     const sarif = parseSarif(values.sarif);
     const id = await createPublication({
@@ -171,6 +190,80 @@ function TextField({
   );
 }
 
+function labelsForEditor(value: string): string[] {
+  return value
+    .split(",")
+    .map((label) => label.trim())
+    .filter((label) => label.length > 0);
+}
+
+function PublicationLabelsField({
+  value,
+  error,
+}: {
+  value: string;
+  error?: string;
+}) {
+  const [labels, setLabels] = useState(() => labelsForEditor(value));
+  const [draft, setDraft] = useState("");
+  const errorId = "labels-error";
+
+  function addDraft() {
+    const next = draft.trim();
+    if (!next || labels.length >= MAX_PUBLICATION_LABELS) return;
+    setLabels((current) => [...current, next]);
+    setDraft("");
+  }
+
+  function onKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "Enter" || event.key === ",") {
+      event.preventDefault();
+      addDraft();
+    }
+  }
+
+  return (
+    <div className="form-field form-field-wide">
+      <label htmlFor="labels">Labels (optional)</label>
+      <div
+        className="publication-label-editor"
+        aria-invalid={error ? true : undefined}
+        aria-describedby={error ? errorId : undefined}
+      >
+        {labels.map((label, index) => (
+          <span className="publication-label publication-label-edit" key={`${label}-${index}`}>
+            <span>{label}</span>
+            <button
+              type="button"
+              className="publication-label-remove"
+              aria-label={`Remove label ${label}`}
+              onClick={() => setLabels((current) => current.filter((_, item) => item !== index))}
+            >
+              ×
+            </button>
+            <input type="hidden" name="labels" value={label} />
+          </span>
+        ))}
+        <input
+          id="labels"
+          name="labels"
+          value={draft}
+          onChange={(event) => setDraft(event.currentTarget.value)}
+          onKeyDown={onKeyDown}
+          placeholder="no-panic, data race"
+          aria-invalid={error ? true : undefined}
+          aria-describedby={error ? errorId : undefined}
+        />
+      </div>
+      <p className="form-note">
+        Press Enter or comma to add a label. Up to {MAX_PUBLICATION_LABELS} labels,{" "}
+        {MAX_PUBLICATION_LABEL_LENGTH} characters each.
+      </p>
+      <FieldError error={error} id={errorId} />
+    </div>
+  );
+}
+
 export default function Publish({}: Route.ComponentProps) {
   const actionData = useActionData() as PublishActionData | undefined;
   const navigation = useNavigation();
@@ -184,6 +277,7 @@ export default function Publish({}: Route.ComponentProps) {
     verification_repository: "",
     verification_commit: "",
     verification_path: "",
+    labels: "",
     sarif: "",
   } satisfies PublishValues;
   const errors = actionData?.errors ?? {};
@@ -287,6 +381,11 @@ export default function Publish({}: Route.ComponentProps) {
               placeholder="verification/"
             />
           </div>
+        </section>
+
+        <section className="form-section">
+          <h2>Labels</h2>
+          <PublicationLabelsField value={values.labels} error={errors.labels} />
         </section>
 
         <section className="form-section">

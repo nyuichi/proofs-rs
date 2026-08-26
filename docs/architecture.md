@@ -4,9 +4,9 @@
 
 1. A publisher modifies an upstream crate locally and runs one or more verification tools.
 2. The publisher pushes the verification source and supporting artifacts to an immutable GitHub commit.
-3. After GitHub login, the publisher submits one publication in the web UI: crate/version, upstream reference, verification-source reference, a commit-message-style explanation, and one SARIF 2.1.0 JSON document.
-4. The Worker validates the metadata and SARIF shape, stores the publication and each SARIF run in D1, then redirects to the public detail page.
-5. Visitors browse publications newest-first, then inspect targets, Rule IDs, descriptions, source locations, provenance, and raw runs.
+3. After GitHub login, the publisher submits one publication in the web UI: crate/version, upstream reference, verification-source reference, a commit-message-style explanation, optional publication labels, and one SARIF 2.1.0 JSON document.
+4. The Worker validates the metadata and SARIF shape, stores the publication, labels, and each SARIF run in D1, then redirects to the public detail page.
+5. Visitors browse crate-centric publications newest-first, then inspect a type/API hierarchy, verification contexts, evidence, provenance, and raw runs.
 
 The service records a publisher's assertion. It does not rerun a verifier, decide whether a result passed, or confirm that GitHub references exist.
 
@@ -31,6 +31,7 @@ flowchart LR
 erDiagram
   PUBLISHERS ||--o{ SESSIONS : owns
   PUBLISHERS ||--o{ PUBLICATIONS : publishes
+  PUBLICATIONS ||--o{ PUBLICATION_LABELS : labels
   PUBLICATIONS ||--|{ SARIF_RUNS : contains
 
   PUBLISHERS {
@@ -65,15 +66,21 @@ erDiagram
     integer run_index PK
     text run_json
   }
+  PUBLICATION_LABELS {
+    text publication_id PK,FK
+    integer position PK
+    text display_name
+    text normalized_name UK
+  }
 ```
 
-There is deliberately no Rule or Result table. `result.ruleId` remains the exact registry label supplied by the publisher, including duplicates and case. Descriptions, targets, tool details, and source locations are read from the stored run JSON when a page is rendered.
+There is deliberately no Rule or Result table. `result.ruleId` remains exactly as supplied by the publisher, including duplicates and case; it is evidence metadata rather than a publication label. Descriptions, targets, tool details, and source locations are read from the stored run JSON when a page is rendered. Publication labels are separate, ordered metadata and do not carry registry-defined verification semantics.
 
 ## Main queries
 
-- `GET /`: one indexed newest-first publication query (21 rows to produce a 20-row cursor page), then one `IN (...)` query for all runs on that page.
-- `GET /publications/:id`: one publication/publisher join, then one ordered run query.
-- `POST /publish`: one UTC-day count, then an atomic D1 batch containing the rate-limited publication insert and all run inserts.
+- `GET /`: one indexed newest-first publication query (21 rows to produce a 20-row cursor page), then one `IN (...)` query for all runs and one for all labels on that page.
+- `GET /publications/:id`: one publication/publisher join, then ordered run and label queries.
+- `POST /publish`: one UTC-day count, then an atomic D1 batch containing the rate-limited publication insert plus all label and run inserts.
 - Session lookup: SHA-256 of the opaque cookie is matched against the indexed session table; plaintext session tokens are never stored.
 
 ## Cost envelope

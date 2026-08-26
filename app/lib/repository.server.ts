@@ -1,6 +1,11 @@
 import { ulid } from "ulid";
 
-import type { PublicationMetadata } from "./metadata";
+import {
+  parsePublicationLabels,
+  type PublicationLabels,
+  type PublicationMetadata,
+} from "./metadata";
+import { normalizePublicationLabel } from "./publication-labels";
 import type { SarifRoot } from "./sarif";
 
 export const PUBLICATION_PAGE_SIZE = 20;
@@ -13,12 +18,20 @@ export interface PublisherRecord {
   created_at: string;
 }
 
-export interface PublicationRecord extends PublicationMetadata {
+export interface PublicationLabelRecord {
+  publication_id: string;
+  position: number;
+  display_name: string;
+  normalized_name: string;
+}
+
+export interface PublicationRecord extends Omit<PublicationMetadata, "labels"> {
   id: string;
   publisher_id: string;
   publisher_login: string;
   sarif_version: string;
   created_at: string;
+  labels: PublicationLabelRecord[];
 }
 
 export interface SarifRunRecord {
@@ -39,6 +52,11 @@ export interface PublicationListPage {
 export interface PublicationCreateInput {
   publisherId: string;
   metadata: PublicationMetadata;
+  /**
+   * Optional compatibility override for callers that keep labels outside the
+   * metadata object. The parsed metadata labels are used by default.
+   */
+  labels?: PublicationLabels | readonly string[];
   sarif: SarifRoot;
   now?: Date;
 }
@@ -112,6 +130,16 @@ function mapPublication(row: Record<string, unknown>): PublicationRecord {
     verification_path: String(row.verification_path),
     sarif_version: String(row.sarif_version),
     created_at: String(row.created_at),
+    labels: [],
+  };
+}
+
+function mapPublicationLabel(row: Record<string, unknown>): PublicationLabelRecord {
+  return {
+    publication_id: String(row.publication_id),
+    position: Number(row.position),
+    display_name: String(row.display_name),
+    normalized_name: String(row.normalized_name),
   };
 }
 
@@ -135,9 +163,33 @@ async function loadRuns(db: D1Database, publicationIds: string[]): Promise<Sarif
   return result.results;
 }
 
-function attachRuns(
+async function loadLabels(
+  db: D1Database,
+  publicationIds: string[],
+): Promise<PublicationLabelRecord[]> {
+  if (publicationIds.length === 0) {
+    const result = await db
+      .prepare("SELECT publication_id, position, display_name, normalized_name FROM publication_labels WHERE 0")
+      .all<Record<string, unknown>>();
+    return result.results.map(mapPublicationLabel);
+  }
+  const placeholders = publicationIds.map(() => "?").join(", ");
+  const result = await db
+    .prepare(
+      `SELECT publication_id, position, display_name, normalized_name
+       FROM publication_labels
+       WHERE publication_id IN (${placeholders})
+       ORDER BY publication_id ASC, position ASC`,
+    )
+    .bind(...publicationIds)
+    .all<Record<string, unknown>>();
+  return result.results.map(mapPublicationLabel);
+}
+
+function attachChildren(
   rows: PublicationRecord[],
   runs: SarifRunRecord[],
+  labels: PublicationLabelRecord[],
 ): PublicationWithRuns[] {
   const byPublication = new Map<string, SarifRunRecord[]>();
   for (const run of runs) {
@@ -145,9 +197,16 @@ function attachRuns(
     if (existing) existing.push(run);
     else byPublication.set(run.publication_id, [run]);
   }
+  const labelsByPublication = new Map<string, PublicationLabelRecord[]>();
+  for (const label of labels) {
+    const existing = labelsByPublication.get(label.publication_id);
+    if (existing) existing.push(label);
+    else labelsByPublication.set(label.publication_id, [label]);
+  }
   return rows.map((publication) => ({
     ...publication,
     runs: byPublication.get(publication.id) ?? [],
+    labels: labelsByPublication.get(publication.id) ?? [],
   }));
 }
 
@@ -161,7 +220,7 @@ const publicationSelect = `
   JOIN publishers AS pub ON pub.id = p.publisher_id
 `;
 
-/** Fetches one page with exactly two D1 queries: publications, then all runs. */
+/** Fetches one page, then loads all runs and immutable publication labels. */
 export async function listPublications(
   db: D1Database,
   cursorValue?: string | null,
@@ -188,9 +247,10 @@ export async function listPublications(
     mapPublication,
   );
   const runs = await loadRuns(db, pageRows.map((publication) => publication.id));
+  const labels = await loadLabels(db, pageRows.map((publication) => publication.id));
   const last = pageRows.at(-1);
   return {
-    publications: attachRuns(pageRows, runs),
+    publications: attachChildren(pageRows, runs, labels),
     nextCursor: hasMore && last ? encodeCursor({ createdAt: last.created_at, id: last.id }) : undefined,
   };
 }
@@ -201,7 +261,8 @@ export async function getPublication(db: D1Database, id: string): Promise<Public
   if (!row) return null;
   const publication = mapPublication(row);
   const runs = await loadRuns(db, [id]);
-  return attachRuns([publication], runs)[0] ?? null;
+  const labels = await loadLabels(db, [id]);
+  return attachChildren([publication], runs, labels)[0] ?? null;
 }
 
 export async function getPublisherById(db: D1Database, id: string): Promise<PublisherRecord | null> {
@@ -243,9 +304,11 @@ export async function createPublication({
   db,
   publisherId,
   metadata,
+  labels: labelsOverride,
   sarif,
   now = new Date(),
 }: PublicationCreateInput & { db: D1Database }): Promise<string> {
+  const labels = parsePublicationLabels(labelsOverride ?? metadata.labels ?? []);
   const { start, end } = utcDayBounds(now);
   const countResult = await db
     .prepare(
@@ -297,9 +360,16 @@ export async function createPublication({
       .prepare("INSERT INTO sarif_runs (publication_id, run_index, run_json) VALUES (?, ?, ?)")
       .bind(publicationId, runIndex, JSON.stringify(run)),
   );
+  const labelStatements = labels.map((label, position) =>
+    db
+      .prepare(
+        "INSERT INTO publication_labels (publication_id, position, display_name, normalized_name) VALUES (?, ?, ?, ?)",
+      )
+      .bind(publicationId, position, label, normalizePublicationLabel(label)),
+  );
 
   try {
-    const results = await db.batch([insert, ...runStatements]);
+    const results = await db.batch([insert, ...runStatements, ...labelStatements]);
     if (Number(results[0]?.meta?.changes ?? 0) !== 1) throw new PublicationRateLimitError();
   } catch (error) {
     if (error instanceof PublicationRateLimitError) throw error;

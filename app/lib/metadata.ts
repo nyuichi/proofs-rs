@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+import {
+  MAX_PUBLICATION_LABEL_LENGTH,
+  MAX_PUBLICATION_LABELS,
+  normalizePublicationLabel,
+} from "./publication-labels";
+
 const GITHUB_REPOSITORY = /^[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,99})\/[A-Za-z0-9](?:[A-Za-z0-9_.-]{0,99})$/;
 const GIT_COMMIT = /^(?:[0-9a-fA-F]{40}|[0-9a-fA-F]{64})$/;
 const FORBIDDEN_CONTROL = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
@@ -22,6 +28,48 @@ export function normalizeRepositoryPath(value: string | undefined | null): strin
   return path;
 }
 
+const publicationLabelSchema = z
+  .string()
+  .transform((value, ctx) => {
+    const displayName = value.trim();
+    const characterCount = Array.from(displayName).length;
+    if (characterCount < 1) {
+      ctx.addIssue({ code: "custom", message: "Labels must not be blank." });
+    } else if (characterCount > MAX_PUBLICATION_LABEL_LENGTH) {
+      ctx.addIssue({
+        code: "custom",
+        message: `Labels must be at most ${MAX_PUBLICATION_LABEL_LENGTH} characters.`,
+      });
+    }
+    return displayName;
+  });
+
+export const publicationLabelsSchema = z
+  .array(publicationLabelSchema)
+  .max(MAX_PUBLICATION_LABELS, `Use at most ${MAX_PUBLICATION_LABELS} labels.`)
+  .superRefine((labels, ctx) => {
+    const seen = new Map<string, number>();
+    labels.forEach((label, index) => {
+      const normalized = normalizePublicationLabel(label);
+      const previousIndex = seen.get(normalized);
+      if (previousIndex !== undefined) {
+        ctx.addIssue({
+          code: "custom",
+          message: "Labels must be unique, ignoring case.",
+          path: [index],
+        });
+      } else {
+        seen.set(normalized, index);
+      }
+    });
+  });
+
+export type PublicationLabels = z.output<typeof publicationLabelsSchema>;
+
+export function parsePublicationLabels(input: unknown): PublicationLabels {
+  return publicationLabelsSchema.parse(input);
+}
+
 const metadataInputSchema = z.object({
   message: z.string(),
   crate_name: z.string().trim().min(1).max(200),
@@ -32,6 +80,7 @@ const metadataInputSchema = z.object({
   verification_repository: repositorySchema,
   verification_commit: commitSchema,
   verification_path: z.string().max(1_000).optional().default(""),
+  labels: publicationLabelsSchema.optional().default([]),
 });
 
 export const metadataSchema = metadataInputSchema.transform((value, ctx) => {

@@ -23,6 +23,34 @@ describe("publication metadata", () => {
     const parsed = parsePublicationMetadata(validMetadata());
     expect(parsed.message).toContain("Verify semaphore");
     expect(parsed.upstream_path).toBe("tokio/src/sync");
+    expect(parsed.labels).toEqual([]);
+  });
+
+  it("normalizes label whitespace and accepts labels with internal spaces", () => {
+    const parsed = parsePublicationMetadata({
+      ...validMetadata(),
+      labels: ["  no-panic  ", "memory safety"],
+    });
+    expect(parsed.labels).toEqual(["no-panic", "memory safety"]);
+  });
+
+  it("rejects blank, oversized, and case-insensitive duplicate labels", () => {
+    expect(() => parsePublicationMetadata({ ...validMetadata(), labels: ["   "] })).toThrow("must not be blank");
+    expect(() => parsePublicationMetadata({ ...validMetadata(), labels: ["a".repeat(33)] })).toThrow(
+      "at most 32",
+    );
+    expect(() =>
+      parsePublicationMetadata({ ...validMetadata(), labels: ["no-panic", "NO-PANIC"] }),
+    ).toThrow("unique");
+  });
+
+  it("limits a publication to eight labels", () => {
+    expect(() =>
+      parsePublicationMetadata({
+        ...validMetadata(),
+        labels: Array.from({ length: 9 }, (_, index) => `label-${index}`),
+      }),
+    ).toThrow("at most 8");
   });
 
   it("requires owner/repository and a full commit hash", () => {

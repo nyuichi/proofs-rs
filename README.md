@@ -8,7 +8,7 @@ The PoC deliberately keeps the storage model small:
 
 - Cloudflare Worker + React Router v8
 - Cloudflare D1
-- `publishers`, `sessions`, `publications`, and `sarif_runs` tables
+- `publishers`, `sessions`, `publications`, `publication_labels`, and `sarif_runs` tables
 - Evidence source files remain in the publisher's GitHub repository
 - Rule and result rows are not normalized; SARIF run JSON is parsed when it is displayed
 
@@ -42,7 +42,7 @@ The unit tests cover metadata constraints, SARIF extraction, PKCE/session helper
 
 ## Publication input
 
-The web form accepts a commit-message-style publication message plus `owner/repository` and an immutable 40- or 64-character hexadecimal commit for the upstream and verification repositories. Paths are optional and are stored without leading slashes; traversal segments are rejected.
+The web form accepts a commit-message-style publication message, up to eight neutral publication labels, plus `owner/repository` and an immutable 40- or 64-character hexadecimal commit for the upstream and verification repositories. Labels are trimmed, limited to 32 Unicode characters, and unique per publication after case-insensitive NFKC normalization. Paths are optional and are stored without leading slashes; traversal segments are rejected.
 
 SARIF input is limited to 1,000,000 UTF-8 bytes. The root must be SARIF `2.1.0`, contain at least one run and one result, and every result must have a non-empty `ruleId`. External property references are unsupported. Rule IDs are kept in SARIF order, including duplicates. `fullyQualifiedName` is preferred over `name` for logical targets; results without logical targets appear under `Target not specified`.
 
