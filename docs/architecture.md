@@ -78,7 +78,7 @@ There is deliberately no Rule or Result table. `result.ruleId` remains exactly a
 
 ## Main queries
 
-- `GET /`: one indexed newest-first publication query (21 rows to produce a 20-row cursor page), then one `IN (...)` query for all runs and one for all labels on that page.
+- `GET /`: one total-count query and one indexed newest-first publication query with `LIMIT 20 OFFSET ((page - 1) * 20)`, then one `IN (...)` query for all runs and one for all labels on that page. The optional `page` query parameter is a positive safe integer; `/` is the canonical first page and pages are live reads without snapshot consistency.
 - `GET /publications/:id`: one publication/publisher join, then ordered run and label queries.
 - `POST /publish`: one UTC-day count, then an atomic D1 batch containing the rate-limited publication insert plus all label and run inserts.
 - Session lookup: SHA-256 of the opaque cookie is matched against the indexed session table; plaintext session tokens are never stored.

@@ -1,13 +1,44 @@
 import { env } from "cloudflare:workers";
-import { Link } from "react-router";
+import { Link, redirect } from "react-router";
 
 import type { Route } from "./+types/home";
+import {
+  InvalidPageParamError,
+  getPaginationItems,
+  PAGINATION_ELLIPSIS,
+  parsePageParam,
+  PUBLICATION_PAGE_SIZE,
+} from "../lib/pagination";
 import { listPublications } from "../lib/repository.server";
 import { relativeTime, splitPublicationMessage } from "../lib/presentation";
 
+function invalidPageResponse(): Response {
+  return new Response("Invalid page parameter.", {
+    status: 400,
+    statusText: "Bad Request",
+  });
+}
+
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
-  return listPublications(env.DB, url.searchParams.get("cursor"));
+  let page: number;
+  try {
+    page = parsePageParam(url);
+  } catch (error) {
+    if (error instanceof InvalidPageParamError) throw invalidPageResponse();
+    throw error;
+  }
+
+  if (url.searchParams.has("page") && page === 1) throw redirect("/");
+
+  const listing = await listPublications(env.DB, page);
+  if (page > listing.totalPages) {
+    throw new Response("Publication page not found.", {
+      status: 404,
+      statusText: "Not Found",
+    });
+  }
+  return listing;
 }
 
 export function meta({}: Route.MetaArgs) {
@@ -20,14 +51,123 @@ export function meta({}: Route.MetaArgs) {
   ];
 }
 
+function pageHref(page: number): string {
+  return page === 1 ? "/" : `/?page=${page}`;
+}
+
+function PageControl({
+  direction,
+  page,
+  totalPages,
+}: {
+  direction: "previous" | "next";
+  page: number;
+  totalPages: number;
+}) {
+  const targetPage = direction === "previous" ? page - 1 : page + 1;
+  const disabled = targetPage < 1 || targetPage > totalPages;
+  const label = direction === "previous" ? "Prev" : "Next";
+  const ariaLabel = direction === "previous" ? "Previous page" : "Next page";
+  if (disabled) {
+    return (
+      <span
+        aria-disabled="true"
+        className="pagination-control pagination-control-disabled"
+      >
+        {label}
+      </span>
+    );
+  }
+  return (
+    <Link
+      aria-label={ariaLabel}
+      className="pagination-control"
+      to={pageHref(targetPage)}
+    >
+      {label}
+    </Link>
+  );
+}
+
+function PageNumbers({
+  currentPage,
+  totalPages,
+  siblingCount,
+  variant,
+}: {
+  currentPage: number;
+  totalPages: number;
+  siblingCount: number;
+  variant: "desktop" | "mobile";
+}) {
+  return (
+    <div className={`pagination-pages pagination-pages-${variant}`}>
+      {getPaginationItems(currentPage, totalPages, siblingCount).map((item, index) =>
+        item === PAGINATION_ELLIPSIS ? (
+          <span
+            aria-hidden="true"
+            className="pagination-ellipsis"
+            key={`ellipsis-${index}`}
+          >
+            …
+          </span>
+        ) : item === currentPage ? (
+          <span
+            aria-current="page"
+            className="pagination-page pagination-page-current"
+            key={item}
+          >
+            {item}
+          </span>
+        ) : (
+          <Link className="pagination-page" key={item} to={pageHref(item)}>
+            {item}
+          </Link>
+        ),
+      )}
+    </div>
+  );
+}
+
+function Pagination({ page, totalPages }: { page: number; totalPages: number }) {
+  if (totalPages <= 1) return null;
+  return (
+    <nav aria-label="Publication pages" className="pagination">
+      <PageControl direction="previous" page={page} totalPages={totalPages} />
+      <PageNumbers
+        currentPage={page}
+        siblingCount={2}
+        totalPages={totalPages}
+        variant="desktop"
+      />
+      <PageNumbers
+        currentPage={page}
+        siblingCount={1}
+        totalPages={totalPages}
+        variant="mobile"
+      />
+      <PageControl direction="next" page={page} totalPages={totalPages} />
+    </nav>
+  );
+}
+
+function publicationRange(page: number, totalCount: number): string {
+  if (totalCount === 0) return "0 publications";
+  const first = (page - 1) * PUBLICATION_PAGE_SIZE + 1;
+  const last = Math.min(page * PUBLICATION_PAGE_SIZE, totalCount);
+  return `${first}–${last} of ${totalCount} publications`;
+}
+
 export default function Home({ loaderData }: Route.ComponentProps) {
-  const { publications, nextCursor } = loaderData;
+  const { page, publications, totalCount, totalPages } = loaderData;
 
   return (
     <main className="page-shell home-page">
       <section className="page-heading">
         <h1>Publications</h1>
       </section>
+
+      <p className="publication-range">{publicationRange(page, totalCount)}</p>
 
       {publications.length > 0 ? (
         <div className="publication-list" aria-label="Publications">
@@ -84,16 +224,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
         </div>
       )}
 
-      {nextCursor ? (
-        <div className="pagination">
-          <Link
-            className="outline-link"
-            to={`/?cursor=${encodeURIComponent(nextCursor)}`}
-          >
-            Load more
-          </Link>
-        </div>
-      ) : null}
+      <Pagination page={page} totalPages={totalPages} />
     </main>
   );
 }

@@ -6,9 +6,9 @@ import {
   type PublicationMetadata,
 } from "./metadata";
 import { normalizePublicationLabel } from "./publication-labels";
+import { PUBLICATION_PAGE_SIZE } from "./pagination";
 import type { SarifRoot } from "./sarif";
 
-export const PUBLICATION_PAGE_SIZE = 20;
 export const PUBLICATION_DAILY_LIMIT = 20;
 
 export interface PublisherRecord {
@@ -46,7 +46,9 @@ export interface PublicationWithRuns extends PublicationRecord {
 
 export interface PublicationListPage {
   publications: PublicationWithRuns[];
-  nextCursor?: string;
+  page: number;
+  totalCount: number;
+  totalPages: number;
 }
 
 export interface PublicationCreateInput {
@@ -73,39 +75,6 @@ export class PublicationNotFoundError extends Error {
     super(`Publication '${id}' was not found.`);
     this.name = "PublicationNotFoundError";
   }
-}
-
-interface Cursor {
-  createdAt: string;
-  id: string;
-}
-
-function encodeCursor(value: Cursor): string {
-  const bytes = new TextEncoder().encode(JSON.stringify(value));
-  let binary = "";
-  for (const byte of bytes) binary += String.fromCharCode(byte);
-  return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
-}
-
-function decodeCursor(value: string | null | undefined): Cursor | undefined {
-  if (!value) return undefined;
-  try {
-    const padded = value.replaceAll("-", "+").replaceAll("_", "/") + "===";
-    const binary = atob(padded.slice(0, padded.length - (padded.length % 4)));
-    const bytes = Uint8Array.from(binary, (character) => character.charCodeAt(0));
-    const parsed: unknown = JSON.parse(new TextDecoder().decode(bytes));
-    if (
-      typeof parsed === "object" &&
-      parsed !== null &&
-      typeof (parsed as Record<string, unknown>).createdAt === "string" &&
-      typeof (parsed as Record<string, unknown>).id === "string"
-    ) {
-      return parsed as Cursor;
-    }
-  } catch {
-    // Treat a malformed cursor as the first page rather than leaking SQL errors.
-  }
-  return undefined;
 }
 
 function utcDayBounds(now: Date): { start: string; end: string } {
@@ -220,38 +189,42 @@ const publicationSelect = `
   JOIN publishers AS pub ON pub.id = p.publisher_id
 `;
 
-/** Fetches one page, then loads all runs and immutable publication labels. */
+/** Counts publications, fetches one page, then loads its runs and labels. */
 export async function listPublications(
   db: D1Database,
-  cursorValue?: string | null,
-  pageSize = PUBLICATION_PAGE_SIZE,
+  page = 1,
 ): Promise<PublicationListPage> {
-  const cursor = decodeCursor(cursorValue);
-  const requested = Math.min(Math.max(pageSize, 1), PUBLICATION_PAGE_SIZE) + 1;
-  const where = cursor
-    ? "WHERE (p.created_at < ? OR (p.created_at = ? AND p.id < ?))"
-    : "";
-  const parameters = cursor ? [cursor.createdAt, cursor.createdAt, cursor.id, requested] : [requested];
+  if (!Number.isSafeInteger(page) || page < 1) {
+    throw new RangeError("Publication page must be a positive safe integer.");
+  }
+
+  const countResult = await db
+    .prepare("SELECT COUNT(*) AS count FROM publications")
+    .first<{ count: number | string }>();
+  const totalCount = Number(countResult?.count ?? 0);
+  const totalPages = Math.max(1, Math.ceil(totalCount / PUBLICATION_PAGE_SIZE));
+  if (page > totalPages) {
+    return { publications: [], page, totalCount, totalPages };
+  }
+
+  const offset = (page - 1) * PUBLICATION_PAGE_SIZE;
   const publicationResult = await db
     .prepare(
       `${publicationSelect}
-       ${where}
        ORDER BY p.created_at DESC, p.id DESC
-       LIMIT ?`,
+       LIMIT ? OFFSET ?`,
     )
-    .bind(...parameters)
+    .bind(PUBLICATION_PAGE_SIZE, offset)
     .all<Record<string, unknown>>();
 
-  const hasMore = publicationResult.results.length > requested - 1;
-  const pageRows = (hasMore ? publicationResult.results.slice(0, -1) : publicationResult.results).map(
-    mapPublication,
-  );
+  const pageRows = publicationResult.results.map(mapPublication);
   const runs = await loadRuns(db, pageRows.map((publication) => publication.id));
   const labels = await loadLabels(db, pageRows.map((publication) => publication.id));
-  const last = pageRows.at(-1);
   return {
     publications: attachChildren(pageRows, runs, labels),
-    nextCursor: hasMore && last ? encodeCursor({ createdAt: last.created_at, id: last.id }) : undefined,
+    page,
+    totalCount,
+    totalPages,
   };
 }
 

@@ -194,7 +194,8 @@ a {
 }
 
 .publication-row:focus-visible,
-.outline-link:focus-visible,
+.pagination-control:focus-visible,
+.pagination-page:focus-visible,
 .primary-button:focus-visible,
 .back-link:focus-visible,
 .rule-disclosure summary:focus-visible,
@@ -326,23 +327,71 @@ a {
   font-size: 11px;
 }
 
-.pagination {
-  display: flex;
-  justify-content: center;
-  margin-top: 28px;
+.publication-range {
+  color: var(--muted);
+  font-size: 12px;
+  margin: 0 0 18px;
 }
 
-.outline-link {
+.pagination {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+  margin-top: 32px;
+}
+
+.pagination-pages {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  justify-content: center;
+}
+
+.pagination-pages-mobile {
+  display: none;
+}
+
+.pagination-control,
+.pagination-page {
+  align-items: center;
   border: 1px solid var(--line-strong);
   color: var(--ink);
-  display: inline-block;
-  font-size: 13px;
-  padding: 9px 18px;
+  display: inline-flex;
+  font-size: 12px;
+  justify-content: center;
+  min-height: 32px;
+  min-width: 32px;
+  padding: 6px 8px;
   text-decoration: none;
 }
 
-.outline-link:hover {
+.pagination-control {
+  min-width: 50px;
+}
+
+a.pagination-control:hover,
+a.pagination-page:hover {
   background: var(--faint);
+}
+
+.pagination-control-disabled {
+  border-color: var(--line);
+  color: var(--muted);
+}
+
+.pagination-page-current {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--paper);
+}
+
+.pagination-ellipsis {
+  color: var(--muted);
+  min-width: 18px;
+  text-align: center;
 }
 
 .empty-state {
@@ -793,6 +842,35 @@ a {
 
   .home-page .page-heading {
     margin-bottom: 22px;
+  }
+
+  .pagination {
+    gap: 4px;
+    margin-top: 28px;
+  }
+
+  .pagination-pages-desktop {
+    display: none;
+  }
+
+  .pagination-pages-mobile {
+    display: flex;
+  }
+
+  .pagination-control,
+  .pagination-page {
+    font-size: 11px;
+    min-width: 28px;
+    padding-left: 5px;
+    padding-right: 5px;
+  }
+
+  .pagination-control {
+    min-width: 42px;
+  }
+
+  .pagination-ellipsis {
+    min-width: 12px;
   }
 
   .publication-row {

@@ -6,11 +6,11 @@ import {
   getPublication,
   listPublications,
   PUBLICATION_DAILY_LIMIT,
-  PUBLICATION_PAGE_SIZE,
   PublicationRateLimitError,
   upsertPublisher,
 } from "../app/lib/repository.server";
 import { parsePublicationMetadata } from "../app/lib/metadata";
+import { PUBLICATION_PAGE_SIZE } from "../app/lib/pagination";
 import { parseSarif } from "../app/lib/sarif";
 
 const db = env.DB;
@@ -82,7 +82,9 @@ describe("D1 publication repository", () => {
   it("starts empty and returns no publication for an unknown id", async () => {
     const page = await listPublications(db);
     expect(page.publications).toEqual([]);
-    expect(page.nextCursor).toBeUndefined();
+    expect(page.page).toBe(1);
+    expect(page.totalCount).toBe(0);
+    expect(page.totalPages).toBe(1);
     expect(await getPublication(db, "01J00000000000000000000000")).toBeNull();
   });
 
@@ -153,30 +155,61 @@ describe("D1 publication repository", () => {
     ).toMatchObject({ results: expected });
   });
 
-  it("orders newest first and returns a stable cursor for the next page", async () => {
-    const publisher = await upsertPublisher(db, "1002", "bob", new Date("2026-08-26T00:00:00.000Z"));
-    const older = await createPublication({
+  it("returns fixed-size numbered pages with deterministic tie ordering", async () => {
+    const firstPublisher = await upsertPublisher(db, "1002", "bob", new Date("2026-08-26T00:00:00.000Z"));
+    const secondPublisher = await upsertPublisher(db, "1005", "carol", new Date("2026-08-26T00:00:00.000Z"));
+    const createdIds: string[] = [];
+    for (let index = 0; index < PUBLICATION_PAGE_SIZE; index += 1) {
+      createdIds.push(await createPublication({
+        db,
+        publisherId: index % 2 === 0 ? firstPublisher.id : secondPublisher.id,
+        metadata: index === 0 ? parsePublicationMetadata({ ...metadata(index), labels: ["page-two"] }) : metadata(index),
+        sarif: sarif(index),
+        now: index === 0 ? new Date("2026-08-26T01:00:00.000Z") : new Date("2026-08-26T02:00:00.000Z"),
+      }));
+    }
+
+    const exactPage = await listPublications(db);
+    expect(exactPage.publications).toHaveLength(PUBLICATION_PAGE_SIZE);
+    expect(exactPage.totalCount).toBe(PUBLICATION_PAGE_SIZE);
+    expect(exactPage.totalPages).toBe(1);
+
+    createdIds.push(await createPublication({
       db,
-      publisherId: publisher.id,
-      metadata: metadata(1),
-      sarif: sarif(1),
-      now: new Date("2026-08-26T01:00:00.000Z"),
-    });
-    const newer = await createPublication({
-      db,
-      publisherId: publisher.id,
-      metadata: metadata(2),
-      sarif: sarif(2),
+      publisherId: firstPublisher.id,
+      metadata: metadata(PUBLICATION_PAGE_SIZE),
+      sarif: sarif(PUBLICATION_PAGE_SIZE),
       now: new Date("2026-08-26T02:00:00.000Z"),
-    });
+    }));
 
-    const firstPage = await listPublications(db, undefined, 1);
-    expect(firstPage.publications.map((publication) => publication.id)).toEqual([newer]);
-    expect(firstPage.nextCursor).toEqual(expect.any(String));
+    const expectedIds = [
+      ...createdIds.slice(1).sort((left, right) => (left < right ? 1 : left > right ? -1 : 0)),
+      createdIds[0],
+    ];
+    const firstPage = await listPublications(db, 1);
+    expect(firstPage.page).toBe(1);
+    expect(firstPage.totalCount).toBe(PUBLICATION_PAGE_SIZE + 1);
+    expect(firstPage.totalPages).toBe(2);
+    expect(firstPage.publications).toHaveLength(PUBLICATION_PAGE_SIZE);
+    expect(firstPage.publications.map((publication) => publication.id)).toEqual(
+      expectedIds.slice(0, PUBLICATION_PAGE_SIZE),
+    );
 
-    const secondPage = await listPublications(db, firstPage.nextCursor, 1);
-    expect(secondPage.publications.map((publication) => publication.id)).toEqual([older]);
-    expect(secondPage.nextCursor).toBeUndefined();
+    const secondPage = await listPublications(db, 2);
+    expect(secondPage.page).toBe(2);
+    expect(secondPage.publications.map((publication) => publication.id)).toEqual(
+      expectedIds.slice(PUBLICATION_PAGE_SIZE),
+    );
+    expect(secondPage.totalCount).toBe(PUBLICATION_PAGE_SIZE + 1);
+    expect(secondPage.totalPages).toBe(2);
+    expect(secondPage.publications[0]?.runs).toHaveLength(1);
+    expect(secondPage.publications[0]?.labels.map((label) => label.display_name)).toEqual(["page-two"]);
+
+    const beyondLastPage = await listPublications(db, 3);
+    expect(beyondLastPage.page).toBe(3);
+    expect(beyondLastPage.publications).toEqual([]);
+    expect(beyondLastPage.totalCount).toBe(PUBLICATION_PAGE_SIZE + 1);
+    expect(beyondLastPage.totalPages).toBe(2);
   });
 
   it("enforces the per-publisher UTC-day publication limit", async () => {
