@@ -1,5 +1,7 @@
 # proofs.rs
 
+[![Deploy](https://github.com/nyuichi/proofs-rs/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/nyuichi/proofs-rs/actions/workflows/deploy.yml)
+
 proofs.rs is a small public registry for software-verification publications. A publication records one upstream crate/version, one immutable verification-source reference, and one SARIF 2.1.0 document that may contain multiple tool runs.
 
 The accepted user flow, ER diagram, query shape, deployment order, and current Free-plan cost envelope are documented in [`docs/architecture.md`](docs/architecture.md).
@@ -29,6 +31,25 @@ Apply the local D1 migration with:
 ```sh
 pnpm exec wrangler d1 migrations apply proofs-rs-db --local
 ```
+
+## Production deployment
+
+Pushing to `main` runs [the deploy workflow](https://github.com/nyuichi/proofs-rs/actions/workflows/deploy.yml). You can also run it manually with `workflow_dispatch`, but runs are guarded to the `main` branch. Deployments are serialized so that only one production deployment runs at a time.
+
+Before the first run, add these repository secrets under **Settings → Secrets and variables → Actions**:
+
+- `CLOUDFLARE_API_TOKEN`: a scoped Cloudflare API token with the Workers Scripts Edit and D1 Edit permissions required by Wrangler.
+- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account that owns the Worker and `proofs-rs-db` D1 database.
+
+See Cloudflare's [GitHub Actions setup guide](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) for creating and scoping the token. These values are passed to GitHub Actions only for the migration and deploy steps; do not commit them to `wrangler.jsonc` or `.dev.vars`.
+
+Production OAuth also needs the Worker secret `GITHUB_CLIENT_SECRET`. Set it once from a trusted, authenticated environment after the initial deployment:
+
+```sh
+pnpm exec wrangler secret put GITHUB_CLIENT_SECRET --config wrangler.jsonc
+```
+
+The workflow runs each deployment in this order: install the frozen lockfile, run tests, typecheck, build, apply pending remote D1 migrations with `wrangler d1 migrations apply proofs-rs-db --remote`, and then deploy the Worker with `wrangler deploy`. Migrations therefore complete before new Worker code is published. Keep migrations backward-compatible with the currently deployed Worker; a failed deploy does not roll back migrations.
 
 ## Checks
 
