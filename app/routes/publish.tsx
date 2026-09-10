@@ -78,6 +78,7 @@ function validationErrors(error: unknown): Record<string, string> {
       const field = issue.path[0];
       if (typeof field === "string" && !errors[field]) errors[field] = issue.message;
     }
+    if (!Object.keys(errors).length) errors._form=error.issues.map(issue=>issue.message).join(" ");
     return errors;
   }
   if (error instanceof RecordValidationError) return { _form: error.message };
