@@ -30,3 +30,11 @@ The seed is idempotent and runs only against the dev config. It includes fnv 1.0
 6. Use “Build on this publication”; retain some results, replace another with new evidence, or omit a result. Publication history preserves earlier snapshots.
 
 Checks cover newest-wins, omissions, immutable attribution, revision chains, version isolation, invalid references, unsupported tags, failed evidence, legacy compatibility and dev authentication gating. The deployment smoke test exercises actual search, pages, login, publication, inheritance and cross-origin rejection.
+
+## API safety and contract source
+
+New results explicitly declare `safe` or `unsafe` and a source language (Rust, Kani, Verus, or Creusot). A single API can have both no-UB and no-panic records; their evidence and conditions remain separate. Safety declarations must agree within a snapshot. Unsafe functions are highlighted even when details are collapsed.
+
+Safe no-UB assertions have no additional caller safety preconditions. This is an assertion supplied by the publisher, not an automatically awarded badge: a safe API can still have an unsound implementation. Configuration/scope is shown separately. Unsafe API records require actual precondition source. Safe no-panic records may be unconditional or carry source-code conditions. Source text is preserved verbatim and rendered as escaped code, not translated into prose or executed/validated by the site.
+
+Old immutable results remain `unknown` safety / `legacy` contract format. Their prose is not presented as code or silently converted to safe/unconditional claims. New versioned demo records show both properties on a safe FNV API, and an unsafe ArrayVec insertion with Kani precondition source. Previous demo snapshots remain in history.

@@ -16,7 +16,7 @@ describe('crate snapshots and provenance',()=>{
   const a=await upsertPublisher(db,'a','author-a'),b=await upsertPublisher(db,'b','author-b');
   const first=await pub(a.id,{now:new Date('2026-09-01T00:00:00Z')});
   const original=await getPublicationRecords(db,first);
-  const latest=await pub(b.id,{now:new Date('2026-09-02T00:00:00Z'),records:[{...demoRecords[1],contract:'Expanded: length <= 32',supersedes_id:original[1].id}],inheritedRecordIds:[original[0].id]});
+  const latest=await pub(b.id,{now:new Date('2026-09-02T00:00:00Z'),records:[{...demoRecords[1],contract:'kani::assume(bytes.len() <= 32);',supersedes_id:original[1].id}],inheritedRecordIds:[original[0].id]});
   expect((await cratePublications(db,'fnv','1.0.7')).map(p=>p.id)).toEqual([latest,first]);
   const results=await getPublicationRecords(db,latest);
   expect(results).toHaveLength(2);
@@ -25,7 +25,7 @@ describe('crate snapshots and provenance',()=>{
   expect(results[1].publisher_login).toBe('author-b');
   expect(results.some(r=>r.api_path.endsWith('finish'))).toBe(false);
   expect((await recordHistory(db,results[1].id)).map(r=>r.id)).toEqual([results[1].id,original[1].id]);
-  expect(await getPublicationRecords(db,first)).toHaveLength(3);
+  expect(await getPublicationRecords(db,first)).toHaveLength(4);
   expect(await cratePublications(db,'fnv','1.0.6')).toEqual([]);
  });
  it('rejects cross-version inheritance and invalid evidence atomically',async()=>{
@@ -42,7 +42,7 @@ describe('crate snapshots and provenance',()=>{
   expect(await getPublicationRecords(db,id)).toEqual([]);
  });
  it('retains different contracts for the same API and tag',async()=>{
-  const a=await upsertPublisher(db,'a','author-a');const id=await pub(a.id,{records:[demoRecords[1],{...demoRecords[1],contract:'Length <= 8; a separate configuration',configuration:'no-default-features'}]});
+  const a=await upsertPublisher(db,'a','author-a');const id=await pub(a.id,{records:[demoRecords[1],{...demoRecords[1],contract:'kani::assume(bytes.len() <= 8);',configuration:'no-default-features'}]});
   expect(await getPublicationRecords(db,id)).toHaveLength(2);
  });
  it('rejects failed evidence and unsupported tags',async()=>{
@@ -50,4 +50,24 @@ describe('crate snapshots and provenance',()=>{
   await expect(pub(a.id,{sarif:failed,records:[demoRecords[0]]})).rejects.toBeInstanceOf(RecordValidationError);
   await expect(pub(a.id,{records:[{...demoRecords[0],tag:'no-unsafe'}]})).rejects.toThrow();
  });
+ it('keeps both properties for one safe API and preserves contract source exactly',async()=>{
+  const a=await upsertPublisher(db,'a','author-a');
+  const code='// submitted Kani source\nkani::assume(bytes.len() <= 16);\n';
+  const id=await pub(a.id,{records:[{...demoRecords[1],contract:code},demoRecords[3]]});
+  const records=await getPublicationRecords(db,id);
+  expect(records.map(r=>r.tag)).toEqual(['no-panic','no-ub']);
+  expect(records[0].contract).toBe(code);
+  expect(records[0].contract_language).toBe('kani');
+  expect(records[1].contract).toBe('');
+  expect(records.every(r=>r.api_safety==='safe')).toBe(true);
+ });
+ it('requires source contracts for unsafe APIs and rejects contradictory safety declarations',async()=>{
+  const a=await upsertPublisher(db,'a','author-a');
+  await expect(pub(a.id,{records:[{...demoRecords[3],api_safety:'unsafe'}]})).rejects.toThrow();
+  await expect(pub(a.id,{records:[{...demoRecords[3],contract:'kani::assume(n < 16);'}]})).rejects.toThrow();
+  await expect(pub(a.id,{records:[demoRecords[1],{...demoRecords[3],api_safety:'unsafe',contract:'kani::assume(n < 16);'}]})).rejects.toBeInstanceOf(RecordValidationError);
+  const id=await pub(a.id,{records:[{...demoRecords[3],api_safety:'unsafe',contract:'kani::assume(vec.len() < CAPACITY);'}]});
+  expect((await getPublicationRecords(db,id))[0]).toMatchObject({api_safety:'unsafe',contract_language:'kani',contract:'kani::assume(vec.len() < CAPACITY);'});
+ });
+
 });

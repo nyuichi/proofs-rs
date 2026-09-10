@@ -7,16 +7,23 @@ const recordSchema = z.object({
   api_path: z.string().trim().min(1).max(500),
   api_kind: z.enum(['function', 'method']),
   tag: z.enum(['no-ub', 'no-panic']),
-  contract: z.string().trim().min(1).max(4000),
+  api_safety: z.enum(['safe', 'unsafe']),
+  contract_language: z.enum(['rust', 'kani', 'verus', 'creusot']),
+  contract: z.string().max(12000),
   configuration: z.string().trim().min(1).max(1000),
   run_index: z.number().int().min(0),
   result_index: z.number().int().min(0),
   supersedes_id: z.string().optional(),
+}).superRefine((r,ctx)=>{
+ if(r.api_safety==='unsafe'&&!r.contract.trim()) ctx.addIssue({code:'custom',path:['contract'],message:'Unsafe APIs require the actual safety precondition code.'});
+ if(r.api_safety==='safe'&&r.tag==='no-ub'&&r.contract.trim()) ctx.addIssue({code:'custom',path:['contract'],message:'A safe API no-UB assertion has no additional safety preconditions. Put verification bounds in Configuration.'});
 });
 export type RecordInput = z.infer<typeof recordSchema>;
 export const recordInputsSchema = z.array(recordSchema).max(200);
 export class RecordValidationError extends Error {}
-export interface VerificationRecord extends RecordInput {
+export interface VerificationRecord extends Omit<RecordInput, 'api_safety' | 'contract_language'> {
+  api_safety: 'safe' | 'unsafe' | 'unknown';
+  contract_language: 'rust' | 'kani' | 'verus' | 'creusot' | 'legacy';
   id: string;
   publication_id: string;
   publisher_login: string;
@@ -59,6 +66,12 @@ export async function prepareRecordStatements(db: D1Database, publicationId: str
   if (!original || original.crate_name !== metadata.crate_name || original.crate_version !== metadata.crate_version) throw new RecordValidationError('Referenced results must belong to this exact crate and version.');
   imported.set(id, original);
  }
+ const safetyByApi=new Map<string,string>();
+ for(const r of [...inherited.map(id=>imported.get(id)!),...records]) {
+  if(r.api_safety==='unknown')continue;
+  if(safetyByApi.has(r.api_path)&&safetyByApi.get(r.api_path)!==r.api_safety)throw new RecordValidationError('All results for the same API must agree on safe/unsafe.');
+  safetyByApi.set(r.api_path,r.api_safety);
+ }
  let position = 0;
  const membership = (id: string) => db.prepare('INSERT INTO publication_records (publication_id, record_id, position) VALUES (?, ?, ?)').bind(publicationId,id,position++);
  for (const id of inherited) statements.push(membership(id));
@@ -74,8 +87,8 @@ export async function prepareRecordStatements(db: D1Database, publicationId: str
   }
   const id=ulid();
   statements.push(db.prepare(`INSERT INTO verification_records
-   (id, publication_id, api_path, api_kind, tag, contract, configuration, run_index, result_index, supersedes_id)
-   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id,publicationId,record.api_path,record.api_kind,record.tag,record.contract,record.configuration,record.run_index,record.result_index,record.supersedes_id ?? null));
+   (id, publication_id, api_path, api_kind, tag, contract, configuration, run_index, result_index, supersedes_id, api_safety, contract_language)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`).bind(id,publicationId,record.api_path,record.api_kind,record.tag,record.contract,record.configuration,record.run_index,record.result_index,record.supersedes_id ?? null,record.api_safety,record.contract_language));
   statements.push(membership(id));
  }
  return statements;

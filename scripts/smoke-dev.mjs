@@ -9,10 +9,12 @@ for(let attempt=0;;attempt++){
  catch(error){if(attempt>=5)throw error;await new Promise(resolve=>setTimeout(resolve,5000));}
 }
 await check('/demo','Try the complete flow');
-const crate=await check('/publications/demo-fnv-expanded','demo-result-expanded');
+const crate=await check('/publications/demo-v2-fnv-expanded','demo-v2-result-expanded');
 if(crate.includes('<code>fnv::FnvHasher::finish</code>'))throw new Error('Omitted result leaked into latest snapshot.');
-await check('/results/demo-result-expanded','demo-result-1');
+await check('/results/demo-v2-result-expanded','demo-v2-result-1');
 await check('/crates/fnv?version=1.0.6','Previous release baseline');
+await check('/crates/arrayvec?version=0.7.6','unsafe fn');
+await check('/results/demo-arrayvec-result-0','kani::assume(vec.len() &lt; CAPACITY);');
 await check('/crates/serde','No verification results yet');
 const search=await fetch(origin+'/?q=fnv',{redirect:'manual'});
 if(search.headers.get('location')!=='/crates/fnv')throw new Error('Search redirect failed.');
@@ -25,10 +27,10 @@ const location=published.headers.get('location');
 if(published.status!==303||!location?.startsWith('/publications/'))throw new Error(`Publication failed: ${published.status}`);
 await check(location,'Automated end-to-end publication');
 // Preserve the most recent demo history while proving a inherited-only snapshot can be posted.
-const inherited={...draft,records:'[]',inherited:JSON.stringify(['demo-result-0','demo-result-expanded']),message:'[DEMO] Latest snapshot: preserve attribution\n\nRetains construction and revised writes; finish remains omitted.'};
+const inherited={...draft,records:'[]',inherited:JSON.stringify(['demo-v2-result-0','demo-v2-result-expanded','demo-v2-result-3']),message:'[DEMO] Latest snapshot: preserve attribution\n\nRetains construction and revised writes; finish remains omitted.'};
 const next=await fetch(origin+'/publish',{method:'POST',headers:{Origin:origin,Cookie:cookie},body:new URLSearchParams(inherited),redirect:'manual'});
 if(next.status!==303)throw new Error('Inheritance publication failed.');
-const latest=await check('/crates/fnv?version=1.0.7','demo-result-expanded');
+const latest=await check('/crates/fnv?version=1.0.7','demo-v2-result-expanded');
 if(latest.includes('<code>fnv::FnvHasher::finish</code>'))throw new Error('Omitted result leaked into latest snapshot.');
 const denied=await fetch(origin+'/publish',{method:'POST',headers:{Origin:'https://untrusted.example',Cookie:cookie},body:new URLSearchParams(draft),redirect:'manual'});
 if(denied.status!==403)throw new Error(`Cross-origin POST returned ${denied.status}: ${(await denied.text()).slice(0,200)}`);

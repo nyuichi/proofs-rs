@@ -1673,3 +1673,8 @@ input,select,textarea { max-width:100%; }
 .record-editor input,.record-editor textarea,.record-editor select,.search-row input,.crate-controls select { border:1px solid #bfc8d1; border-radius:6px; padding:.65rem; background:white; color:#1c2937; font:inherit; min-height:44px; }
 .record-editor .form-grid { min-width:0; }
 .record-editor label { min-width:0; }
+.unsafe-badge { display:inline-block; padding:.2rem .45rem; border:1px solid #b85428; border-radius:4px; background:#fff0e4; color:#8c3715; font-size:.85rem; }
+.safe-badge { font-size:.85rem; color:#526271; }
+.api-properties { display:flex; gap:.5rem; margin:.8rem 0; }
+.contract-code { font-family:ui-monospace,SFMono-Regular,Consolas,monospace; white-space:pre; overflow-x:auto; max-width:100%; padding:1rem; background:#f3f5f7; border-radius:6px; font-size:.9rem; }
+.contract-language { font-size:.8rem; font-weight:600; margin-bottom:.3rem; }
