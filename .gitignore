@@ -18,3 +18,9 @@ worker-configuration.d.ts
 
 !.dev.vars.example
 !.env.example
+
+
+# Generated development bindings and state
+wrangler.dev.json
+.dev-origin
+fixtures/demo.sql

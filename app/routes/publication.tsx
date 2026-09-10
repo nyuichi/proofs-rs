@@ -2,6 +2,8 @@ import { env } from "cloudflare:workers";
 import { Link } from "react-router";
 
 import type { Route } from "./+types/publication";
+import { getPublicationRecords } from "../lib/records.server";
+import { VerificationList } from "../components/verification-list";
 import { getPublication } from "../lib/repository.server";
 import {
   asObject,
@@ -30,7 +32,7 @@ export async function loader({ params }: Route.LoaderArgs) {
   if (!id) throw new Response("Publication not found", { status: 404 });
   const publication = await getPublication(env.DB, id);
   if (!publication) throw new Response("Publication not found", { status: 404 });
-  return { publication };
+  return { publication, records: await getPublicationRecords(env.DB,id) };
 }
 
 export function meta({}: Route.MetaArgs) {
@@ -652,13 +654,16 @@ function RawRuns({
 }
 
 export default function PublicationDetail({ loaderData }: Route.ComponentProps) {
-  const { publication } = loaderData;
+  const { publication, records } = loaderData;
   const { title, body } = splitPublicationMessage(publication.message);
   const model = verifiedTargetsForPublication(publication);
   const contextDetails = contextDetailsForPublication(publication);
 
   return (
     <main className="page-shell detail-page">
+      <div className="crate-controls"><Link to={`/crates/${publication.crate_name}?version=${publication.crate_version}`}>← {publication.crate_name} {publication.crate_version}</Link><Link className="primary-button" to={`/publish?from=${publication.id}`}>Build on this publication</Link></div>
+      {records.length>0 && <VerificationList records={records}/>}
+
       <Link className="back-link" to="/">
         ← Publications
       </Link>
@@ -718,3 +723,4 @@ export default function PublicationDetail({ loaderData }: Route.ComponentProps) 
     </main>
   );
 }
+

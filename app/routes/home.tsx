@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { Link, redirect } from "react-router";
+import { Form, Link, redirect } from "react-router";
 
 import type { Route } from "./+types/home";
 import {
@@ -21,6 +21,8 @@ function invalidPageResponse(): Response {
 
 export async function loader({ request }: Route.LoaderArgs) {
   const url = new URL(request.url);
+  const query=url.searchParams.get('q')?.trim();
+  if(query) throw redirect(`/crates/${encodeURIComponent(query)}`);
   let page: number;
   try {
     page = parsePageParam(url);
@@ -163,6 +165,8 @@ export default function Home({ loaderData }: Route.ComponentProps) {
 
   return (
     <main className="page-shell home-page">
+      <section className="crate-search"><p className="eyebrow">Explore verification</p><h1>Find a Rust crate</h1><Form method="get"><label htmlFor="crate-query">Crate name</label><div className="search-row"><input id="crate-query" name="q" placeholder="fnv, arrayvec, bytes…" required maxLength={64}/><button className="primary-button" type="submit">Find crate</button></div></Form><p>Browse published results and the people behind them.</p></section>
+
       <section className="page-heading">
         <h1>Publications</h1>
       </section>
@@ -228,3 +232,4 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     </main>
   );
 }
+

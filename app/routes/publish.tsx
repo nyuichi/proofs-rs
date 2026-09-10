@@ -1,3 +1,8 @@
+import { RecordEditor } from "../components/record-editor";
+import { getPublicationRecords, RecordValidationError, recordInputsSchema } from "../lib/records.server";
+import { getPublication } from "../lib/repository.server";
+import { isDemoMode } from "../lib/demo.server";
+import { demoDraft } from "../lib/demo-data";
 import { env } from "cloudflare:workers";
 import { data, Form, redirect, useActionData, useNavigation } from "react-router";
 import { useState, type KeyboardEvent } from "react";
@@ -31,6 +36,9 @@ const FIELD_NAMES = [
   "verification_path",
   "labels",
   "sarif",
+  "records",
+  "inherited",
+  "source",
 ] as const;
 
 export type PublishValues = Record<(typeof FIELD_NAMES)[number], string>;
@@ -72,6 +80,7 @@ function validationErrors(error: unknown): Record<string, string> {
     }
     return errors;
   }
+  if (error instanceof RecordValidationError) return { _form: error.message };
   if (error instanceof SarifValidationError) {
     return { sarif: error.message };
   }
@@ -81,20 +90,34 @@ function validationErrors(error: unknown): Record<string, string> {
   return { _form: "This publication could not be created. Try again." };
 }
 
-function publishLoginRedirect(): Response {
-  return redirect(`/auth/github?returnTo=${encodeURIComponent("/publish")}`, 303);
+function publishLoginRedirect(request: Request): Response {
+ const url=new URL(request.url);const returnTo=url.pathname+url.search;
+ return redirect(`${isDemoMode(env)?'/demo':'/auth/github'}?returnTo=${encodeURIComponent(returnTo)}`,303);
 }
 
 export async function loader({ request }: Route.LoaderArgs) {
   const publisher = await getOptionalPublisher(request, env.DB);
-  if (!publisher) throw publishLoginRedirect();
-  return { publisher: { github_login: publisher.github_login } };
+  if (!publisher) throw publishLoginRedirect(request);
+  const url=new URL(request.url);
+  const from=url.searchParams.get('from');
+  const source=from ? await getPublication(env.DB,from) : null;
+  if(from&&!source) throw new Response('Source publication not found',{status:404});
+  const available=source ? await getPublicationRecords(env.DB,source.id) : [];
+  const initial: Partial<PublishValues> = source ? {
+   message:`Update ${source.crate_name} verification`, crate_name:source.crate_name,crate_version:source.crate_version,
+   upstream_repository:source.upstream_repository,upstream_commit:source.upstream_commit,upstream_path:source.upstream_path,
+   verification_repository:source.verification_repository,verification_commit:source.verification_commit,verification_path:source.verification_path,
+   sarif:JSON.stringify({version:source.sarif_version,runs:source.runs.map(r=>JSON.parse(r.run_json))},null,2),source:source.id
+  } : {crate_name:url.searchParams.get('crate') ?? '',crate_version:url.searchParams.get('version') ?? ''};
+  if(url.searchParams.has('demo') && isDemoMode(env)) Object.assign(initial,demoDraft());
+  return { publisher: { github_login: publisher.github_login }, initial, available };
+
 }
 
 export async function action({ request }: Route.ActionArgs) {
   assertSameOrigin(request, env);
   const publisher = await getOptionalPublisher(request, env.DB);
-  if (!publisher) return publishLoginRedirect();
+  if (!publisher) return publishLoginRedirect(request);
 
   const formData = await request.formData();
   const values = valuesFromFormData(formData);
@@ -112,17 +135,27 @@ export async function action({ request }: Route.ActionArgs) {
       labels: labelValues(formData),
     });
     const sarif = parseSarif(values.sarif);
+    let recordInput: unknown, inherited: unknown;
+    try { recordInput=JSON.parse(values.records || '[]');inherited=JSON.parse(values.inherited || '[]'); }
+    catch { throw new RecordValidationError('Invalid API result data.'); }
+    const records=recordInputsSchema.parse(recordInput);
+    const inheritedRecordIds=z.array(z.string().min(1)).max(200).parse(inherited);
+    if(records.length+inheritedRecordIds.length===0) throw new RecordValidationError('Add at least one API result or retain an existing result.');
+
     const id = await createPublication({
       db: env.DB,
       publisherId: publisher.id,
       metadata,
       sarif,
+      records,
+      inheritedRecordIds,
     });
     return redirect(`/publications/${encodeURIComponent(id)}`, 303);
   } catch (error) {
     if (
       !(error instanceof z.ZodError) &&
       !(error instanceof SarifValidationError) &&
+      !(error instanceof RecordValidationError) &&
       !(error instanceof PublicationRateLimitError)
     ) {
       throw error;
@@ -264,7 +297,7 @@ function PublicationLabelsField({
   );
 }
 
-export default function Publish({}: Route.ComponentProps) {
+export default function Publish({loaderData}: Route.ComponentProps) {
   const actionData = useActionData() as PublishActionData | undefined;
   const navigation = useNavigation();
   const values = actionData?.values ?? {
@@ -279,6 +312,10 @@ export default function Publish({}: Route.ComponentProps) {
     verification_path: "",
     labels: "",
     sarif: "",
+    records: "[]",
+    inherited: "[]",
+    source: "",
+    ...loaderData.initial,
   } satisfies PublishValues;
   const errors = actionData?.errors ?? {};
   const isSubmitting = navigation.state === "submitting";
@@ -294,6 +331,9 @@ export default function Publish({}: Route.ComponentProps) {
       </section>
 
       <Form className="publish-form" method="post">
+        <input type="hidden" name="source" value={values.source}/>
+        <RecordEditor initial={JSON.parse(values.records || '[]')} available={loaderData.available} selected={actionData ? JSON.parse(values.inherited || '[]') : undefined}/>
+
         <section className="form-section">
           <h2>Publication message</h2>
           <div className="form-field form-field-wide">
@@ -389,7 +429,11 @@ export default function Publish({}: Route.ComponentProps) {
         </section>
 
         <section className="form-section">
-          <h2>SARIF JSON</h2>
+          <h2>SARIF JSON</h2><label>Upload SARIF file<input type="file" accept=".sarif,.json,application/json" onChange={async event=>{
+ const file=event.target.files?.[0]; if(!file)return;
+ if(file.size>1000000){event.target.setCustomValidity('Maximum file size is 1 MB.');event.target.reportValidity();return;}
+ event.target.setCustomValidity('');const area=document.getElementById('sarif') as HTMLTextAreaElement|null;if(area)area.value=await file.text();
+ }}/></label>
           <div className="form-field form-field-wide">
             <label htmlFor="sarif">
               One SARIF 2.1.0 document; multiple runs are allowed; maximum 1 MB.
@@ -426,3 +470,4 @@ export default function Publish({}: Route.ComponentProps) {
     </main>
   );
 }
+

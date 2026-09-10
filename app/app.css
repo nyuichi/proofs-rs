@@ -1638,3 +1638,35 @@ a.pagination-page:hover {
     transition: none;
   }
 }
+
+
+/* Crate snapshots and result provenance share the publication visual language. */
+.crate-search { padding: 2rem 0 3rem; border-bottom: 1px solid #d8dce2; margin-bottom: 2rem; }
+.crate-search h1 { font-size: clamp(2rem,5vw,3.2rem); margin: .5rem 0 1.5rem; }
+.search-row { display:flex; gap:.75rem; margin:.5rem 0 1rem; max-width:42rem; }
+.search-row input { flex:1; min-width:0; }
+.crate-controls, .record-links { display:flex; flex-wrap:wrap; gap:1rem; align-items:center; margin:1rem 0; }
+.crate-controls form { display:flex; align-items:center; gap:.5rem; }
+.snapshot-banner { background:#eff6f1; border:1px solid #cdded2; border-radius:10px; padding:1.25rem; margin:1.5rem 0; }
+.api-scope { margin:2rem 0; }
+.api-scope h2 { font-size:1rem; overflow-wrap:anywhere; color:#596370; }
+.api-record { border:1px solid #d8dce2; padding:1.25rem; border-radius:10px; margin:1rem 0; }
+.api-record h3 { margin:0; font-size:1.05rem; overflow-wrap:anywhere; }
+.verification-result { border-top:1px solid #e1e5e9; padding:.8rem 0; }
+.verification-result summary { cursor:pointer; display:flex; flex-wrap:wrap; align-items:center; gap:.6rem; min-height:44px; }
+.verification-tag { display:inline-block; background:#dfeee5; color:#204d39; border-radius:5px; padding:.2rem .5rem; font-weight:600; }
+.blame-author { margin-left:auto; color:#526271; font-size:.85rem; }
+.verification-result dt { font-weight:600; margin-top:1rem; }
+.verification-result dd { margin:.35rem 0; overflow-wrap:anywhere; }
+.contract-text { white-space:pre-wrap; }
+.pub-history { padding-left:1.3rem; }
+.pub-history li { padding:.65rem 0; overflow-wrap:anywhere; }
+.pub-history span { display:block; font-size:.85rem; color:#65717e; }
+.record-editor { margin:1.2rem 0; padding:1rem; border:1px solid #d8dce2; border-radius:8px; }
+.record-editor label { display:flex; flex-direction:column; gap:.4rem; }
+.inherit-row { padding:.8rem 0; display:flex; flex-wrap:wrap; gap:.7rem; align-items:center; }
+.inherit-row label { flex:1; overflow-wrap:anywhere; }
+.inherit-row input { width:auto; margin-right:.5rem; }
+.development-banner { background:#fff1c9; padding:.65rem 1rem; text-align:center; font-size:.85rem; }
+input,select,textarea { max-width:100%; }
+@media(max-width:600px) { .search-row { flex-direction:column; } .record-links { flex-direction:column; align-items:flex-start; } .api-record { padding:.85rem; } .crate-controls { align-items:flex-start; } }

@@ -1,4 +1,5 @@
 import { ulid } from "ulid";
+import { prepareRecordStatements } from "./records.server";
 
 import {
   parsePublicationLabels,
@@ -61,6 +62,8 @@ export interface PublicationCreateInput {
   labels?: PublicationLabels | readonly string[];
   sarif: SarifRoot;
   now?: Date;
+  records?: unknown;
+  inheritedRecordIds?: string[];
 }
 
 export class PublicationRateLimitError extends Error {
@@ -280,6 +283,8 @@ export async function createPublication({
   labels: labelsOverride,
   sarif,
   now = new Date(),
+  records = [],
+  inheritedRecordIds = [],
 }: PublicationCreateInput & { db: D1Database }): Promise<string> {
   const labels = parsePublicationLabels(labelsOverride ?? metadata.labels ?? []);
   const { start, end } = utcDayBounds(now);
@@ -341,12 +346,19 @@ export async function createPublication({
       .bind(publicationId, position, label, normalizePublicationLabel(label)),
   );
 
+  const recordStatements = await prepareRecordStatements(db, publicationId, metadata, sarif, records, inheritedRecordIds);
   try {
-    const results = await db.batch([insert, ...runStatements, ...labelStatements]);
+    const results = await db.batch([insert, ...runStatements, ...labelStatements, ...recordStatements]);
     if (Number(results[0]?.meta?.changes ?? 0) !== 1) throw new PublicationRateLimitError();
   } catch (error) {
     if (error instanceof PublicationRateLimitError) throw error;
     throw error;
   }
   return publicationId;
+}
+
+
+export async function cratePublications(db: D1Database, name: string, version: string) {
+ const rows = await db.prepare(`${publicationSelect} WHERE p.crate_name=? AND p.crate_version=? ORDER BY p.created_at DESC, p.id DESC`).bind(name, version).all<Record<string, unknown>>();
+ return rows.results.map(mapPublication);
 }

@@ -4,10 +4,11 @@ import { defineConfig } from "vite";
 
 export default defineConfig({
   plugins: [
-    cloudflare({ viteEnvironment: { name: "ssr" } }),
+    cloudflare({ configPath: process.env.PROOFS_DEV_CONFIG || "wrangler.jsonc", viteEnvironment: { name: "ssr" } }),
     reactRouter(),
   ],
   resolve: {
     tsconfigPaths: true,
   },
 });
+

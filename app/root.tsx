@@ -11,6 +11,7 @@ import {
   useLoaderData,
 } from "react-router";
 
+import { isDemoMode } from "./lib/demo.server";
 import { env } from "cloudflare:workers";
 
 import type { Route } from "./+types/root";
@@ -24,6 +25,7 @@ export const links: Route.LinksFunction = () => [
 export async function loader({ request }: Route.LoaderArgs) {
   const publisher = await getOptionalPublisher(request, env.DB);
   return {
+    demo: isDemoMode(env),
     publisher: publisher
       ? { github_login: publisher.github_login }
       : null,
@@ -49,10 +51,11 @@ export function Layout({ children }: { children: React.ReactNode }) {
 }
 
 export default function App() {
-  const { publisher } = useLoaderData<typeof loader>();
+  const { publisher, demo } = useLoaderData<typeof loader>();
 
   return (
     <>
+      {demo && <div className="development-banner">Development sandbox · Synthetic demo evidence · <Link to="/demo">Try the demo</Link></div>}
       <header className="site-header">
         <div className="site-header-inner">
           <Link className="brand" to="/" aria-label="proofs.rs home">
@@ -81,8 +84,8 @@ export default function App() {
                 </button>
               </Form>
             ) : (
-              <a className="auth-button" href="/auth/github">
-                Log in with GitHub
+              <a className="auth-button" href={demo ? "/demo" : "/auth/github"}>
+                {demo ? "Try demo account" : "Log in with GitHub"}
               </a>
             )}
           </div>
@@ -125,3 +128,4 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     </main>
   );
 }
+
