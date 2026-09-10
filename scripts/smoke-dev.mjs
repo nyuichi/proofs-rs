@@ -2,12 +2,16 @@ import {readFileSync,appendFileSync} from 'node:fs';
 import {demoDraft} from '../app/lib/demo-data.ts';
 const origin=readFileSync('.dev-origin','utf8').trim();
 if(!origin.startsWith('https://proofs-rs-dev.'))throw new Error('Not a development URL.');
-async function check(path,pattern){const r=await fetch(origin+path);const html=await r.text();if(!r.ok||!html.includes(pattern))throw new Error(`Smoke check failed: ${path} (${r.status})`);return html;}
-// A new workers.dev hostname can take a short time to propagate.
-for(let attempt=0;;attempt++){
- try{await check('/','Development sandbox');break;}
- catch(error){if(attempt>=5)throw error;await new Promise(resolve=>setTimeout(resolve,5000));}
+// Read-only checks tolerate edge propagation after a deployment; writes are never retried.
+async function check(path,pattern){
+ for(let attempt=0;;attempt++){
+  const r=await fetch(origin+path);const html=await r.text();
+  if(r.ok&&html.includes(pattern))return html;
+  if(attempt>=5)throw new Error(`Smoke check failed: ${path} (${r.status})`);
+  await new Promise(resolve=>setTimeout(resolve,5000));
+ }
 }
+await check('/','Development sandbox');
 await check('/demo','Try the complete flow');
 const crate=await check('/publications/demo-v2-fnv-expanded','demo-v2-result-expanded');
 if(crate.includes('<code>fnv::FnvHasher::finish</code>'))throw new Error('Omitted result leaked into latest snapshot.');
