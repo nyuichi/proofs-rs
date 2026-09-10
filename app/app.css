@@ -1670,3 +1670,6 @@ a.pagination-page:hover {
 .development-banner { background:#fff1c9; padding:.65rem 1rem; text-align:center; font-size:.85rem; }
 input,select,textarea { max-width:100%; }
 @media(max-width:600px) { .search-row { flex-direction:column; } .record-links { flex-direction:column; align-items:flex-start; } .api-record { padding:.85rem; } .crate-controls { align-items:flex-start; } }
+.record-editor input,.record-editor textarea,.record-editor select,.search-row input,.crate-controls select { border:1px solid #bfc8d1; border-radius:6px; padding:.65rem; background:white; color:#1c2937; font:inherit; min-height:44px; }
+.record-editor .form-grid { min-width:0; }
+.record-editor label { min-width:0; }

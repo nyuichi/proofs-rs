@@ -9,7 +9,7 @@ for(let attempt=0;;attempt++){
  catch(error){if(attempt>=5)throw error;await new Promise(resolve=>setTimeout(resolve,5000));}
 }
 await check('/demo','Try the complete flow');
-const crate=await check('/crates/fnv?version=1.0.7','demo-result-expanded');
+const crate=await check('/publications/demo-fnv-expanded','demo-result-expanded');
 if(crate.includes('<code>fnv::FnvHasher::finish</code>'))throw new Error('Omitted result leaked into latest snapshot.');
 await check('/results/demo-result-expanded','demo-result-1');
 await check('/crates/fnv?version=1.0.6','Previous release baseline');
@@ -28,8 +28,9 @@ await check(location,'Automated end-to-end publication');
 const inherited={...draft,records:'[]',inherited:JSON.stringify(['demo-result-0','demo-result-expanded']),message:'[DEMO] Latest snapshot: preserve attribution\n\nRetains construction and revised writes; finish remains omitted.'};
 const next=await fetch(origin+'/publish',{method:'POST',headers:{Origin:origin,Cookie:cookie},body:new URLSearchParams(inherited),redirect:'manual'});
 if(next.status!==303)throw new Error('Inheritance publication failed.');
-await check('/crates/fnv?version=1.0.7','demo-result-expanded');
+const latest=await check('/crates/fnv?version=1.0.7','demo-result-expanded');
+if(latest.includes('<code>fnv::FnvHasher::finish</code>'))throw new Error('Omitted result leaked into latest snapshot.');
 const denied=await fetch(origin+'/publish',{method:'POST',headers:{Origin:'https://untrusted.example',Cookie:cookie},body:new URLSearchParams(draft),redirect:'manual'});
-if(denied.status!==403)throw new Error('Cross-origin POST was not rejected.');
+if(denied.status!==403)throw new Error(`Cross-origin POST returned ${denied.status}: ${(await denied.text()).slice(0,200)}`);
 console.log(`Verified development browsing, login, posting, inheritance and origin protection: ${origin}`);
 if(process.env.GITHUB_STEP_SUMMARY)appendFileSync(process.env.GITHUB_STEP_SUMMARY,`\nDevelopment demo: ${origin}/demo\n\nSmoke checks passed. All example results are synthetic.\n`);

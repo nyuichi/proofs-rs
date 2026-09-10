@@ -662,7 +662,6 @@ export default function PublicationDetail({ loaderData }: Route.ComponentProps) 
   return (
     <main className="page-shell detail-page">
       <div className="crate-controls"><Link to={`/crates/${publication.crate_name}?version=${publication.crate_version}`}>← {publication.crate_name} {publication.crate_version}</Link><Link className="primary-button" to={`/publish?from=${publication.id}`}>Build on this publication</Link></div>
-      {records.length>0 && <VerificationList records={records}/>}
 
       <Link className="back-link" to="/">
         ← Publications
@@ -712,11 +711,11 @@ export default function PublicationDetail({ loaderData }: Route.ComponentProps) 
           />
         </section>
 
-        <VerifiedTargets
+        {records.length>0 ? <VerificationList records={records}/> : <VerifiedTargets
           model={model}
           contextDetails={contextDetails}
           publication={publication}
-        />
+        />}
 
         <RawRuns publication={publication} />
       </article>
