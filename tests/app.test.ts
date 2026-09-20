@@ -1,13 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { app } from "../src/worker";
 import { hash, Env } from "../src/core";
 import { extractAPIs } from "../src/imports";
 function database() {
   const db = new DatabaseSync(":memory:");
-  for (const f of ["0001_schema.sql", "0002_tools.sql"])
+  for (const f of readdirSync(new URL("../migrations/", import.meta.url))
+    .filter((f) => f.endsWith(".sql"))
+    .sort())
     db.exec(
       readFileSync(new URL("../migrations/" + f, import.meta.url), "utf8"),
     );
@@ -49,8 +51,12 @@ function database() {
     } as unknown as D1Database,
   };
 }
-async function fixture() {
+async function fixture(seedTools = true) {
   const { db, binding } = database();
+  if (seedTools)
+    db.exec(
+      "INSERT INTO tools VALUES('kani','Kani','Test verifier','https://example.test',1); INSERT INTO tool_versions VALUES('kani-0.68.0','kani','0.68.0',1);",
+    );
   const time = new Date().toISOString();
   for (const [id, n] of [
     ["alice", 1],
@@ -518,4 +524,56 @@ test("frontend publish preview, revision links and nested comment deletion", asy
   } finally {
     w.close();
   }
+});
+
+test("empty catalogue can be managed through the authenticated admin API", async () => {
+  const { request } = await fixture(false);
+  const empty = await request("/tools");
+  assert.deepEqual(empty.body.items, []);
+  assert.deepEqual(empty.body.versions, []);
+  const tool = {
+    action: "tool",
+    target: "test-verifier",
+    name: "Test verifier",
+    description: "A configurable tool",
+    url: "https://example.test/verifier",
+    reason: "Register tool",
+  };
+  assert.equal((await request("/admin/action", "POST", tool)).status, 403);
+  assert.equal(
+    (await request("/admin/action", "POST", tool, "admin")).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        "/admin/action",
+        "POST",
+        {
+          action: "tool_version",
+          target: "test-verifier-1",
+          tool_id: tool.target,
+          version: "1.0",
+          reason: "Register version",
+        },
+        "admin",
+      )
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await request(
+        "/admin/action",
+        "POST",
+        { ...tool, name: "Updated verifier" },
+        "admin",
+      )
+    ).status,
+    200,
+  );
+  const catalogue = await request("/tools");
+  assert.equal(catalogue.body.items.length, 1);
+  assert.equal(catalogue.body.items[0].name, "Updated verifier");
+  assert.equal(catalogue.body.versions[0].version, "1.0");
 });

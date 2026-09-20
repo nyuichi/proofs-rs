@@ -8,7 +8,7 @@ Cloudflare Workers (Hono/TypeScript), D1, private R2, Queues, Cron, Workers Asse
 
 Requires Node 24. `npm ci`, `npm run build`, `npm run db:local`, then `npm run dev`. Copy `.dev.vars.example` to `.dev.vars` and configure a development GitHub OAuth app to enable sign-in. Callback: `http://localhost:8787/auth/github/callback`. No local auth bypass is exposed by the Worker. `npm test` uses an in-memory SQLite adapter and fixture rustdoc JSON, never a live docs.rs request or email send.
 
-`npm run typecheck`, `npm test`, `npm run build` are the deployment gates. The first migration creates immutable revisions, transaction guards, comment history, accepts, votes, outbox events and delivery states. A keyset cursor is used for lists. Tools and initial versions are copied from the approved mock, not inferred from upstream latest releases.
+`npm run typecheck`, `npm test`, `npm run build` are the deployment gates. The first migration creates immutable revisions, transaction guards, comment history, accepts, votes, outbox events and delivery states. A keyset cursor is used for lists. The tool catalogue starts empty. Tools and versions are stored in D1 and can be added or updated through the audited admin API without a deployment.
 
 ## Staging
 

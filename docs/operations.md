@@ -12,17 +12,17 @@ Restore into a new private database, never directly into a serving database. Dow
 
 Sign in as an admin. Use the browser session and `/api/v1/me` CSRF value, same-origin requests. Never copy a session into an issue. `POST /api/v1/admin/action` takes `{action,target,reason,...}`. Reason is mandatory.
 
-| Action | Additional fields | Result |
-|---|---|---|
-| claim_visibility / comment_visibility | value: public or hidden | Hide/restore content |
-| suspend / restore_user | none | Account status; suspension revokes sessions |
-| redact_comment | none | Erase current and retained text, remove votes, preserve thread |
-| redact_revision | revision_no | Exceptional redaction with audit and restore marker |
-| delete_user | none | Ghost attribution, remove private profile/contact/session/votes/accepts |
-| pause | target: imports_paused or email_paused; value: boolean | Background work stop |
-| retry_email | none | Explicit operator-approved retry, including unknown outcomes |
-| tool | name, description, url, active | Curated tool catalogue |
-| tool_version | tool_id, version, selectable | Curated version catalogue |
+| Action                                | Additional fields                                      | Result                                                                  |
+| ------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |
+| claim_visibility / comment_visibility | value: public or hidden                                | Hide/restore content                                                    |
+| suspend / restore_user                | none                                                   | Account status; suspension revokes sessions                             |
+| redact_comment                        | none                                                   | Erase current and retained text, remove votes, preserve thread          |
+| redact_revision                       | revision_no                                            | Exceptional redaction with audit and restore marker                     |
+| delete_user                           | none                                                   | Ghost attribution, remove private profile/contact/session/votes/accepts |
+| pause                                 | target: imports_paused or email_paused; value: boolean | Background work stop                                                    |
+| retry_email                           | none                                                   | Explicit operator-approved retry, including unknown outcomes            |
+| tool                                  | name, description, url, active                         | Curated tool catalogue                                                  |
+| tool_version                          | tool_id, version, selectable                           | Curated version catalogue                                               |
 
 `GET /api/v1/admin/comments/:id/history` audits the read. `GET /api/v1/admin/audit` lists recent audit records. `GET /api/v1/admin/deliveries` lists unresolved delivery failures. Keep unknown delivery outcomes under review; retry only after evaluating possible duplicate mail. Inspect the dead-letter Queue in Cloudflare. Replaying an outbox event is safe; creating a new delivery for an uncertain send is not automatically safe.
 
@@ -46,4 +46,6 @@ The parser allowlists rustdoc format 61 and rejects unsupported syntax or unreso
 
 ## Current staging setup status (2026-09-20)
 
-D1/R2/Queues provisioning and D1 migrations have succeeded. The account is on Workers Free. Per the operator decision, staging now omits the Paid-only CPU limit and explicitly disables email via EMAIL_DISABLED=true. New comment notification events are completed without creating deliveries; pending/retry deliveries are cancelled. The email binding and event consumer are omitted, so setting an EMAIL_FROM variable alone cannot enable sending. Staging OAuth still requires its GitHub client ID and secret. docs.rs import CPU usage on the Free plan remains unverified; live import and email tests are intentionally excluded.
+D1/R2/Queues provisioning and D1 migrations have succeeded. The account is on Workers Free. Per the operator decision, staging now omits the Paid-only CPU limit and explicitly disables email via EMAIL_DISABLED=true. New comment notification events are completed without creating deliveries; pending/retry deliveries are cancelled. The email binding and event consumer are omitted, so setting an EMAIL_FROM variable alone cannot enable sending. OAuth credentials are read from the GitHub staging variable and secret on each deployment. docs.rs import CPU usage on the Free plan remains unverified; live import and email tests are intentionally excluded.
+
+The tool catalogue starts empty. Use the audited `tool` and `tool_version` admin actions to register tools and selectable versions before publishing claims. There is no dedicated admin UI yet.

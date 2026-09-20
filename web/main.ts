@@ -412,7 +412,7 @@ function renderComment(cm: any, container: HTMLElement, claimID: number) {
   return children;
 }
 function login() {
-  root.innerHTML = `<h1>Sign in</h1><p>Use your GitHub account to sign in or create an account.</p><p>By signing up, you agree to the <a href="#/terms">Terms</a> and acknowledge the <a href="#/privacy">Privacy Policy</a>.</p>${config.oauth_configured ? '<a href="/auth/github">Continue with GitHub</a>' : "<p>GitHub sign-in is awaiting staging configuration.</p>"}`;
+  root.innerHTML = `<h1>Sign in</h1><p>Use your GitHub account to sign in or create an account.</p><p>By signing up, you agree to the <a href="#/terms">Terms</a> and acknowledge the <a href="#/privacy">Privacy Policy</a>.</p>${config.oauth_configured ? '<a href="/auth/github">Continue with GitHub</a>' : "<p>GitHub sign-in is currently unavailable.</p>"}`;
 }
 async function termsUpdate() {
   if (!me.user) return login();
@@ -466,7 +466,7 @@ async function mine(kind: string) {
 async function settings() {
   if (!me.user) return login();
   const p = await request("/me/notification-preferences");
-  root.innerHTML = `<h1>Email notifications</h1><p>Verified primary GitHub email: ${esc(me.email?.address || "Unavailable")}</p>${config.email_disabled ? "<p>Email notifications are disabled in this staging environment.</p>" : !config.email_configured ? "<p>Email delivery is awaiting staging configuration.</p>" : ""}<p>Pending or uncertain deliveries: ${me.delayed_notifications || 0}</p><form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form>`;
+  root.innerHTML = `<h1>Email notifications</h1><p>Verified primary GitHub email: ${esc(me.email?.address || "Unavailable")}</p>${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<p>Pending or uncertain deliveries: ${me.delayed_notifications || 0}</p><form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form>`;
   bind(
     "#prefs",
     async (e) => {
@@ -490,7 +490,7 @@ async function toolsPage(id?: string) {
     );
   }
   const d = await request("/tools");
-  root.innerHTML = `<h1>Verification tools</h1>${d.items.map((t: any) => `<article><h2><a href="#/tool/${enc(t.id)}">${esc(t.name)}</a></h2><p>${esc(t.description)}</p></article>`).join("")}<p><a href="https://github.com/nyuichi/proofs-rs/issues/new">Request a tool or version</a></p>`;
+  root.innerHTML = `<h1>Verification tools</h1>${d.items.map((t: any) => `<article><h2><a href="#/tool/${enc(t.id)}">${esc(t.name)}</a></h2><p>${esc(t.description)}</p></article>`).join("") || "<p>No tools have been registered yet.</p>"}<p><a href="https://github.com/nyuichi/proofs-rs/issues/new">Request a tool or version</a></p>`;
 }
 async function publish() {
   if (!needUser()) return;
@@ -734,12 +734,6 @@ window.addEventListener("hashchange", () => void route());
   try {
     config = await request("/config");
     await refreshMe();
-    if (config.environment === "staging") {
-      const banner = document.createElement("p");
-      banner.className = "staging-banner";
-      banner.textContent = "Staging · test data may be reset";
-      document.querySelector("header")!.after(banner);
-    }
     await route();
   } catch (e) {
     error(e);
