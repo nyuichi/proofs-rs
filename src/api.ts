@@ -623,7 +623,7 @@ for (const prefix of ["/users/:id", "/me"]) {
       await listing(
         c,
         commentSelect +
-          " JOIN claims c ON c.id=cm.claim_id WHERE cm.author_id=? AND c.visibility='public' AND cm.visibility='public'",
+          " JOIN claims c ON c.id=cm.claim_id WHERE cm.author_id=? AND c.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL",
         [
           c.get("user")?.id || "",
           prefix === "/me" ? requireUser(c).id : c.req.param("id"),

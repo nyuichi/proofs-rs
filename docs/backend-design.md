@@ -111,7 +111,7 @@ HonoにはWorkers用の公式導入手順があります。Workersのメモリ�
 | Accept一覧・My accepts | 対象revisionと日時を表示し、過去版であることを明示します。 | accepts検索 |
 | karma | 同一Claim・同一評価者の有効Acceptを全版で重複排除して1点とします。方式は交換可能にします。 | KarmaPolicyモジュール |
 | GitHubログイン・ログアウト | OAuthと失効可能なセッションです。 | auth |
-| ユーザー活動ページ | GitHubプロフィールへのリンク、公開Claims・Comments一覧、karma、登録日を表示します。自己紹介の入力・保存は行いません。メール情報と削除案内は本人専用の設定画面に置きます。 | users |
+| ユーザー活動ページ | GitHubプロフィールへのリンク、公開Claims・Comments一覧、karma、登録日を表示します。自分・他人の活動ページとMy commentsでは削除済みコメントを一覧から除外し、削除跡はClaimの返信ツリー内だけに表示します。自己紹介の入力・保存は行いません。メール情報と削除案内は本人専用の設定画面に置きます。 | users |
 | My claims / My comments | 所有者の投稿・削除済みコメントの参照をページングします。 | 所有者検索 |
 | 通知設定 | Reply・自分のClaimへの新規コメントを個別設定します。メンション設定は削除します。 | notification_preferences |
 | 通知先メール | GitHubの確認済みメールを表示します。変更はGitHub側で行い、再ログイン時に同期します。 | email_contacts |

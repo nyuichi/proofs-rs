@@ -283,6 +283,20 @@ test("nested replies, edit conflicts, private history, deletion and vote removal
   assert.equal(deleted.body, null);
   assert.equal(deleted.score, 0);
   assert.equal(deleted.reply_count, 1);
+  for (const [path, viewer] of [
+    ["/me/comments", "bob"],
+    ["/users/bob/comments", "bob"],
+    ["/users/bob/comments", "alice"],
+    ["/users/bob/comments", "anonymous"],
+  ]) {
+    const listing = await request(path, "GET", undefined, viewer);
+    assert.equal(listing.status, 200);
+    assert.deepEqual(
+      listing.body.items.map((item: any) => item.id),
+      [reply2],
+    );
+  }
+
   assert.deepEqual(
     db
       .prepare(
@@ -533,7 +547,7 @@ test("frontend publish preview, revision links and nested comment deletion", asy
       w.document.querySelector("#activity-comments")!.textContent!,
       /Nested reply/,
     );
-    assert.match(
+    assert.doesNotMatch(
       w.document.querySelector("#activity-comments")!.textContent!,
       /deleted comment/,
     );
