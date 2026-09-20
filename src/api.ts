@@ -53,7 +53,9 @@ api.get("/config", (c) =>
   c.json({
     environment: c.env.ENVIRONMENT,
     oauth_configured: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET),
-    email_configured: !!(c.env.EMAIL && c.env.EMAIL_FROM),
+    email_disabled: c.env.EMAIL_DISABLED === "true",
+    email_configured:
+      c.env.EMAIL_DISABLED !== "true" && !!(c.env.EMAIL && c.env.EMAIL_FROM),
     terms_version: c.env.TERMS_VERSION,
   }),
 );

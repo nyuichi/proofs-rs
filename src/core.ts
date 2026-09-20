@@ -18,6 +18,7 @@ export interface Env {
   GITHUB_CLIENT_ID: string;
   GITHUB_CLIENT_SECRET?: string;
   TOKEN_SECRET?: string;
+  EMAIL_DISABLED?: string;
   EMAIL_FROM: string;
   EMAIL_ALLOWLIST: string;
   ADMIN_GITHUB_IDS: string;

@@ -21,6 +21,11 @@ export async function dispatch(env: Env) {
     "UPDATE email_deliveries SET status='unknown' WHERE status='sending' AND sending_at<?",
     new Date(Date.now() - 300000).toISOString(),
   ).run();
+  if (env.EMAIL_DISABLED === "true")
+    await stmt(
+      db,
+      "UPDATE email_deliveries SET status='cancelled' WHERE status IN ('pending','retry')",
+    ).run();
   const sends = await rows(
     db,
     "SELECT id FROM email_deliveries WHERE status IN ('pending','retry') AND (next_attempt_at IS NULL OR next_attempt_at<=?) LIMIT 40",
@@ -41,6 +46,15 @@ export async function dispatch(env: Env) {
   ]);
 }
 async function createNotifications(env: Env, event: any) {
+  if (env.EMAIL_DISABLED === "true") {
+    await stmt(
+      env.DB,
+      "UPDATE outbox_events SET completed_at=? WHERE id=?",
+      now(),
+      event.id,
+    ).run();
+    return;
+  }
   const db = env.DB,
     cm = await one(
       db,
@@ -92,6 +106,14 @@ async function createNotifications(env: Env, event: any) {
   await batch(db, ss);
 }
 async function deliver(env: Env, id: string) {
+  if (env.EMAIL_DISABLED === "true") {
+    await stmt(
+      env.DB,
+      "UPDATE email_deliveries SET status='cancelled' WHERE id=? AND status IN ('pending','retry')",
+      id,
+    ).run();
+    return;
+  }
   const db = env.DB;
   const d = await one(
     db,

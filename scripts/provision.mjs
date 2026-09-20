@@ -73,7 +73,7 @@ for (const name of [
   "ADMIN_GITHUB_IDS",
 ])
   if (process.env[name]) config.vars[name] = process.env[name];
-if (config.vars.EMAIL_FROM)
+if (config.vars.EMAIL_DISABLED !== "true" && config.vars.EMAIL_FROM)
   config.send_email = [
     {
       name: "EMAIL",

@@ -19,7 +19,8 @@
     "EMAIL_FROM": "",
     "EMAIL_ALLOWLIST": "",
     "ADMIN_GITHUB_IDS": "540144",
-    "TERMS_VERSION": "2026-09-20"
+    "TERMS_VERSION": "2026-09-20",
+    "EMAIL_DISABLED": "true"
   },
   "d1_databases": [
     {
@@ -48,12 +49,6 @@
         "max_batch_size": 5,
         "max_retries": 3,
         "dead_letter_queue": "proofs-rs-staging-dead"
-      },
-      {
-        "queue": "proofs-rs-staging-email-events",
-        "max_batch_size": 10,
-        "max_retries": 3,
-        "dead_letter_queue": "proofs-rs-staging-dead"
       }
     ]
   },
@@ -65,8 +60,5 @@
   },
   "observability": {
     "enabled": true
-  },
-  "limits": {
-    "cpu_ms": 120000
   }
 }

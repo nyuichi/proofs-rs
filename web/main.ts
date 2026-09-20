@@ -466,7 +466,7 @@ async function mine(kind: string) {
 async function settings() {
   if (!me.user) return login();
   const p = await request("/me/notification-preferences");
-  root.innerHTML = `<h1>Email notifications</h1><p>Verified primary GitHub email: ${esc(me.email?.address || "Unavailable")}</p>${!config.email_configured ? "<p>Email delivery is awaiting staging configuration.</p>" : ""}<p>Pending or uncertain deliveries: ${me.delayed_notifications || 0}</p><form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form>`;
+  root.innerHTML = `<h1>Email notifications</h1><p>Verified primary GitHub email: ${esc(me.email?.address || "Unavailable")}</p>${config.email_disabled ? "<p>Email notifications are disabled in this staging environment.</p>" : !config.email_configured ? "<p>Email delivery is awaiting staging configuration.</p>" : ""}<p>Pending or uncertain deliveries: ${me.delayed_notifications || 0}</p><form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form>`;
   bind(
     "#prefs",
     async (e) => {

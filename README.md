@@ -17,7 +17,7 @@ Pushes to `main` run `.github/workflows/deploy.yml`. `scripts/provision.mjs` cre
 Required GitHub Actions secrets:
 
 - `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`: scoped to the account, Workers Scripts edit, D1 edit, R2 edit, Queues edit, and account/subdomain read as required by Cloudflare. R2 and Queues must be enabled. The configured CPU budget requires Workers Paid.
+- `CLOUDFLARE_API_TOKEN`: scoped to the account, Workers Scripts edit, D1 edit, R2 edit, Queues edit, and account/subdomain read as required by Cloudflare. R2 and Queues must be enabled. Staging currently uses Workers Free with no custom CPU limit. Email sending is explicitly disabled.
 
 Optional integration settings (missing integrations are visibly marked, not silently simulated):
 
@@ -36,6 +36,10 @@ No GitHub tokens or client secrets are committed or included in the browser buil
 - Replies form an unbounded-depth tree; every reply level indents. Deleted comments retain a public tombstone and private history.
 - Notifications arise only from new comments, deduplicate recipients and skip the author. Unknown send outcomes are not automatically retried.
 - Admin APIs require the same session/CSRF/terms guards plus the admin role. Every moderation action and history read is audited. There is no public history endpoint.
+
+## Free staging mode
+
+`EMAIL_DISABLED=true` skips new email notifications and cancels pending/retry deliveries; it never accumulates a backlog for later sending. The email binding and email-event consumer are omitted. Existing user preferences are retained. docs.rs imports are implemented, but their CPU usage on the Free plan has not been verified. No live import or email tests are run. Enabling arbitrary-recipient email later requires Workers Paid and deliberate configuration changes.
 
 ## Release boundary
 
