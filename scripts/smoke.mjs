@@ -11,11 +11,17 @@ for (const path of [
   "/api/v1/me",
   "/api/v1/config",
 ]) {
-  const r = await fetch(origin + path);
+  let r;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    r = await fetch(origin + path);
+    if (r.ok || ![404, 502, 503, 504].includes(r.status)) break;
+    if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 3000));
+  }
   if (!r.ok) throw Error(path + " returned " + r.status);
   if (!r.headers.get("x-robots-tag")?.includes("noindex"))
     throw Error("Missing staging noindex header");
-  if(path === "/openapi.json" && (await r.json()).openapi !== "3.1.1") throw Error("Invalid OpenAPI document");
+  if (path === "/openapi.json" && (await r.json()).openapi !== "3.1.1")
+    throw Error("Invalid OpenAPI document");
   if (path === "/api/v1/config") {
     const config = await r.json();
     console.log(
