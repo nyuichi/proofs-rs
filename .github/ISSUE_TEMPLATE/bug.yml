@@ -1,0 +1,16 @@
+name: Bug report
+description: Report a problem with proofs.rs
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Include the page URL and expected behavior. Do not include private data or credentials.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+    validations:
+      required: true

@@ -27,7 +27,9 @@ const prop = (p: string) =>
   p === "no_ub" ? "No undefined behavior" : "Panic contract";
 const notice =
   '<p class="meta">By publishing, you agree to the <a href="#/terms">Terms</a> and license your original contribution under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. See our <a href="#/privacy">Privacy Policy</a>.</p>';
+class NavigationChanged extends Error {}
 async function request(path: string, method = "GET", body?: any, key?: string) {
+  const generation = routeID;
   const r = await fetch(path.startsWith("/auth/") ? path : "/api/v1" + path, {
     method,
     credentials: "same-origin",
@@ -39,6 +41,7 @@ async function request(path: string, method = "GET", body?: any, key?: string) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const v = await r.json();
+  if (generation !== routeID) throw new NavigationChanged();
   if (!r.ok) {
     if (r.status === 428) location.hash = "/terms-update";
     throw new Error(v.message || v.error || `Request failed (${r.status})`);
@@ -46,6 +49,7 @@ async function request(path: string, method = "GET", body?: any, key?: string) {
   return v;
 }
 function error(e: unknown) {
+  if (e instanceof NavigationChanged) return;
   let box = root.querySelector<HTMLElement>('[role="alert"]');
   if (!box) {
     box = document.createElement("p");
@@ -111,7 +115,7 @@ function needUser() {
   return true;
 }
 function claimItem(c: any) {
-  return `<article class="claim-item"><a href="#/claim/${c.id}">#${c.id} ${esc(c.title)}</a> · v${c.revision_no}${c.withdrawn_at ? " · <strong>Withdrawn</strong>" : ""}<div class="meta">${esc(c.crate)} ${esc(c.version)} · <code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</div><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)} · ${c.accept_count} accepts · ${c.comment_count} comments</p></article>`;
+  return `<article class="claim-item"><a href="#/claim/${c.id}?v=${c.revision_no}">#${c.id} ${esc(c.title)}</a> · v${c.revision_no}${c.latest_revision_no > c.revision_no ? " · Past revision" : ""}${c.accepted_at ? " · Accepted " + date(c.accepted_at) : ""}${c.withdrawn_at ? " · <strong>Withdrawn</strong>" : ""}<div class="meta">${esc(c.crate)} ${esc(c.version)} · <code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</div><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)} · ${c.accept_count} accepts · ${c.comment_count} comments</p></article>`;
 }
 function pager(data: any, fn: (cursor: number) => any, container: HTMLElement) {
   if (data.next_cursor !== null && data.next_cursor !== undefined) {
@@ -423,7 +427,8 @@ async function termsUpdate() {
 }
 async function profile(id: string, own = false) {
   const u = await request("/users/" + enc(id));
-  root.innerHTML = `<h1>${esc(u.username)}</h1><p>${u.karma} karma · joined ${date(u.created_at)}</p><p class="preserve">${esc(u.bio)}</p>${own ? `<form id="bio"><label>Bio (500 UTF-8 bytes maximum)<textarea name="bio">${esc(u.bio)}</textarea></label><button>Save</button></form><p>Email: ${esc(me.email?.address || "Unavailable")} · <a href="#/settings">Email settings</a></p><p>Your GitHub username and verified primary email are refreshed when you sign in again.</p><p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>` : ""}<h2>Claims</h2><div id="claims"></div>`;
+  id = u.id;
+  root.innerHTML = `<h1>${esc(u.username)}</h1><p>${u.karma} karma · joined ${date(u.created_at)}</p><p class="preserve">${esc(u.bio)}</p>${own ? `<form id="bio"><label>Bio (500 UTF-8 bytes maximum)<textarea name="bio">${esc(u.bio)}</textarea></label><button>Save</button></form><p>Email: ${esc(me.email?.address || "Unavailable")} · <a href="#/settings">Email settings</a></p><p>Your GitHub username and verified primary email are refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}<p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>` : ""}<h2>Claims</h2><div id="claims"></div>`;
   bind(
     "#bio",
     async (e) => {
@@ -478,7 +483,7 @@ async function settings() {
 async function toolsPage(id?: string) {
   if (id) {
     const t = await request("/tools/" + enc(id));
-    root.innerHTML = `<h1>${esc(t.name)}</h1><p>${esc(t.description)}</p><p><a href="${esc(t.official_url)}" rel="noopener noreferrer">Tool website</a></p><h2>Claims</h2><div id="items"></div>`;
+    root.innerHTML = `<h1>${esc(t.name)}</h1><p>${esc(t.description)}</p><p><a href="${esc(t.official_url)}" rel="noopener noreferrer">Tool website</a></p><h2>Supported versions</h2><ul>${t.versions.map((v: any) => `<li>${esc(v.version)}${v.selectable ? "" : " (retired)"}</li>`).join("")}</ul><h2>Claims</h2><div id="items"></div>`;
     return claimsList(
       "/tools/" + enc(id) + "/claims",
       root.querySelector("#items")!,
@@ -591,11 +596,18 @@ async function claimForm() {
     form.querySelector<HTMLTextAreaElement>('[name="precondition"]')!.required =
       property.value !== "no_ub" || !!draftTarget.is_unsafe;
   }
+  form.addEventListener("input", () => {
+    draft = {
+      ...draft,
+      ...Object.fromEntries(new FormData(form)),
+      property: editing ? draft.property : property.value,
+    };
+  });
   property.onchange = pre;
   pre();
   bind("#change-target", () => {
     draftTarget = null;
-    return publish();
+    navigate("/publish");
   });
   bind(
     "#claim-form",
@@ -650,7 +662,9 @@ async function unsubscribe() {
   });
 }
 async function route() {
-  routeID++;
+  const generation = ++routeID;
+  root.inert = true;
+  root.setAttribute("aria-busy", "true");
   root.innerHTML = "<p>Loading…</p>";
   try {
     const parts = current()
@@ -659,9 +673,36 @@ async function route() {
         .map(decodeURIComponent),
       [p, id] = parts;
     if (!p) await home();
-    else if (p === "crates") await crates();
+    else if (p === "crates" && id) {
+      if (parts[3]) {
+        const a = await request(
+          "/resolve-api?" +
+            new URLSearchParams({
+              crate: id,
+              version: parts[2],
+              path: parts[3],
+            }),
+        );
+        navigate("/api/" + a.id);
+      } else
+        navigate(
+          "/crate/" + enc(id) + (parts[2] ? "?version=" + enc(parts[2]) : ""),
+        );
+    } else if (p === "crates") await crates();
     else if (p === "crate") await cratePage(id);
-    else if (p === "api") await apiPage(id);
+    else if (p === "api" && parts[2]) {
+      const releases = await request("/crates/" + enc(id) + "/releases");
+      const a = await request(
+        "/resolve-api?" +
+          new URLSearchParams({
+            crate: id,
+            version:
+              current().searchParams.get("v") || releases.default_version || "",
+            path: parts[2],
+          }),
+      );
+      navigate("/api/" + a.id);
+    } else if (p === "api") await apiPage(id);
     else if (p === "claim") await claimPage(Number(id));
     else if (p === "publish") await publish();
     else if (p === "login") login();
@@ -678,8 +719,14 @@ async function route() {
       root.innerHTML = "<h1>" + esc(legal[p].title) + "</h1>" + legal[p].body;
     else root.innerHTML = "<h1>Page not found</h1>";
   } catch (e) {
+    if (e instanceof NavigationChanged) return;
     root.innerHTML = "<h1>Unable to load this page</h1>";
     error(e);
+  } finally {
+    if (generation === routeID) {
+      root.inert = false;
+      root.setAttribute("aria-busy", "false");
+    }
   }
 }
 window.addEventListener("hashchange", () => void route());

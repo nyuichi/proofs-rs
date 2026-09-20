@@ -43,3 +43,7 @@ The approved planning estimate is approximately USD 5/month at small scale with 
 ## Known integration limits
 
 The parser allowlists rustdoc format 61 and rejects unsupported syntax or unresolved external reexports instead of fabricating API data. crates.io/docs.rs calls happen only on explicit user preparation. This implementation deliberately has no live import/email test in CI. Staging contains no fabricated claims or shared demo login.
+
+## Current staging setup status (2026-09-20)
+
+Implementation is pushed to main; CI type checks, application tests and build pass. The deployment reached Cloudflare D1 resource creation, then the R2 buckets API rejected the existing Actions token with code 10000, Authentication error. The Worker has not been deployed by this implementation. Review the existing token’s account and Workers R2 Storage / Queues permissions. Configure R2 service activation if not already enabled. The deploy script checks D1, R2, Queues and workers.dev access together to report remaining setup failures. Staging OAuth variables and email variables were empty in the deployment run.

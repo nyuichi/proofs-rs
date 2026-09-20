@@ -1,0 +1,19 @@
+name: Tool or version request
+description: Request an addition to the verification tool catalogue
+body:
+  - type: input
+    id: tool
+    attributes:
+      label: Tool and version
+    validations:
+      required: true
+  - type: input
+    id: upstream
+    attributes:
+      label: Official release or documentation URL
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Context

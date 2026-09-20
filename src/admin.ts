@@ -11,6 +11,7 @@ import {
   batch,
   rows,
   one,
+  url,
 } from "./core";
 export const admin = new Hono<App>();
 admin.use("*", async (c, next) => {
@@ -196,7 +197,7 @@ admin.post("/action", async (c) => {
           target,
           text(b.name, "Name", 100, true),
           text(b.description, "Description"),
-          text(b.url, "URL", 1000, true),
+          url(b.url),
           b.active === false ? 0 : 1,
         ),
       );

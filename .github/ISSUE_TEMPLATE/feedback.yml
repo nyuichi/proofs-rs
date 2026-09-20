@@ -1,0 +1,9 @@
+name: Feedback
+description: Suggestions and general feedback
+body:
+  - type: textarea
+    id: feedback
+    attributes:
+      label: Feedback
+    validations:
+      required: true

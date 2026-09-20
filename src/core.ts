@@ -251,7 +251,7 @@ export async function verifyToken(env: Env, value: string, sig: string) {
     diff |= expected.charCodeAt(i) ^ (sig.charCodeAt(i) || 0);
   return diff === 0;
 }
-export const publicClaim = `SELECT c.id,c.api_item_id,c.property,c.author_id,c.visibility,c.withdrawn_at,c.created_at,c.updated_at,r.title,r.revision_no,r.precondition,r.explanation,r.trusted_assumptions,r.environment,r.evidence_url,r.limitations,r.tool_version_id,a.display_path,a.is_unsafe,a.signature,a.upstream_url,cr.name crate,rel.version,rel.yanked,u.username,t.name tool,tv.version tool_version,(SELECT COUNT(*) FROM comments cm WHERE cm.claim_id=c.id AND cm.deleted_at IS NULL AND cm.visibility='public') comment_count,(SELECT COUNT(*) FROM accepts ac WHERE ac.claim_id=c.id AND ac.revision_no=r.revision_no) accept_count FROM claims c JOIN claim_revisions r ON r.claim_id=c.id JOIN api_items a ON a.id=c.api_item_id JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN users u ON u.id=c.author_id JOIN tool_versions tv ON tv.id=r.tool_version_id JOIN tools t ON t.id=tv.tool_id`;
+export const publicClaim = `SELECT c.id,c.api_item_id,c.property,c.author_id,c.visibility,c.withdrawn_at,c.created_at,c.updated_at,r.title,r.revision_no,(SELECT MAX(v.revision_no) FROM claim_revisions v WHERE v.claim_id=c.id) latest_revision_no,r.precondition,r.explanation,r.trusted_assumptions,r.environment,r.evidence_url,r.limitations,r.tool_version_id,a.display_path,a.is_unsafe,a.signature,a.upstream_url,cr.name crate,rel.version,rel.yanked,u.username,t.name tool,tv.version tool_version,(SELECT COUNT(*) FROM comments cm WHERE cm.claim_id=c.id AND cm.deleted_at IS NULL AND cm.visibility='public') comment_count,(SELECT COUNT(*) FROM accepts ac WHERE ac.claim_id=c.id AND ac.revision_no=r.revision_no) accept_count FROM claims c JOIN claim_revisions r ON r.claim_id=c.id JOIN api_items a ON a.id=c.api_item_id JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN users u ON u.id=c.author_id JOIN tool_versions tv ON tv.id=r.tool_version_id JOIN tools t ON t.id=tv.tool_id`;
 export const latest = `r.revision_no=(SELECT MAX(rr.revision_no) FROM claim_revisions rr WHERE rr.claim_id=c.id)`;
 export const karmaPolicy = {
   id: "distinct-claim-acceptor/v1",
@@ -274,7 +274,14 @@ export async function listing(
   const raw = c.req.query("cursor");
   if (raw && raw !== "0") {
     try {
-      values = JSON.parse(atob(raw.replace(/-/g, "+").replace(/_/g, "/")));
+      values = JSON.parse(
+        new TextDecoder().decode(
+          Uint8Array.from(
+            atob(raw.replace(/-/g, "+").replace(/_/g, "/")),
+            (ch) => ch.charCodeAt(0),
+          ),
+        ),
+      );
       if (
         !Array.isArray(values) ||
         values.length !== order.length ||
@@ -311,7 +318,13 @@ export async function listing(
     items: items.map(map),
     next_cursor:
       result.length > 30
-        ? btoa(JSON.stringify(order.map((o) => last[o.key])))
+        ? btoa(
+            String.fromCharCode(
+              ...new TextEncoder().encode(
+                JSON.stringify(order.map((o) => last[o.key])),
+              ),
+            ),
+          )
             .replace(/\+/g, "-")
             .replace(/\//g, "_")
             .replace(/=+$/, "")

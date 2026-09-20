@@ -51,7 +51,10 @@ function typ(t: any): string {
     return (
       "dyn " +
       t.dyn_trait.traits
-        .map((x: any) => x.trait.path + args(x.trait.args))
+        .map(
+          (x: any) =>
+            higherRanked(x.generic_params) + x.trait.path + args(x.trait.args),
+        )
         .join(" + ") +
       (t.dyn_trait.lifetime ? " + " + t.dyn_trait.lifetime : "")
     );
@@ -68,7 +71,15 @@ function typ(t: any): string {
       t.qualified_path.name +
       args(t.qualified_path.args)
     );
-  if (t.function_pointer) return "fn" + signature(t.function_pointer.sig);
+  if (t.function_pointer) {
+    const f = t.function_pointer;
+    return (
+      higherRanked(f.generic_params) +
+      header(f.header) +
+      "fn" +
+      signature(f.sig)
+    );
+  }
   throw new Fault(422, "unsupported_rustdoc_type");
 }
 function args(a: any): string {
@@ -108,7 +119,10 @@ function bound(b: any): string {
   if (b.trait_bound) {
     const t = b.trait_bound;
     return (
-      (t.modifier === "maybe" ? "?" : "") + t.trait.path + args(t.trait.args)
+      higherRanked(t.generic_params) +
+      (t.modifier === "maybe" ? "?" : "") +
+      t.trait.path +
+      args(t.trait.args)
     );
   }
   if (b.use)
@@ -154,6 +168,7 @@ function wheres(g: any): string {
   const w = (g?.where_predicates || []).map((p: any) => {
     if (p.bound_predicate)
       return (
+        higherRanked(p.bound_predicate.generic_params) +
         typ(p.bound_predicate.type) +
         ": " +
         p.bound_predicate.bounds.map(bound).join(" + ")
@@ -169,6 +184,25 @@ function wheres(g: any): string {
     throw new Fault(422, "unsupported_rustdoc_where");
   });
   return w.length ? " where " + w.join(", ") : "";
+}
+function higherRanked(p: any[] | undefined) {
+  return p?.length ? "for" + params({ params: p }) + " " : "";
+}
+function header(h: any) {
+  if (!h) return "";
+  const abi = typeof h.abi === "string" ? h.abi : Object.keys(h.abi || {})[0];
+  const abiName =
+    abi && typeof h.abi === "object" && h.abi[abi]?.unwind
+      ? abi + "-unwind"
+      : abi;
+  return (
+    (h.is_const ? "const " : "") +
+    (h.is_async ? "async " : "") +
+    (h.is_unsafe ? "unsafe " : "") +
+    (abiName && abiName !== "Rust"
+      ? "extern " + JSON.stringify(abiName) + " "
+      : "")
+  );
 }
 function signature(s: any) {
   if (!s || !Array.isArray(s.inputs))

@@ -379,3 +379,143 @@ test("rustdoc fixture: public free functions, inherent methods, reexports, no tr
     extractAPIs({ ...doc, format_version: 999 }, "sample", "1.0.0"),
   );
 });
+
+test("keyset pagination remains stable after inserts, accepts include old revisions", async () => {
+  const { request, db } = await fixture();
+  for (let i = 0; i < 35; i++) {
+    db.exec("DELETE FROM rate_limits");
+    await request("/claims", "POST", { ...claim, title: "Claim " + i });
+  }
+  const first = (await request("/users/alice/claims")).body;
+  assert.equal(first.items.length, 30);
+  db.exec("DELETE FROM rate_limits");
+  await request("/claims", "POST", { ...claim, title: "Newer" });
+  const second = (
+    await request(
+      "/users/alice/claims?cursor=" + encodeURIComponent(first.next_cursor),
+    )
+  ).body;
+  assert.deepEqual(
+    second.items.map((x: any) => x.id),
+    [5, 4, 3, 2, 1],
+  );
+  await request("/claims/1/revisions/1/accept", "PUT", {}, "bob");
+  assert.equal(
+    (await request("/me/accepts", "GET", undefined, "bob")).body.items[0].id,
+    1,
+  );
+});
+
+test("frontend publish preview, revision links and nested comment deletion", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { transpileModule, ModuleKind, ScriptTarget } =
+    await import("typescript");
+  const { request } = await fixture();
+  const dom = new JSDOM(
+    readFileSync(new URL("../index.html", import.meta.url), "utf8"),
+    {
+      url: "https://example.test/#/publish?api=safe",
+      runScripts: "outside-only",
+    },
+  );
+  const w = dom.window;
+  w.fetch = async (path: any, init: any = {}) => {
+    const p = String(path).replace("/api/v1", "");
+    const result = await request(
+      p,
+      init.method || "GET",
+      init.body ? JSON.parse(init.body) : undefined,
+      "alice",
+      init.headers || {},
+    );
+    return new Response(JSON.stringify(result.body), {
+      status: result.status,
+      headers: { "Content-Type": "application/json" },
+    }) as any;
+  };
+  w.confirm = () => true;
+  w.HTMLElement.prototype.scrollIntoView = () => {};
+  const legal = readFileSync(
+    new URL("../web/legal.ts", import.meta.url),
+    "utf8",
+  ).replace("export const legal", "const legal");
+  const main = readFileSync(
+    new URL("../web/main.ts", import.meta.url),
+    "utf8",
+  ).replace(/import \{ legal \} from "\.\/legal";/, "");
+  w.eval(
+    transpileModule(legal + "\n" + main, {
+      compilerOptions: { module: ModuleKind.None, target: ScriptTarget.ES2022 },
+    }).outputText,
+  );
+  async function until(selector: string) {
+    for (let n = 0; n < 100; n++) {
+      const el = w.document.querySelector(selector);
+      if (
+        el &&
+        w.document.querySelector("#app")?.getAttribute("aria-busy") !== "true"
+      )
+        return el;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw Error(
+      "Missing " +
+        selector +
+        ": " +
+        w.document.querySelector("#app")?.textContent,
+    );
+  }
+  const input = (name: string, value: string) => {
+    (w.document.querySelector('[name="' + name + '"]') as any).value = value;
+  };
+  const submit = (selector: string) =>
+    (w.document.querySelector(selector) as any).dispatchEvent(
+      new w.Event("submit", { bubbles: true, cancelable: true }),
+    );
+  try {
+    await until("#claim-form");
+    input("property", "no_ub");
+    w.document
+      .querySelector('[name="property"]')!
+      .dispatchEvent(new w.Event("change"));
+    assert.match(
+      w.document.querySelector("#pre-label")!.textContent!,
+      /optional; mandatory for unsafe APIs/,
+    );
+    assert.equal(
+      (w.document.querySelector('[name="precondition"]') as any).required,
+      false,
+    );
+    for (const [k, v] of Object.entries(claim))
+      if (w.document.querySelector('[name="' + k + '"]')) input(k, v);
+    submit("#claim-form");
+    await until("#publish");
+    assert.match(w.document.querySelector("#app")!.textContent!, /Preview/);
+    ((await until("#publish")) as any).click();
+    await until("#comment-form");
+    assert.match(w.document.querySelector("h1")!.textContent!, /#1: No UB/);
+    input("body", "Root comment");
+    submit("#comment-form");
+    await until("[data-reply]");
+    (w.document.querySelector("[data-reply]") as any).click();
+    input("body", "Nested reply");
+    submit("#comment-form");
+    await until(".comment-children .comment");
+    assert.match(
+      w.document.querySelector(".comment-children .comment")!.textContent!,
+      /Nested reply/,
+    );
+    (w.document.querySelector("[data-delete]") as any).click();
+    await until(".comment-content em");
+    assert.equal(
+      w.document.querySelector(".comment-content em")!.textContent,
+      "deleted comment",
+    );
+    assert.match(
+      w.document.querySelector(".comment-children .comment")!.textContent!,
+      /Nested reply/,
+    );
+  } finally {
+    w.close();
+  }
+});

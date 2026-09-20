@@ -604,7 +604,9 @@ api.on(["PUT", "DELETE"], "/claims/:id/revisions/:n/accept", async (c) => {
 api.get("/users/:id", async (c) => {
   const u = await one(
     c.env.DB,
-    "SELECT id,username,bio,created_at FROM users WHERE id=?",
+    "SELECT id,username,bio,created_at FROM users WHERE id=? OR username=? ORDER BY id=? DESC LIMIT 1",
+    c.req.param("id"),
+    c.req.param("id"),
     c.req.param("id"),
   );
   if (!u) throw new Fault(404, "user_not_found");
@@ -698,4 +700,19 @@ api.get("/tools/:slug/claims", async (c) =>
     ),
   ),
 );
+api.get("/resolve-api", async (c) => {
+  const name = c.req.query("crate") || "",
+    version = c.req.query("version") || "",
+    path = c.req.query("path") || "";
+  const a = await one(
+    c.env.DB,
+    `SELECT a.id FROM api_items a JOIN releases r ON r.id=a.release_id JOIN crates cr ON cr.id=r.crate_id JOIN doc_snapshots ds ON ds.release_id=r.id WHERE cr.name=? AND r.version=? AND a.display_path IN (?,?)`,
+    name,
+    version,
+    path,
+    name.replaceAll("-", "_") + "::" + path,
+  );
+  if (!a) throw new Fault(404, "api_not_found");
+  return c.json(a);
+});
 export default api;

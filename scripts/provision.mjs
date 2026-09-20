@@ -30,7 +30,16 @@ async function pages(path) {
   throw Error("Resource pagination limit exceeded");
 }
 const config = JSON.parse(await readFile("wrangler.json", "utf8"));
-const databases = await pages("/d1/database");
+const checks = await Promise.allSettled([
+  pages("/d1/database"),
+  api("/r2/buckets"),
+  pages("/queues"),
+  api("/workers/subdomain"),
+]);
+const failures = checks.filter((r) => r.status === "rejected");
+if (failures.length)
+  throw Error(failures.map((r) => r.reason.message).join("\n"));
+const [databases, buckets, queues, domain] = checks.map((r) => r.value);
 let database = databases.find(
   (x) => x.name === config.d1_databases[0].database_name,
 );
@@ -39,17 +48,17 @@ if (!database)
     name: config.d1_databases[0].database_name,
   });
 config.d1_databases[0].database_id = database.uuid;
-const buckets = await api("/r2/buckets");
+
 if (!buckets.buckets.some((x) => x.name === config.r2_buckets[0].bucket_name))
   await api("/r2/buckets", "POST", { name: config.r2_buckets[0].bucket_name });
-const queues = await pages("/queues");
+
 for (const name of new Set([
   ...config.queues.producers.map((x) => x.queue),
   ...config.queues.consumers.flatMap((x) => [x.queue, x.dead_letter_queue]),
 ]))
   if (!queues.some((x) => x.queue_name === name))
     await api("/queues", "POST", { queue_name: name });
-const domain = await api("/workers/subdomain");
+
 if (!domain.subdomain)
   throw Error("Enable a workers.dev subdomain in Cloudflare.");
 config.vars.APP_ORIGIN = `https://${config.name}.${domain.subdomain}.workers.dev`;

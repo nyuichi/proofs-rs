@@ -259,9 +259,10 @@ async function reconcile(env: Env) {
     const ss = [
       stmt(
         env.DB,
-        `UPDATE email_deliveries SET status=? WHERE id=? AND (status IN ('accepted','deferred') OR ?='complained')`,
+        `UPDATE email_deliveries SET status=? WHERE id=? AND (status IN ('accepted','deferred') OR (? IN ('bounced','complained') AND status='delivered') OR ?='complained')`,
         status,
         e.did,
+        status,
         status,
       ),
       stmt(
