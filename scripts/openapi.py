@@ -10,7 +10,7 @@ def listing(v):return obj({'items':arr(v),'next_cursor':{'type':['string','null'
 sc={}
 db=sqlite3.connect(':memory:')
 for p in sorted(Path('migrations').glob('*.sql')):db.executescript(p.read_text())
-for table in ['crates','releases','api_items','claims','claim_revisions','comments','tools','tool_versions','comment_history','audit_events']:
+for table in ['crates','releases','api_items','claims','claim_revisions','comments','tools','tool_versions']:
  fields={}
  for _,name,typ,notnull,default,pk in db.execute('pragma table_info('+table+')'):
   typ='integer' if typ=='INTEGER' else 'string'
@@ -38,7 +38,7 @@ def add(path,method,summary,body=None,out=None,security=None,description='',stat
  if method!='get' and any('session' in x for x in security):params.append(dict(name='Origin',**{'in':'header'},required=False,schema=S(),description='Required for browser-session writes; must equal this service origin.'))
  responses={str(status):dict(description='Success',content={'application/json':{'schema':out or ref('Ok')}})}
  for code,desc in [(400,'Invalid input'),(401,'Authentication required or token invalid/expired'),(403,'Forbidden, insufficient scope, suspended account, or invalid Origin/CSRF'),(404,'Resource not found'),(409,'Conflict, stale revision, or idempotency mismatch'),(413,'Body exceeds 128 KiB'),(415,'Unsupported content type'),(428,'Terms changed: sign in in the browser and accept the current terms'),(429,'Rate limit exceeded'),(500,'Internal error'),(503,'Service unavailable')]:responses[str(code)]=dict(description=desc,content={'application/json':{'schema':ref('Error')}})
- tag='Authentication' if path.startswith('/auth') else ('Administration' if '/admin/' in path else ('Tokens' if '/tokens' in path else ('Claims' if '/claims' in path else ('Comments' if '/comments' in path else ('Imports' if '/imports' in path or '/prepare' in path else 'Registry')))))
+ tag='Authentication' if path.startswith('/auth') else ('Tokens' if '/tokens' in path else ('Claims' if '/claims' in path else ('Comments' if '/comments' in path else ('Imports' if '/imports' in path or '/prepare' in path else 'Registry'))))
  op=dict(operationId=method+'_'+re.sub(r'[^a-zA-Z0-9]+','_',path).strip('_'),summary=summary,tags=[tag],description=description,security=security,parameters=params,responses=responses)
  if body:op['requestBody']=dict(required=True,content={mime:{'schema':body} for mime in (['application/json','application/x-www-form-urlencoded'] if form else ['application/json'])})
  paths.setdefault(path,{})[method]=op
@@ -91,12 +91,6 @@ for op in ['inspect','approve']:
 add(P+'/me/tokens','get','List your unexpired, unrevoked tokens',out=obj({'items':arr(ref('Token'))}),security=sessionRead,description='UUID is a public management identifier, never the secret token. Last used is updated at most once per hour. No token names are stored.')
 add(P+'/me/tokens/{id}','delete','Revoke your token',security=session,description='Idempotent. Only tokens belonging to the current user can be revoked.')
 add(P+'/tokens/revoke','post','Revoke the current CLI token',security=[{'bearer':[]}],description='Use for CLI logout. Works even if terms have changed.')
-for path,summary,out in [('audit','List latest 100 audit events',obj({'items':arr(ref('audit_events'))})),('comments/{id}/history','Read private comment history (audited)',obj({'items':arr(ref('comment_history'))})),('deliveries','List up to 100 uncertain or failed email deliveries',obj({'items':arr(obj({'id':S(),'status':S(),'attempts':{'type':'integer'},'created_at':S()}))}))]:add(P+'/admin/'+path,'get',summary,out=out,security=sessionRead,description='Administrator browser session required. CLI tokens are never accepted.')
-actions=[]
-for action,extra in [('claim_visibility',{'value':{'enum':['public','hidden']}}),('comment_visibility',{'value':{'enum':['public','hidden']}}),('suspend',{}),('restore_user',{}),('pause',{'value':B}),('redact_comment',{}),('redact_revision',{'revision_no':I}),('delete_user',{}),('retry_email',{}),('tool_version',{'tool_id':S(100),'version':S(100),'selectable':B}),('tool',{'name':S(100),'description':S(),'url':S(1000,format='uri'),'active':B})]:
- required=['action','target','reason']+[x for x in extra if x not in ['active','selectable','description']]
- actions.append(obj({'action':{'const':action},'target':S(200,minLength=1),'reason':S(1000,minLength=1),**extra},required))
-add(P+'/admin/action','post','Perform an audited administrative action',{'oneOf':actions},security=session,description='Administrator browser session required. pause target is email_paused or imports_paused. Tool target is its ID; tool_version target is version ID. Other targets are resource IDs. Existing tool versions only update selectable.')
 add('/auth/logout','post','Sign out of browser session',security=session)
 for path,params in [('/auth/github',[('return_to',S(description='Only /#/device optionally followed by ?code=XXXXXXXX is allowed.'),False)]),('/auth/github/callback',[(x,S(),True) for x in ['state','code']])]:
  add(path,'get','Start GitHub sign-in' if path.endswith('github') else 'Complete GitHub sign-in',security=[],queries=params)

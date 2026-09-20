@@ -926,7 +926,7 @@ test("device expiry, token expiry, suspension, quotas, and user erasure", async 
   assert.equal(db.prepare("SELECT COUNT(*) n FROM api_tokens").get()!.n, 0);
 });
 
-test("OpenAPI covers every registered API/auth route with resolvable schema references", () => {
+test("OpenAPI covers non-admin routes and excludes administrative schemas", () => {
   const spec = JSON.parse(
     readFileSync(new URL("../public/openapi.json", import.meta.url), "utf8"),
   );
@@ -936,6 +936,7 @@ test("OpenAPI covers every registered API/auth route with resolvable schema refe
         (r) =>
           r.method !== "ALL" &&
           !r.path.includes("*") &&
+          !r.path.startsWith("/api/v1/admin/") &&
           (r.path.startsWith("/api/") || r.path.startsWith("/auth/")),
       )
       .map(
@@ -951,6 +952,7 @@ test("OpenAPI covers every registered API/auth route with resolvable schema refe
     ),
   );
   assert.deepEqual(documented, actual);
+  assert.doesNotMatch(JSON.stringify(spec), /Administration|\/admin\/|comment_history|audit_events/);
   function walk(v: any) {
     if (!v || typeof v !== "object") return;
     if (v.$ref) {

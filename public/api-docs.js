@@ -54,7 +54,6 @@
       "Registry",
       "Tokens",
       "Authentication",
-      "Administration",
     ];
     const labels = {
       Imports: "API imports",

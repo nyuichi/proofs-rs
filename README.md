@@ -56,4 +56,4 @@ and can be revoked in Settings or through `POST /api/v1/tokens/revoke`.
 No CLI binary is included in this repository yet.
 
 Regenerate the checked-in API specification with `python3 scripts/openapi.py`.
-The test suite checks coverage against every registered API/auth route.
+The test suite checks coverage against every non-administrative API/auth route.
