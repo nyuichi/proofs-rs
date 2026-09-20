@@ -339,6 +339,9 @@ header {
 #account-nav summary::-webkit-details-marker {
   display: none;
 }
+main:has(> .home-search) {
+  margin-inline: auto;
+}
 .home-search {
   text-align: center;
   padding: 22px 0 32px;
