@@ -1,0 +1,481 @@
+/* Plain document layout; native links and form controls. */
+body {
+  margin: 16px 24px;
+  color: #000;
+  background: #fff;
+  font:
+    16px/1.45 "Times New Roman",
+    Times,
+    serif;
+}
+a {
+  color: #0000ee;
+  text-decoration: underline;
+}
+a:visited {
+  color: #551a8b;
+}
+header {
+  border-bottom: 1px solid #999;
+  padding-bottom: 10px;
+}
+.brand {
+  font-size: 28px;
+  font-weight: bold;
+}
+nav {
+  display: inline;
+  margin-left: 24px;
+}
+nav a {
+  margin-right: 14px;
+}
+.demo,
+.meta,
+.small,
+.row-sub,
+.results-summary {
+  font-size: 14px;
+}
+.demo {
+  margin-bottom: 8px;
+}
+main {
+  margin: 20px 0 32px;
+  max-width: 1000px;
+}
+footer {
+  border-top: 1px solid #999;
+  padding-top: 8px;
+  font-size: 14px;
+}
+h1 {
+  font-size: 26px;
+  margin: 16px 0;
+}
+h2 {
+  font-size: 21px;
+  margin: 20px 0 12px;
+}
+h3 {
+  font-size: 18px;
+  margin: 12px 0 8px;
+}
+p {
+  margin: 10px 0;
+}
+input,
+select,
+textarea,
+button {
+  font-size: 16px;
+  max-width: 100%;
+}
+button {
+  cursor: pointer;
+}
+.searchbar {
+  margin: 16px 0;
+}
+.searchbar input {
+  width: 280px;
+  max-width: 65%;
+}
+.searchbar button {
+  margin-left: 4px;
+}
+.filterbar {
+  margin: 12px 0;
+}
+.table-wrap {
+  overflow-x: auto;
+}
+table {
+  border-collapse: collapse;
+  width: 100%;
+}
+th,
+td {
+  text-align: left;
+  vertical-align: top;
+  padding: 8px 12px 8px 0;
+  border-bottom: 1px solid #ccc;
+}
+th {
+  border-bottom-color: #777;
+}
+td p {
+  margin: 3px 0 0;
+}
+.numeric {
+  text-align: right;
+}
+.crate-name {
+  font-weight: bold;
+}
+.row-sub {
+  display: block;
+  margin-top: 3px;
+}
+.legend {
+  margin-top: 16px;
+}
+.legend span {
+  margin-right: 20px;
+}
+.breadcrumbs {
+  margin: 12px 0;
+}
+.breadcrumbs span {
+  margin: 0 6px;
+}
+.section-head {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+.code,
+code,
+.api-name {
+  font-family: monospace;
+  overflow-wrap: anywhere;
+}
+h1.code {
+  font-size: 22px;
+}
+.claim-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.claim-item,
+.discussion-entry {
+  padding: 12px 0;
+  border-bottom: 1px solid #ccc;
+}
+.tag {
+  font-family: monospace;
+  font-size: 14px;
+}
+.statement {
+  margin: 20px 0;
+}
+.statement .eyebrow {
+  font-weight: bold;
+}
+.formula {
+  margin: 12px 0;
+  font-size: 18px;
+  overflow-wrap: anywhere;
+}
+dl {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  gap: 8px 16px;
+}
+dt {
+  font-weight: bold;
+}
+dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.evidence {
+  margin: 20px 0;
+}
+summary {
+  cursor: pointer;
+}
+pre {
+  overflow: auto;
+  font-size: 14px;
+}
+.note {
+  margin: 16px 0;
+}
+.discussion {
+  margin-top: 28px;
+}
+.comment {
+  padding: 14px 0;
+  border-top: 1px solid #ccc;
+}
+.comment.reply {
+  margin-left: 28px;
+}
+.comment-top {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.comment-actions {
+  display: flex;
+  gap: 8px;
+}
+.comment-form {
+  margin-top: 20px;
+}
+.comment-form textarea {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 110px;
+  margin: 8px 0;
+}
+.comment-form .meta {
+  margin-left: 8px;
+}
+.empty {
+  margin: 20px 0;
+}
+@media (max-width: 600px) {
+  body {
+    margin: 12px;
+  }
+  nav {
+    display: block;
+    margin: 8px 0 0;
+  }
+  th,
+  td {
+    padding-right: 8px;
+  }
+  dl {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
+  dd {
+    margin-bottom: 10px;
+  }
+  .comment.reply {
+    margin-left: 16px;
+  }
+  .comment-form .meta {
+    display: block;
+    margin: 8px 0;
+  }
+}
+.publish-form {
+  max-width: 720px;
+}
+.publish-form > label {
+  display: block;
+  margin: 14px 0 3px;
+}
+.publish-form > input,
+.publish-form > textarea,
+.publish-form > select {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+}
+.publish-form > textarea {
+  min-height: 85px;
+}
+.publish-form details {
+  margin-top: 24px;
+}
+.form-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.preserve {
+  white-space: pre-wrap;
+}
+header {
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+#account-nav {
+  margin-left: auto;
+  position: relative;
+}
+#account-nav summary {
+  cursor: pointer;
+  text-decoration: underline;
+  color: #0000ee;
+}
+.profile-menu {
+  position: absolute;
+  right: 0;
+  z-index: 2;
+  min-width: 155px;
+  background: white;
+  border: 1px solid #999;
+  padding: 10px;
+}
+.profile-menu a {
+  display: block;
+  margin-bottom: 6px;
+}
+@media (max-width: 600px) {
+  header {
+    gap: 10px;
+  }
+  nav {
+    order: 3;
+    width: 100%;
+  }
+}
+.versions [aria-current="page"] {
+  font-weight: bold;
+}
+.bio {
+  display: block;
+  width: 100%;
+  max-width: 600px;
+  box-sizing: border-box;
+}
+
+#account-nav summary {
+  list-style: none;
+}
+#account-nav summary::-webkit-details-marker {
+  display: none;
+}
+.home-search {
+  text-align: center;
+  padding: 22px 0 32px;
+}
+.home-search h1 {
+  font-size: 30px;
+}
+.home-search .searchbar input {
+  width: 480px;
+}
+.home-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 48px;
+}
+.home-entry {
+  padding: 10px 0;
+  border-bottom: 1px solid #ddd;
+}
+.home-entry p {
+  margin: 4px 0;
+}
+.api-docs {
+  margin: 22px 0;
+}
+.api-docs pre {
+  padding: 8px 0;
+  white-space: pre;
+}
+.api-docs .signature {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.vote {
+  white-space: nowrap;
+  font:
+    13px/1.3 Arial,
+    sans-serif;
+  color: #666;
+}
+.vote button {
+  background: none;
+  border: 0;
+  padding: 0 1px;
+  color: #777;
+  font-size: 11px;
+}
+.vote button[aria-pressed="true"] {
+  color: #222;
+  outline: none;
+}
+.vote button:focus-visible {
+  outline: 1px solid #555;
+}
+@media (max-width: 650px) {
+  .home-columns {
+    grid-template-columns: 1fr;
+    gap: 20px;
+  }
+}
+
+.publish-form > [hidden] {
+  display: none;
+}
+[hidden] {
+  display: none !important;
+}
+button:disabled {
+  cursor: wait;
+}
+.error {
+  color: #a00;
+}
+.comment-children {
+  margin-left: 28px;
+  min-width: 280px;
+}
+.thread-container {
+  overflow-x: auto;
+}
+.comment.reply {
+  margin-left: 0;
+}
+textarea {
+  min-height: 90px;
+}
+input,
+select,
+textarea {
+  padding: 4px;
+}
+.form-actions {
+  margin: 16px 0;
+}
+.status {
+  padding: 8px 0;
+}
+.label {
+  display: block;
+  margin-top: 12px;
+}
+.user-link {
+  white-space: nowrap;
+}
+.comment-top time {
+  font-size: 14px;
+}
+.comment-content {
+  overflow-wrap: anywhere;
+}
+.pager {
+  margin: 12px 0;
+}
+.unsafe {
+  font-weight: bold;
+}
+@media (max-width: 600px) {
+  .comment-children {
+    margin-left: 16px;
+  }
+}
+.publish-form label input,
+.publish-form label textarea,
+.publish-form label select {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 4px;
+}
+.api-option {
+  display: block;
+  margin: 10px 0;
+  text-align: left;
+  font-family: monospace;
+}
+.staging-banner {
+  border-bottom: 1px solid #ccc;
+  font-size: 14px;
+  padding-bottom: 6px;
+}

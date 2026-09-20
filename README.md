@@ -1,76 +1,42 @@
 # proofs.rs
 
-[![Deploy](https://github.com/nyuichi/proofs-rs/actions/workflows/deploy.yml/badge.svg?branch=main)](https://github.com/nyuichi/proofs-rs/actions/workflows/deploy.yml)
+A registry of human-reviewed verification claims for Rust APIs. The service records evidence URLs; it does not run proofs or certify correctness.
 
-proofs.rs is a small public registry for software-verification publications. A publication records one upstream crate/version, one immutable verification-source reference, and one SARIF 2.1.0 document that may contain multiple tool runs.
+Cloudflare Workers (Hono/TypeScript), D1, private R2, Queues, Cron, Workers Assets, GitHub OAuth and optional Cloudflare Email Service. The frontend retains the approved plain-document design. See [backend design](docs/backend-design.md) and [operations](docs/operations.md).
 
-The accepted user flow, ER diagram, query shape, deployment order, and current Free-plan cost envelope are documented in [`docs/architecture.md`](docs/architecture.md).
+## Development
 
-The PoC deliberately keeps the storage model small:
+Requires Node 24. `npm ci`, `npm run build`, `npm run db:local`, then `npm run dev`. Copy `.dev.vars.example` to `.dev.vars` and configure a development GitHub OAuth app to enable sign-in. Callback: `http://localhost:8787/auth/github/callback`. No local auth bypass is exposed by the Worker. `npm test` uses an in-memory SQLite adapter and fixture rustdoc JSON, never a live docs.rs request or email send.
 
-- Cloudflare Worker + React Router v8
-- Cloudflare D1
-- `publishers`, `sessions`, `publications`, `publication_labels`, and `sarif_runs` tables
-- Evidence source files remain in the publisher's GitHub repository
-- Rule and result rows are not normalized; SARIF run JSON is parsed when it is displayed
+`npm run typecheck`, `npm test`, `npm run build` are the deployment gates. The first migration creates immutable revisions, transaction guards, comment history, accepts, votes, outbox events and delivery states. A keyset cursor is used for lists. Tools and initial versions are copied from the approved mock, not inferred from upstream latest releases.
 
-## Local development
+## Staging
 
-Use Node 24+ and pnpm 11+.
+Pushes to `main` run `.github/workflows/deploy.yml`. `scripts/provision.mjs` creates/reuses only resources named `proofs-rs-staging-*` and writes the ignored `wrangler.staging.json`. Staging is public on workers.dev, with no Cloudflare Access gate and `noindex` headers. Old Worker and database resources are not modified. The custom domain is intentionally left unconfigured.
 
-```sh
-pnpm install
-cp .dev.vars.example .dev.vars
-pnpm dev
-```
+Required GitHub Actions secrets:
 
-Set `GITHUB_CLIENT_ID` and `GITHUB_CLIENT_SECRET` in `.dev.vars` to enable OAuth locally. The callback URL is `http://localhost:5173/auth/github/callback` unless `APP_ORIGIN` is set. Real credentials must never be committed.
+- `CLOUDFLARE_ACCOUNT_ID`
+- `CLOUDFLARE_API_TOKEN`: scoped to the account, Workers Scripts edit, D1 edit, R2 edit, Queues edit, and account/subdomain read as required by Cloudflare. R2 and Queues must be enabled. The configured CPU budget requires Workers Paid.
 
-Apply the local D1 migration with:
+Optional integration settings (missing integrations are visibly marked, not silently simulated):
 
-```sh
-pnpm exec wrangler d1 migrations apply proofs-rs-db --local
-```
+- Repository variable `STAGING_GITHUB_CLIENT_ID`, secret `STAGING_GITHUB_CLIENT_SECRET`. OAuth callback: the deployed origin plus `/auth/github/callback`. Use a separate staging OAuth app.
+- Variable `ADMIN_GITHUB_IDS`, comma-separated GitHub numeric IDs. Defaults to repository owner nyuichi (`540144`).
+- `STAGING_EMAIL_FROM`, `STAGING_EMAIL_ALLOWLIST`, `STAGING_EMAIL_DOMAIN`, `STAGING_EMAIL_EVENT_SUBSCRIPTION`: variables after Email Service onboarding and event subscription to `proofs-rs-staging-email-events`. Staging delivers only to the explicit allowlist.
+- Secret `CLOUDFLARE_D1_BACKUP_TOKEN`, with D1 export permission. This is separate from the deploy token.
+- Optional secret `STAGING_TOKEN_SECRET`. A random Worker-only secret is generated on first deployment and preserved on subsequent deployments. It signs unsubscribe URLs.
 
-## Production deployment
+No GitHub tokens or client secrets are committed or included in the browser build. Workflow logs contain secret names, not values.
 
-Pushing to `main` runs [the deploy workflow](https://github.com/nyuichi/proofs-rs/actions/workflows/deploy.yml). You can also run it manually with `workflow_dispatch`, but runs are guarded to the `main` branch. Deployments are serialized so that only one production deployment runs at a time.
+## Data and behavior
 
-Before the first run, add these repository secrets under **Settings → Secrets and variables → Actions**:
+- First explicit preparation of a crate/version imports crates.io metadata plus one docs.rs rustdoc JSON; later publications reuse D1. Unsupported rustdoc formats fail closed. Initial allowlist: format 61. No whole-registry crawl, no re-run of proofs, no HTML scraping fallback.
+- Claim target is immutable. Other changes append revisions. Accepts are per revision; karma policy is replaceable in `src/core.ts`.
+- Replies form an unbounded-depth tree; every reply level indents. Deleted comments retain a public tombstone and private history.
+- Notifications arise only from new comments, deduplicate recipients and skip the author. Unknown send outcomes are not automatically retried.
+- Admin APIs require the same session/CSRF/terms guards plus the admin role. Every moderation action and history read is audited. There is no public history endpoint.
 
-- `CLOUDFLARE_API_TOKEN`: a scoped Cloudflare API token with the Workers Scripts Edit and D1 Edit permissions required by Wrangler.
-- `CLOUDFLARE_ACCOUNT_ID`: the Cloudflare account that owns the Worker and `proofs-rs-db` D1 database.
+## Release boundary
 
-See Cloudflare's [GitHub Actions setup guide](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) for creating and scoping the token. These values are passed to GitHub Actions only for the migration and deploy steps; do not commit them to `wrangler.jsonc` or `.dev.vars`.
-
-Production OAuth also needs the Worker secret `GITHUB_CLIENT_SECRET`. Set it once from a trusted, authenticated environment after the initial deployment:
-
-```sh
-pnpm exec wrangler secret put GITHUB_CLIENT_SECRET --config wrangler.jsonc
-```
-
-The workflow runs each deployment in this order: install the frozen lockfile, run tests, typecheck, build, apply pending remote D1 migrations with `wrangler d1 migrations apply proofs-rs-db --remote`, and then deploy the Worker with `wrangler deploy`. Migrations therefore complete before new Worker code is published. Keep migrations backward-compatible with the currently deployed Worker; a failed deploy does not roll back migrations.
-
-## Checks
-
-```sh
-pnpm test
-pnpm typecheck
-pnpm build
-```
-
-The unit tests cover metadata constraints, SARIF extraction, PKCE/session helpers, and cookie handling. The production database should start empty; use local fixtures for development tests.
-
-## Publication input
-
-The web form accepts a commit-message-style publication message, up to eight neutral publication labels, plus `owner/repository` and an immutable 40- or 64-character hexadecimal commit for the upstream and verification repositories. Labels are trimmed, limited to 32 Unicode characters, and unique per publication after case-insensitive NFKC normalization. Paths are optional and are stored without leading slashes; traversal segments are rejected.
-
-SARIF input is limited to 1,000,000 UTF-8 bytes. The root must be SARIF `2.1.0`, contain at least one run and one result, and every result must have a non-empty `ruleId`. External property references are unsupported. Rule IDs are kept in SARIF order, including duplicates. `fullyQualifiedName` is preferred over `name` for logical targets; results without logical targets appear under `Target not specified`.
-
-The Worker performs only shallow structural validation. It does not decide whether a tool actually passed, verify GitHub references, or interpret the meaning of a rule ID.
-
-## Security notes
-
-GitHub OAuth requests no scopes and use `state` plus PKCE S256. GitHub's short-lived access token is used only to fetch `/user`, then discarded. Sessions use opaque random cookies; D1 stores only a SHA-256 token hash. HTTPS uses the `__Host-proofsr_session` cookie with `HttpOnly`, `Secure`, and `SameSite=Lax`; local HTTP uses a development-safe cookie name.
-
-Mutating routes validate the `Origin` header when one is sent. Responses set no-store caching, `nosniff`, frame denial, a strict referrer policy, permissions policy, and `X-Robots-Tag: noindex`. The current CSP uses a narrow `'unsafe-inline'` fallback because React Router's generated document scripts do not yet receive an application nonce; this can be tightened when nonce propagation is wired through the root document.
+Before production: configure OAuth, domain/DNS and contact mailbox, Email Service if desired, backup credentials, billing notifications, restore access and operator procedures. Publishing the GitHub repository and attaching proofs.rs are separate later actions. No external docs.rs import or email delivery verification is performed by CI.

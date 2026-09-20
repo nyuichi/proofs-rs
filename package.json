@@ -1,36 +1,29 @@
 {
   "name": "proofs-rs",
   "private": true,
+  "version": "0.1.0",
   "type": "module",
   "scripts": {
-    "build": "react-router build",
-    "dev": "react-router dev",
-    "typecheck": "wrangler types && react-router typegen && tsc -b",
-    "deploy": "pnpm build && wrangler deploy",
-    "preview": "pnpm build && vite preview",
-    "cf-typegen": "wrangler types",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "postinstall": "wrangler types"
+    "dev": "wrangler dev",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
+    "test": "node --import tsx --test tests/*.test.ts",
+    "db:local": "wrangler d1 migrations apply DB --local",
+    "deploy:staging": "node scripts/provision.mjs && wrangler d1 migrations apply DB --remote --config wrangler.staging.json && wrangler deploy --config wrangler.staging.json"
   },
   "dependencies": {
-    "isbot": "^5.1.36",
-    "react": "^19.2.7",
-    "react-dom": "^19.2.7",
-    "react-router": "^8",
-    "ulid": "^3.0.1",
-    "zod": "^4.1.5"
+    "hono": "^4.9.0",
+    "semver": "^7.7.0"
   },
   "devDependencies": {
-    "@cloudflare/vite-plugin": "^1.53.1",
-    "@cloudflare/vitest-plugin": "^1.0.0",
-    "@react-router/dev": "^8",
-    "@types/node": "^22.20.1",
-    "@types/react": "^19.2.14",
-    "@types/react-dom": "^19.2.3",
-    "typescript": "^5.9.3",
-    "vite": "^8.0.3",
-    "vitest": "^4.1.0",
-    "wrangler": "^4.125.0"
+    "@cloudflare/workers-types": "^5.20260920.1",
+    "@types/node": "^24.0.0",
+    "@types/semver": "^7.7.0",
+    "miniflare": "^4.0.0",
+    "prettier": "^3.9.8",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0",
+    "vite": "^7.1.0",
+    "wrangler": "^4.0.0"
   }
 }

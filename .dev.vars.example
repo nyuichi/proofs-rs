@@ -1,5 +1,5 @@
-# Local development values. Never commit real credentials.
-GITHUB_CLIENT_ID=""
-GITHUB_CLIENT_SECRET=""
-# Set this when the local origin is not the request origin.
-APP_ORIGIN="http://localhost:5173"
+GITHUB_CLIENT_SECRET=
+TOKEN_SECRET=
+# Required only for the scheduled D1 export:
+CLOUDFLARE_ACCOUNT_ID=
+CLOUDFLARE_D1_TOKEN=

@@ -1,20 +1,8 @@
-.DS_Store
-.env
-/node_modules/
-*.tsbuildinfo
-
-# React Router
-/.react-router/
-/build/
-
-# Cloudflare
-.mf
+node_modules/
+dist/
 .wrangler/
-/.playwright/
-/.playwright-cli/
-/test-results/
-.dev.vars*
-worker-configuration.d.ts
-
-!.dev.vars.example
+.dev.vars
+.env*
 !.env.example
+wrangler.staging.json
+coverage/
