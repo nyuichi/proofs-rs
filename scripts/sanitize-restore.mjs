@@ -36,6 +36,23 @@ try {
       db.exec("DELETE FROM maintenance");
     } else throw Error("Unknown erasure marker");
   }
+  // Older backups may predate the CLI migration.
+  if (
+    db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='device_authorizations'",
+      )
+      .get()
+  )
+    db.exec("DELETE FROM device_authorizations");
+  if (
+    db
+      .prepare(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='api_tokens'",
+      )
+      .get()
+  )
+    db.exec("DELETE FROM api_tokens");
   // Restored sessions and pending email work must never become active automatically.
   db.exec(
     "DELETE FROM sessions; DELETE FROM oauth_flows; UPDATE email_deliveries SET status='cancelled' WHERE status IN ('pending','retry','sending'); INSERT OR REPLACE INTO settings VALUES('email_paused','1'); INSERT OR REPLACE INTO settings VALUES('imports_paused','1');",

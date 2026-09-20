@@ -414,7 +414,7 @@ function renderComment(cm: any, container: HTMLElement, claimID: number) {
 function login() {
   root.innerHTML = `<h1>Sign in</h1><p>Use your GitHub account to sign in or create an account.</p><p>By signing up, you agree to the <a href="#/terms">Terms</a> and acknowledge the <a href="#/privacy">Privacy Policy</a>.</p>${config.oauth_configured ? '<a href="/auth/github">Continue with GitHub</a>' : "<p>GitHub sign-in is currently unavailable.</p>"}`;
 }
-async function termsUpdate() {
+async function termsUpdate(returnTo = "/account") {
   if (!me.user) return login();
   root.innerHTML = `<h1>Updated terms</h1>${legal.terms.body}<p>Version: ${esc(config.terms_version)}</p><button id="agree">Agree and continue</button>`;
   bind("#agree", async () => {
@@ -422,7 +422,7 @@ async function termsUpdate() {
       version: config.terms_version,
     });
     await refreshMe();
-    navigate("/account");
+    navigate(returnTo);
   });
 }
 async function activity(id: string) {
@@ -460,8 +460,21 @@ async function commentsList(path: string, box: HTMLElement, cursor = 0) {
 async function settings() {
   if (!me.user) return login();
   const p = await request("/me/notification-preferences");
-  root.innerHTML = `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Your GitHub username is refreshed when you sign in again.</p><h2>Email notifications</h2><p>Email: ${esc(me.email?.address || "Unavailable")}</p><p>This is the verified primary GitHub email. Your email is refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form><h2>Delete my account</h2><p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>`;
+  const tokens = await request("/me/tokens");
+  root.innerHTML = `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Your GitHub username is refreshed when you sign in again.</p><h2>Email notifications</h2><p>Email: ${esc(me.email?.address || "Unavailable")}</p><p>This is the verified primary GitHub email. Your email is refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form><h2>Tokens</h2>${tokens.items.length ? `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr></thead><tbody>${tokens.items.map((t: any) => `<tr><td><code>${esc(t.id)}</code></td><td>${date(t.created_at)}</td><td>${t.last_used_at ? date(t.last_used_at) : "Never"}</td><td>${date(t.expires_at)}</td><td><button data-revoke="${esc(t.id)}">Revoke</button></td></tr>`).join("")}</tbody></table></div>` : "<p>No tokens.</p>"}<div id="revoke-confirm"></div><h2>Delete my account</h2><p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>`;
 
+  bind("[data-revoke]", (e) => {
+    const id = e.currentTarget.dataset.revoke;
+    root.querySelector("#revoke-confirm")!.innerHTML =
+      '<p>Revoke this token?</p><div class="form-actions"><button id="confirm-revoke">Revoke</button><button id="cancel-revoke">Cancel</button></div>';
+    bind("#confirm-revoke", async () => {
+      await request("/me/tokens/" + enc(id), "DELETE");
+      await settings();
+    });
+    bind("#cancel-revoke", () => {
+      root.querySelector("#revoke-confirm")!.innerHTML = "";
+    });
+  });
   bind(
     "#prefs",
     async (e) => {
@@ -474,6 +487,73 @@ async function settings() {
     },
     "submit",
   );
+}
+async function devicePage() {
+  const code = (current().searchParams.get("code") || "")
+    .toUpperCase()
+    .replace(/[^A-Z2-9]/g, "");
+  const back = "/#/device" + (code ? "?code=" + code : "");
+  const loginURL = "/auth/github?return_to=" + enc(back);
+  if (!me.user) {
+    root.innerHTML = `<h1>Sign in</h1><p><a href="${loginURL}">Continue with GitHub</a></p><p class="meta">By signing in, you agree to the <a href="#/terms">Terms</a>.</p>`;
+    return;
+  }
+  if (me.terms_required) {
+    await termsUpdate("/device" + (code ? "?code=" + code : ""));
+    return;
+  }
+  const account = `<p>Signed in as <strong>${esc(me.user.username)}</strong>. <button class="link-button" id="switch-account">Use another account</button></p>`;
+  if (!code) {
+    root.innerHTML =
+      account +
+      `<p>Check the code:</p><form id="device-code-form"><label for="device-code" class="label">Code from your terminal</label><input id="device-code" name="code" autocomplete="off" maxlength="12" required><div class="form-actions"><button>Continue</button></div></form>`;
+    bind(
+      "#device-code-form",
+      (e) =>
+        navigate(
+          "/device?code=" + enc(new FormData(e.target).get("code") as string),
+        ),
+      "submit",
+    );
+  } else {
+    let d;
+    try {
+      d = await request("/auth/device/inspect", "POST", { user_code: code });
+    } catch (e) {
+      if (
+        e instanceof Error &&
+        ["expired_or_invalid_code", "invalid_user_code"].includes(e.message)
+      ) {
+        root.innerHTML =
+          account +
+          '<p>This code is invalid or has expired. Check your terminal or run <code>cargo proofs login</code> again.</p><p><a href="#/device">Enter another code</a></p>';
+        bind("#switch-account", async () => {
+          await request("/auth/logout", "POST", {});
+          location.href = loginURL;
+        });
+        return;
+      }
+      throw e;
+    }
+    if (d.state !== "pending") {
+      root.innerHTML =
+        account +
+        "<p>This request has already been used. Run <code>cargo proofs login</code> again.</p>";
+    } else {
+      root.innerHTML =
+        account +
+        `<p class="device-label">Check the code:</p><p class="device-code"><code>${esc(code.slice(0, 4) + "-" + code.slice(4))}</code></p><button id="device-authorize">Authorize</button>`;
+      bind("#device-authorize", async () => {
+        await request("/auth/device/approve", "POST", { user_code: code });
+        root.innerHTML =
+          '<h1>CLI connected</h1><p>Return to your terminal to continue. You can close this page.</p><p><a href="#/settings">Manage tokens</a></p>';
+      });
+    }
+  }
+  bind("#switch-account", async () => {
+    await request("/auth/logout", "POST", {});
+    location.href = loginURL;
+  });
 }
 async function toolsPage(id?: string) {
   if (id) {
@@ -708,6 +788,7 @@ async function route() {
       else login();
     } else if (p.startsWith("my-")) await mine(p.slice(3));
     else if (p === "settings") await settings();
+    else if (p === "device") await devicePage();
     else if (p === "tools" || p === "tool") await toolsPage(id);
     else if (p === "unsubscribe") await unsubscribe();
     else if (p in legal)

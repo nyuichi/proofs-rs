@@ -6,6 +6,7 @@ import api from "./api";
 import { importRoutes } from "./imports";
 import { queue, dispatch, backup } from "./jobs";
 import { admin } from "./admin";
+import { deviceRoutes, tokenRoutes, publicDevicePaths } from "./device";
 const app = new Hono<App>();
 app.use("*", async (c, next) => {
   c.set("requestId", uid());
@@ -39,19 +40,45 @@ app.use("/auth/*", async (c, next) => {
   await next();
 });
 app.use("*", async (c, next) => {
-  if (!["GET", "HEAD", "OPTIONS"].includes(c.req.method)) {
-    if (c.req.header("origin") !== c.env.APP_ORIGIN)
+  const path = c.req.path,
+    bearer = !!c.get("tokenId"),
+    write = !["GET", "HEAD", "OPTIONS"].includes(c.req.method);
+  if (bearer) {
+    const readable =
+      c.req.method === "GET" &&
+      (path === "/api/v1/me" ||
+        path === "/api/v1/me/claims" ||
+        /^\/api\/v1\/(crates|apis|claims|tools|resolve-api|imports|health|config|terms)(\/|$)/.test(
+          path,
+        ));
+    const writable =
+      c.req.method === "POST" &&
+      ([
+        "/api/v1/publish/prepare",
+        "/api/v1/claims",
+        "/api/v1/claims/validate",
+        "/api/v1/tokens/revoke",
+      ].includes(path) ||
+        /^\/api\/v1\/claims\/[^/]+\/revisions$/.test(path));
+    if (!readable && !writable) throw new Fault(403, "insufficient_scope");
+  }
+  if (write && !publicDevicePaths.has(path)) {
+    if (!bearer && c.req.header("origin") !== c.env.APP_ORIGIN)
       throw new Fault(403, "invalid_origin");
-    if (c.req.path !== "/api/v1/notifications/unsubscribe") {
+    if (path !== "/api/v1/notifications/unsubscribe") {
       requireUser(c);
-      if (c.req.header("X-CSRF-Token") !== c.get("csrf"))
+      if (!bearer && c.req.header("X-CSRF-Token") !== c.get("csrf"))
         throw new Fault(403, "invalid_csrf");
-      if (
-        ![
+      const exempt =
+        [
           "/auth/logout",
           "/api/v1/me/terms-acceptance",
           "/api/v1/me/notification-preferences",
-        ].includes(c.req.path) &&
+          "/api/v1/tokens/revoke",
+        ].includes(path) ||
+        (c.req.method === "DELETE" && path.startsWith("/api/v1/me/tokens/"));
+      if (
+        !exempt &&
         c.get("user")!.accepted_terms_version !== c.env.TERMS_VERSION
       )
         throw new Fault(428, "terms_required");
@@ -71,10 +98,17 @@ app.use("/api/*", async (c, next) => {
     c.executionCtx.waitUntil(dispatch(c.env));
 });
 app.route("/auth", authRoutes());
+app.route("/auth", deviceRoutes);
+app.route("/api/v1", tokenRoutes);
 app.route("/api/v1", api);
 app.route("/api/v1", importRoutes);
 app.route("/api/v1/admin", admin);
 app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));
+app.get("/docs/api", (c) =>
+  c.env.ASSETS.fetch(
+    new Request(new URL("/docs/api/index.html", c.req.url), c.req.raw),
+  ),
+);
 app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 app.onError((e, c) => {
   if (e instanceof Fault)
@@ -99,6 +133,11 @@ export default {
     ctx: ExecutionContext,
   ) {
     ctx.waitUntil(dispatch(env));
+    ctx.waitUntil(
+      env.DB.prepare("DELETE FROM device_authorizations WHERE expires_at<?")
+        .bind(new Date(Date.now() - 86400000).toISOString())
+        .run(),
+    );
     if (controller.cron === "17 2 * * *") ctx.waitUntil(backup(env));
   },
 };

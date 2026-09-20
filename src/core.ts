@@ -44,6 +44,7 @@ export type App = {
     user: User | null;
     csrf: string;
     sessionHash: string;
+    tokenId: string;
     requestId: string;
   };
 };

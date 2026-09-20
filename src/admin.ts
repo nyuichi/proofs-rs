@@ -96,6 +96,17 @@ admin.post("/action", async (c) => {
       ss.push(
         stmt(db, "UPDATE users SET status='suspended' WHERE id=?", target),
         stmt(db, "DELETE FROM sessions WHERE user_id=?", target),
+        stmt(
+          db,
+          "UPDATE api_tokens SET revoked_at=COALESCE(revoked_at,?) WHERE user_id=?",
+          now(),
+          target,
+        ),
+        stmt(
+          db,
+          "UPDATE device_authorizations SET state='denied' WHERE user_id=? AND state='approved'",
+          target,
+        ),
       );
       break;
     case "restore_user":

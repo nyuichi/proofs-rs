@@ -566,7 +566,7 @@ test("frontend publish preview, revision links and nested comment deletion", asy
         w.document.querySelectorAll("#app h2"),
         (el) => el.textContent,
       ),
-      ["Account", "Email notifications", "Delete my account"],
+      ["Account", "Email notifications", "Tokens", "Delete my account"],
     );
     assert.doesNotMatch(
       w.document.querySelector("#app")!.textContent!,
@@ -668,4 +668,405 @@ test("removing Bio preserves accounts and removes it from public and private API
     (await request("/me", "PATCH", { bio: "Cannot save" })).status,
     404,
   );
+});
+
+test("device login, one-time exchange, scope isolation, ownership and revocation", async () => {
+  const { env, db, request } = await fixture();
+  async function auth(
+    path: string,
+    body: any,
+    browser = false,
+    headers: Record<string, string> = {},
+  ) {
+    const r = await app.request(
+      "https://example.test/auth/device/" + path,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(browser
+            ? {
+                Origin: env.APP_ORIGIN,
+                Cookie: "__Host-proofsr_session=alice",
+                "X-CSRF-Token": "csrf",
+              }
+            : {}),
+          ...headers,
+        },
+        body: JSON.stringify(body),
+      },
+      env,
+    );
+    return { status: r.status, body: (await r.json()) as any };
+  }
+  const start = await auth("code", { client_id: "proofs-cli" });
+  assert.equal(start.status, 200);
+  const poll = {
+    client_id: "proofs-cli",
+    grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+    device_code: start.body.device_code,
+  };
+  assert.equal((await auth("token", poll)).body.error, "authorization_pending");
+  assert.equal((await auth("token", poll)).body.error, "slow_down");
+  assert.equal(
+    (await auth("approve", { user_code: start.body.user_code })).status,
+    403,
+  );
+  assert.equal(
+    (
+      await auth("approve", { user_code: start.body.user_code }, true, {
+        "X-CSRF-Token": "wrong",
+      })
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await auth("inspect", { user_code: start.body.user_code }, true)).body
+      .state,
+    "pending",
+  );
+  assert.equal(
+    (await auth("approve", { user_code: start.body.user_code }, true)).status,
+    200,
+  );
+  assert.equal(
+    (await auth("approve", { user_code: start.body.user_code }, true)).status,
+    409,
+  );
+  db.exec("UPDATE device_authorizations SET next_poll_at='2000-01-01'");
+  const issued = await auth("token", poll);
+  assert.equal(issued.status, 200);
+  assert.ok(issued.body.access_token);
+  assert.equal((await auth("token", poll)).body.error, "invalid_grant");
+  const stored = db.prepare("SELECT * FROM api_tokens").get() as any;
+  assert.equal(stored.token_hash, await hash(issued.body.access_token));
+  assert.equal(stored.name, undefined);
+  const headers = {
+    Authorization: "Bearer " + issued.body.access_token,
+    Origin: "",
+    "X-CSRF-Token": "",
+    Cookie: "",
+  };
+  assert.equal(
+    (await request("/claims", "POST", claim, "", headers)).status,
+    201,
+  );
+  assert.equal(
+    (
+      await request(
+        "/claims/1/revisions",
+        "POST",
+        { ...claim, expected_revision: 1, title: "Updated" },
+        "",
+        headers,
+      )
+    ).status,
+    201,
+  );
+  assert.equal(
+    (
+      await request(
+        "/publish/prepare",
+        "POST",
+        { crate: "sample", version: "1.0.0" },
+        "",
+        headers,
+      )
+    ).body.status,
+    "ready",
+  );
+  assert.equal(
+    (await request("/admin/audit", "GET", undefined, "", headers)).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        "/claims/1/comments",
+        "POST",
+        { body: "hello", revision_no: 1 },
+        "",
+        headers,
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (await request("/me/tokens", "GET", undefined, "", headers)).status,
+    403,
+  );
+  assert.equal(
+    (
+      await request(
+        "/me/terms-acceptance",
+        "POST",
+        { version: "test" },
+        "",
+        headers,
+      )
+    ).status,
+    403,
+  );
+  const listed = (await request("/me/tokens")).body.items;
+  assert.equal(listed[0].id, issued.body.token_id);
+  assert.ok(!("token_hash" in listed[0]));
+  await request(
+    "/me/tokens/" + issued.body.token_id,
+    "DELETE",
+    undefined,
+    "bob",
+  );
+  assert.equal(
+    (await request("/me", "GET", undefined, "", headers)).status,
+    200,
+  );
+  db.exec("UPDATE users SET accepted_terms_version='old' WHERE id='alice'");
+  assert.equal(
+    (await request("/claims", "POST", claim, "", headers)).status,
+    428,
+  );
+  assert.equal(
+    (await request("/tokens/revoke", "POST", {}, "", headers)).status,
+    200,
+  );
+  assert.equal(
+    (await request("/me", "GET", undefined, "", headers)).status,
+    401,
+  );
+  // Invalid Bearer must not fall back to the valid browser session.
+  assert.equal(
+    (
+      await request("/me", "GET", undefined, "alice", {
+        Authorization: "Bearer bad",
+      })
+    ).status,
+    401,
+  );
+});
+
+test("device expiry, token expiry, suspension, quotas, and user erasure", async () => {
+  const { env, db, request } = await fixture();
+  const token = "a".repeat(64),
+    h = await hash(token),
+    future = new Date(Date.now() + 86400000).toISOString();
+  db.prepare(
+    "INSERT INTO api_tokens(id,user_id,token_hash,scope,created_at,expires_at) VALUES('token','alice',?,'publish',?,?)",
+  ).run(h, new Date().toISOString(), future);
+  const headers = { Authorization: "Bearer " + token };
+  db.exec("UPDATE api_tokens SET expires_at='2000-01-01'");
+  assert.equal(
+    (await request("/me", "GET", undefined, "", headers)).status,
+    401,
+  );
+  db.prepare("UPDATE api_tokens SET expires_at=?").run(future);
+  await request(
+    "/admin/action",
+    "POST",
+    { action: "suspend", target: "alice", reason: "Test" },
+    "admin",
+  );
+  await request(
+    "/admin/action",
+    "POST",
+    { action: "restore_user", target: "alice", reason: "Test" },
+    "admin",
+  );
+  assert.equal(
+    (await request("/me", "GET", undefined, "", headers)).status,
+    401,
+  );
+  const r = await app.request(
+    "https://example.test/auth/device/code",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: "client_id=proofs-cli",
+    },
+    env,
+  );
+  const start = (await r.json()) as any;
+  assert.equal(r.status, 200);
+  db.exec("UPDATE device_authorizations SET expires_at='2000-01-01'");
+  const poll = await app.request(
+    "https://example.test/auth/device/token",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        client_id: "proofs-cli",
+        device_code: start.device_code,
+        grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+      }),
+    },
+    env,
+  );
+  assert.equal(((await poll.json()) as any).error, "expired_token");
+  db.exec("UPDATE rate_limits SET used=lim WHERE kind='device_start'");
+  const limited = await app.request(
+    "https://example.test/auth/device/code",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ client_id: "proofs-cli" }),
+    },
+    env,
+  );
+  assert.equal(limited.status, 429);
+  assert.equal(
+    (
+      await request(
+        "/admin/action",
+        "POST",
+        { action: "delete_user", target: "alice", reason: "Test" },
+        "admin",
+      )
+    ).status,
+    200,
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM api_tokens").get()!.n, 0);
+});
+
+test("OpenAPI covers every registered API/auth route with resolvable schema references", () => {
+  const spec = JSON.parse(
+    readFileSync(new URL("../public/openapi.json", import.meta.url), "utf8"),
+  );
+  const actual = new Set(
+    app.routes
+      .filter(
+        (r) =>
+          r.method !== "ALL" &&
+          !r.path.includes("*") &&
+          (r.path.startsWith("/api/") || r.path.startsWith("/auth/")),
+      )
+      .map(
+        (r) =>
+          r.method.toLowerCase() +
+          " " +
+          r.path.replace(/:([a-zA-Z]+)/g, "{$1}"),
+      ),
+  );
+  const documented = new Set(
+    Object.entries(spec.paths).flatMap(([p, methods]) =>
+      Object.keys(methods as any).map((m) => m + " " + p),
+    ),
+  );
+  assert.deepEqual(documented, actual);
+  function walk(v: any) {
+    if (!v || typeof v !== "object") return;
+    if (v.$ref) {
+      assert.ok(v.$ref.startsWith("#/components/"));
+      assert.ok(spec.components[v.$ref.split("/")[2]][v.$ref.split("/").pop()]);
+    }
+    Object.values(v).forEach(walk);
+  }
+  walk(spec);
+});
+
+test("browser approval returns through terms acceptance and exposes only token UUIDs", async () => {
+  const { env, db } = await fixture();
+  const { JSDOM } = await import("jsdom");
+  const { transpileModule, ModuleKind, ScriptTarget } =
+    await import("typescript");
+  const start = await app.request(
+    "https://example.test/auth/device/code",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: '{"client_id":"proofs-cli"}',
+    },
+    env,
+  );
+  const device = (await start.json()) as any;
+  db.exec("UPDATE users SET accepted_terms_version='old' WHERE id='alice'");
+  const dom = new JSDOM(
+      readFileSync(new URL("../index.html", import.meta.url), "utf8"),
+      {
+        url: "https://example.test/#/device?code=" + device.user_code,
+        runScripts: "outside-only",
+      },
+    ),
+    w = dom.window;
+  w.fetch = async (path: any, init: any = {}) =>
+    app.request(
+      new URL(String(path), "https://example.test").href,
+      {
+        ...init,
+        headers: {
+          ...init.headers,
+          Origin: env.APP_ORIGIN,
+          Cookie: "__Host-proofsr_session=alice",
+        },
+      },
+      env,
+    ) as any;
+  w.HTMLElement.prototype.scrollIntoView = () => {};
+  const code =
+    readFileSync(new URL("../web/legal.ts", import.meta.url), "utf8").replace(
+      "export const legal",
+      "const legal",
+    ) +
+    "\n" +
+    readFileSync(new URL("../web/main.ts", import.meta.url), "utf8").replace(
+      'import { legal } from "./legal";',
+      "",
+    );
+  w.eval(
+    transpileModule(code, {
+      compilerOptions: { module: ModuleKind.None, target: ScriptTarget.ES2022 },
+    }).outputText,
+  );
+  const until = async (selector: string) => {
+    for (let n = 0; n < 100; n++) {
+      const el = w.document.querySelector(selector);
+      if (el && !w.document.querySelector("#app")!.hasAttribute("inert"))
+        return el;
+      await new Promise((r) => setTimeout(r, 10));
+    }
+    throw Error(w.document.querySelector("#app")!.textContent || selector);
+  };
+  try {
+    ((await until("#agree")) as any).click();
+    ((await until("#device-authorize")) as any).click();
+    await until('a[href="#/settings"]');
+    for (
+      let n = 0;
+      n < 100 &&
+      !w.document.querySelector("#app")!.textContent!.includes("CLI connected");
+      n++
+    )
+      await new Promise((r) => setTimeout(r, 10));
+    assert.match(
+      w.document.querySelector("#app")!.textContent!,
+      /CLI connected/,
+    );
+    const issued = await app.request(
+      "https://example.test/auth/device/token",
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          client_id: "proofs-cli",
+          device_code: device.device_code,
+          grant_type: "urn:ietf:params:oauth:grant-type:device_code",
+        }),
+      },
+      env,
+    );
+    const token = (await issued.json()) as any;
+    assert.equal(issued.status, 200);
+    w.location.hash = "/settings";
+    await until("[data-revoke]");
+    assert.match(
+      w.document.querySelector("#app")!.textContent!,
+      new RegExp(token.token_id),
+    );
+    assert.ok(!w.document.body.textContent!.includes(token.access_token));
+    (w.document.querySelector("[data-revoke]") as any).click();
+    ((await until("#confirm-revoke")) as any).click();
+    for (let n = 0; n < 100 && w.document.querySelector("[data-revoke]"); n++)
+      await new Promise((r) => setTimeout(r, 10));
+    assert.match(w.document.querySelector("#app")!.textContent!, /No tokens/);
+  } finally {
+    w.close();
+  }
 });

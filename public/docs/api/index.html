@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>API documentation · proofs.rs</title>
+    <link rel="stylesheet" href="/style.css" />
+    <script src="/api-docs.js" defer></script>
+  </head>
+  <body>
+    <header>
+      <a class="brand" href="/">proofs.rs</a>
+      <nav>
+        <a href="/#/crates">Crates</a><a href="/#/tools">Tools</a
+        ><a href="/#/publish">Publish</a><a href="/#/about">About</a>
+      </nav>
+    </header>
+    <main>
+      <h1>API documentation</h1>
+      <p>
+        API v1 · OpenAPI 3.1 ·
+        <a href="/openapi.json">Download OpenAPI specification</a>
+      </p>
+      <section>
+        <h2>Authentication</h2>
+        <p>
+          Start a device request, display its code in your terminal, and open
+          the returned verification URL. After browser authorization, poll for a
+          token. Store the token securely and send it as
+          <code>Authorization: Bearer &lt;token&gt;</code>.
+        </p>
+        <p>
+          Tokens expire after 90 days. Manage them in
+          <a href="/#/settings">Settings</a>. CLI tokens can import API lists,
+          publish claims, and revise your claims. Other write operations require
+          a browser session.
+        </p>
+        <details>
+          <summary>Device login example</summary>
+          <pre>
+curl -X POST "$ORIGIN/auth/device/code" \
+  -H 'Content-Type: application/json' \
+  -d '{"client_id":"proofs-cli"}'
+
+# Display user_code, open verification_uri_complete, then poll
+# no more frequently than the returned interval (initially 5 seconds).
+curl -X POST "$ORIGIN/auth/device/token" \
+  -H 'Content-Type: application/json' \
+  -d '{"client_id":"proofs-cli","device_code":"DEVICE_CODE","grant_type":"urn:ietf:params:oauth:grant-type:device_code"}'</pre>
+        </details>
+        <p>
+          For <code>authorization_pending</code>, continue polling. For
+          <code>slow_down</code>, increase the interval by five seconds. For
+          expired, denied, or consumed requests, start again. If terms change,
+          accept them in the browser.
+        </p>
+      </section>
+      <section>
+        <h2>Conventions</h2>
+        <p>
+          Send JSON unless otherwise stated. Paginated lists return
+          <code>items</code> and <code>next_cursor</code>; pass the cursor
+          unchanged to get the next page. Use the same
+          <code>Idempotency-Key</code> and identical JSON body when retrying a
+          creation request. A stale revision or changed idempotency body returns
+          409.
+        </p>
+        <p>
+          Browser writes require a same-origin <code>Origin</code> and the
+          <code>X-CSRF-Token</code> from <code>GET /api/v1/me</code>. CLI tokens
+          do not use these headers. Errors contain <code>error</code>, with
+          optional <code>message</code> and <code>request_id</code>.
+        </p>
+      </section>
+      <label for="filter">Find an endpoint</label>
+      <input id="filter" type="search" placeholder="claims, tokens, imports…" />
+      <div id="endpoints" aria-live="polite">Loading specification…</div>
+    </main>
+    <footer>
+      © 2026 proofs.rs · <a href="/#/about">About</a> ·
+      <a href="https://github.com/nyuichi/proofs-rs">GitHub</a> ·
+      <a href="/#/privacy">Privacy</a> · <a href="/#/terms">Terms</a> ·
+      <a href="/#/contact">Contact</a>
+    </footer>
+  </body>
+</html>

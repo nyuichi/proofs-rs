@@ -44,3 +44,16 @@ No GitHub tokens or client secrets are committed or included in the browser buil
 ## Release boundary
 
 Before production: configure OAuth, domain/DNS and contact mailbox, Email Service if desired, backup credentials, billing notifications, restore access and operator procedures. Publishing the GitHub repository and attaching proofs.rs are separate later actions. No external docs.rs import or email delivery verification is performed by CI.
+
+
+## CLI authentication and API documentation
+
+Open `/docs/api` for the API reference and `/openapi.json` for OpenAPI 3.1.
+The fixed public client ID is `proofs-cli`. Start at `POST /auth/device/code`,
+show the returned user code, open the verification URL, and poll
+`POST /auth/device/token`. Tokens have publishing scope, expire after 90 days,
+and can be revoked in Settings or through `POST /api/v1/tokens/revoke`.
+No CLI binary is included in this repository yet.
+
+Regenerate the checked-in API specification with `python3 scripts/openapi.py`.
+The test suite checks coverage against every registered API/auth route.

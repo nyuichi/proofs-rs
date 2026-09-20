@@ -23,6 +23,30 @@ export async function authenticate(c: Ctx) {
   c.set("user", null);
   c.set("csrf", "");
   c.set("sessionHash", "");
+  c.set("tokenId", "");
+  const authorization = c.req.header("authorization");
+  if (authorization !== undefined) {
+    if (!/^Bearer [a-f0-9]{64}$/i.test(authorization))
+      throw new Fault(401, "invalid_token");
+    const row = await one(
+      c.env.DB,
+      "SELECT u.*,t.id token_id FROM api_tokens t JOIN users u ON u.id=t.user_id WHERE t.token_hash=? AND t.revoked_at IS NULL AND t.expires_at>?",
+      await hash(authorization.slice(7)),
+      now(),
+    );
+    if (!row) throw new Fault(401, "invalid_token");
+    c.set("user", row);
+    requireUser(c);
+    c.set("tokenId", row.token_id);
+    await stmt(
+      c.env.DB,
+      "UPDATE api_tokens SET last_used_at=? WHERE id=? AND (last_used_at IS NULL OR last_used_at<?)",
+      now(),
+      row.token_id,
+      new Date(Date.now() - 3600000).toISOString(),
+    ).run();
+    return;
+  }
   const tok = getCookie(c, cookieName(c));
   if (!tok) return;
   const h = await hash(tok);
@@ -47,6 +71,16 @@ export function authRoutes() {
         "oauth_not_configured",
         "GitHub sign-in is not configured for this environment yet.",
       );
+    const returnTo = c.req.query("return_to") || "";
+    if (/^\/#\/device(?:\?code=[A-Z2-9-]{8,9})?$/.test(returnTo))
+      setCookie(c, "oauth_return", returnTo, {
+        secure: secure(c),
+        httpOnly: true,
+        sameSite: "Lax",
+        path: "/",
+        maxAge: 600,
+      });
+    else deleteCookie(c, "oauth_return", { path: "/" });
     const state = random(),
       verifier = random();
     const digest = await crypto.subtle.digest(
@@ -234,6 +268,10 @@ export function authRoutes() {
       path: "/",
       maxAge: 30 * 86400,
     });
+    const back = getCookie(c, "oauth_return");
+    deleteCookie(c, "oauth_return", { path: "/" });
+    if (back && /^\/#\/device(?:\?code=[A-Z2-9-]{8,9})?$/.test(back))
+      return c.redirect(back);
     return c.redirect(er.ok ? "/#/account" : "/#/settings?email=retry");
   });
   app.post("/logout", async (c) => {

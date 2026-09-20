@@ -471,3 +471,21 @@ textarea {
   text-align: left;
   font-family: monospace;
 }
+
+.device-label {
+  margin-top: 24px;
+}
+.device-code {
+  font-size: 26px;
+  letter-spacing: 3px;
+  margin: 20px 0;
+}
+.link-button {
+  border: 0;
+  background: none;
+  padding: 0;
+  color: #0000ee;
+  text-decoration: underline;
+  font: inherit;
+  cursor: pointer;
+}

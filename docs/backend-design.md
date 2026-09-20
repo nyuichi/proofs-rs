@@ -519,3 +519,44 @@ We may restrict access, suspend or terminate accounts, hide or remove content, o
 Issue report・feedback・tool requestは同リポジトリのIssuesに集約します。3種類のIssueテンプレートとサイトからのリンクを用意します。公開サービスから一般利用者に案内する前に、リポジトリがpublicでIssuesが有効なことを確認します。privateの開発期間中は外部利用者に利用可能な窓口として案内しません。機密のセキュリティ報告・退会・個人情報の問い合わせは従来の非公開メール窓口を維持します。
 
 完成時の公開準備には、履歴を含む秘密情報・実データ混入の確認とコードライセンスの選定を含めます。公開リポジトリ化とOSSライセンス選択は別であり、CC BY 4.0の投稿ライセンスをコードへ自動適用しません。
+
+
+## CLI認証・公開API仕様（2026-09-20追加）
+
+- Browser-assisted Device Flow。固定public client `proofs-cli`、scopeは`publish`。JSONとform-urlencodedを受け付ける。開始 `/auth/device/code`、交換 `/auth/device/token`。コードは10分で期限切れ、ポーリングは5秒から開始し過頻度時に5秒延長（最大60秒）。
+- `device_authorizations`: device_hash PK、user_code_hash UNIQUE、user_id FK、state、created_at、expires_at、next_poll_at、poll_interval、token_id FK。生のコードは保存せず、承認を一回だけトークンに交換する。期限から1日後に定期削除する。
+- `api_tokens`: id UUID PK、user_id FK、token_hash UNIQUE、scope、created_at、last_used_at、expires_at、revoked_at。名前カラムは持たない。256-bit乱数の秘密トークンはSHA-256ハッシュのみ保存する。90日で期限切れ、refresh tokenなし。last_used_atの書き込みは最大1時間に1回。
+- CLIトークンはAPI取り込み・Claim検証/作成・自分のClaim改定と、それに必要な読み取りのみ。管理・コメント・投票・規約同意・他のトークン管理はブラウザ専用。CLIログアウトは `/api/v1/tokens/revoke` で自身を失効させる。
+- Cookie認証のOrigin/CSRF保護は維持。Bearer認証でのみCSRFを免除する。不正BearerからCookie認証へのフォールバックは禁止。利用停止時はトークンも失効し、復帰しても復活しない。規約更新はブラウザ同意を要求するが、失効操作は可能。
+- SettingsのTokens一覧はUUID・作成日時・最終利用日時・期限・Revoke。秘密トークンは表示しない。承認画面はアカウント表示/切替、確認コード、Authorizeだけ。OAuth後も承認対象コードを保持する。
+- `/openapi.json` と `/docs/api` はログインなしで公開。管理用も含めて全ルートを文書化し、CLI非対応の操作を区別する。生成元 `scripts/openapi.py`、登録ルートと仕様の対応をテスト。既存バリデーションを維持し、大規模なルーター置換は行わない。
+- IP別日次制限: 開始30、照会/承認100、ポーリング10000。既存のユーザー別投稿/取り込み制限はそのまま適用する。
+- バックアップ復元時はセッションとともにCLIトークン・未完了の端末認証も削除する。
+- この変更にCLIバイナリは含まない。Aboutページへの案内文追加は別途レビューする。
+
+```mermaid
+erDiagram
+  users ||--o{ api_tokens : owns
+  users ||--o{ device_authorizations : approves
+  api_tokens o|--o| device_authorizations : issued_from
+  api_tokens {
+    string id PK
+    string user_id FK
+    string token_hash UK
+    string scope
+    datetime created_at
+    datetime last_used_at
+    datetime expires_at
+    datetime revoked_at
+  }
+  device_authorizations {
+    string device_hash PK
+    string user_code_hash UK
+    string user_id FK
+    string state
+    datetime expires_at
+    datetime next_poll_at
+    int poll_interval
+    string token_id FK
+  }
+```
