@@ -29,7 +29,7 @@ async function pages(path) {
   }
   throw Error("Resource pagination limit exceeded");
 }
-const config = JSON.parse(await readFile("wrangler.jsonc", "utf8"));
+const config = JSON.parse(await readFile("wrangler.json", "utf8"));
 const databases = await pages("/d1/database");
 let database = databases.find(
   (x) => x.name === config.d1_databases[0].database_name,
