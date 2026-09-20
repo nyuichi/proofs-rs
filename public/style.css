@@ -489,3 +489,61 @@ textarea {
   font: inherit;
   cursor: pointer;
 }
+
+.docs-page {
+  max-width: 1100px;
+}
+.docs-layout {
+  display: grid;
+  grid-template-columns: 180px minmax(0, 1fr);
+  gap: 32px;
+  align-items: start;
+}
+.docs-sidebar {
+  position: sticky;
+  top: 20px;
+  padding-top: 12px;
+}
+.docs-sidebar a {
+  display: block;
+  margin: 8px 0;
+}
+.docs-sidebar a[aria-current] {
+  font-weight: bold;
+}
+.docs-content {
+  min-width: 0;
+}
+.docs-content h2 {
+  border-bottom: 1px solid #ccc;
+  padding-bottom: 8px;
+}
+.docs-content h2,
+.docs-content h3 {
+  scroll-margin-top: 20px;
+}
+.docs-content pre {
+  background: #f7f7f7;
+  padding: 12px;
+}
+.docs-group-heading {
+  margin-top: 32px;
+}
+@media (max-width: 650px) {
+  .docs-layout {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .docs-sidebar {
+    position: static;
+    padding: 0 0 12px;
+    border-bottom: 1px solid #ccc;
+  }
+  .docs-sidebar a {
+    display: inline-block;
+    margin: 4px 14px 4px 0;
+  }
+  #docs-groups {
+    display: contents;
+  }
+}
