@@ -33,7 +33,6 @@ export type User = {
   id: string;
   github_id: number;
   username: string;
-  bio: string;
   role: string;
   status: string;
   accepted_terms_version: string;

@@ -521,6 +521,28 @@ test("frontend publish preview, revision links and nested comment deletion", asy
       w.document.querySelector(".comment-children .comment")!.textContent!,
       /Nested reply/,
     );
+    w.location.hash = "/account";
+    await until("#claims");
+    assert.equal(
+      w.document.querySelector('a[href="https://github.com/alice"]')
+        ?.textContent,
+      "GitHub profile",
+    );
+    assert.equal(w.document.querySelector("#bio"), null);
+    assert.match(
+      w.document.querySelector("#account-nav")!.textContent!,
+      /My activity/,
+    );
+    w.location.hash = "/settings?email=retry";
+    await until("#prefs");
+    assert.match(
+      w.document.querySelector("#app")!.textContent!,
+      /GitHub email lookup failed/,
+    );
+    assert.match(
+      w.document.querySelector("#app")!.textContent!,
+      /For account deletion/,
+    );
   } finally {
     w.close();
   }
@@ -576,4 +598,37 @@ test("empty catalogue can be managed through the authenticated admin API", async
   assert.equal(catalogue.body.items.length, 1);
   assert.equal(catalogue.body.items[0].name, "Updated verifier");
   assert.equal(catalogue.body.versions[0].version, "1.0");
+});
+
+test("removing Bio preserves accounts and removes it from public and private APIs", async () => {
+  const legacy = new DatabaseSync(":memory:");
+  legacy.exec(
+    readFileSync(
+      new URL("../migrations/0001_schema.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  legacy.exec(
+    "INSERT INTO users(id,github_id,username,bio,accepted_terms_version,terms_accepted_at,created_at) VALUES('legacy',42,'legacy','Old biography','test','2026-09-20','2026-09-20')",
+  );
+  legacy.exec(
+    readFileSync(
+      new URL("../migrations/0004_remove_bio.sql", import.meta.url),
+      "utf8",
+    ),
+  );
+  const retained = legacy.prepare("SELECT * FROM users").get()!;
+  assert.equal(retained.id, "legacy");
+  assert.equal(retained.github_id, 42);
+  assert.equal("bio" in retained, false);
+  legacy.close();
+  const { request } = await fixture();
+  const publicUser = await request("/users/alice");
+  assert.equal(publicUser.status, 200);
+  assert.equal("bio" in publicUser.body, false);
+  assert.equal("bio" in (await request("/me")).body.user, false);
+  assert.equal(
+    (await request("/me", "PATCH", { bio: "Cannot save" })).status,
+    404,
+  );
 });

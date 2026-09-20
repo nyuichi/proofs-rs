@@ -111,7 +111,7 @@ HonoにはWorkers用の公式導入手順があります。Workersのメモリ�
 | Accept一覧・My accepts | 対象revisionと日時を表示し、過去版であることを明示します。 | accepts検索 |
 | karma | 同一Claim・同一評価者の有効Acceptを全版で重複排除して1点とします。方式は交換可能にします。 | KarmaPolicyモジュール |
 | GitHubログイン・ログアウト | OAuthと失効可能なセッションです。 | auth |
-| プロフィール・自己紹介 | 公開投稿一覧、karma、500 UTF-8 bytes以内のplain textです。 | users |
+| ユーザー活動ページ | GitHubプロフィールへのリンク、公開投稿一覧、karma、登録日を表示します。自己紹介の入力・保存は行いません。メール情報と削除案内は本人専用の設定画面に置きます。 | users |
 | My claims / My comments | 所有者の投稿・削除済みコメントの参照をページングします。 | 所有者検索 |
 | 通知設定 | Reply・自分のClaimへの新規コメントを個別設定します。メンション設定は削除します。 | notification_preferences |
 | 通知先メール | GitHubの確認済みメールを表示します。変更はGitHub側で行い、再ログイン時に同期します。 | email_contacts |
@@ -155,7 +155,7 @@ erDiagram
 
 | テーブル | 主な列 | 必須制約・索引 |
 |---|---|---|
-| users | id PK, github_id UQ, username UQ, bio, role, status, accepted_terms_version, terms_accepted_at, created_at | github_idは変更不可、bioはUTF-8 500bytes以下。認証判定はusernameで行いません。 |
+| users | id PK, github_id UQ, username UQ, role, status, accepted_terms_version, terms_accepted_at, created_at | github_idは変更不可。認証判定はusernameで行いません。 |
 | crates | id PK, registry, name, description, updated_at | UQ(registry,name)。初期対象はcrates.io公開済み版のみです。 |
 | releases | id PK, crate_id FK, version, checksum, yanked, created_at | UQ(crate_id,version)。checksumでcrateの実体を固定します。 |
 | api_items | id PK, release_id FK, canonical_key, display_path, kind, is_unsafe, created_at | UQ(release_id,canonical_key)。canonical_keyは公開パスとAPI種別です。re-exportの別パスは別APIとし、同一実体への集約はしません。signatureとupstream_urlも保持します。 |
@@ -227,7 +227,7 @@ erDiagram
 | idempotency_keys | user_id FK, operation, key, request_hash, resource_id, expires_at。PK(user_id,operation,key)、公開投稿の二重作成を防ぎます。 |
 | audit_events | id PK, actor_id nullable FK, action, target_type, target_id, reason, created_at。運営操作を記録し、通常の公開APIには返しません。 |
 
-OAuthではGitHub IDでupsertし、private repository権限は要求しません。メール取得が必要な最小scopeに限定し、取得後のGitHubアクセストークンは原則保存しません。stateとPKCEを使い、コールバック・セッション固定攻撃を防ぎます。ユーザー名変更で既存ユーザーと紐づけ替えず、公開プロフィールの恒久URLは内部IDを基準にし、表示名slugは互換解決します。[GitHub OAuth](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)
+OAuthではGitHub IDでupsertし、private repository権限は要求しません。メール取得が必要な最小scopeに限定し、取得後のGitHubアクセストークンは原則保存しません。stateとPKCEを使い、コールバック・セッション固定攻撃を防ぎます。ユーザー名変更で既存ユーザーと紐づけ替えず、公開活動ページの恒久URLは内部IDを基準にし、表示名slugは互換解決します。[GitHub OAuth](https://docs.github.com/en/apps/oauth-apps/building-oauth-apps/authorizing-oauth-apps)
 
 session cookieはSecure / HttpOnly / SameSite=Lax、寿命30日の案です。書込リクエストはOriginとCSRF tokenを確認します。ログアウト時にはDBのsessionを失効させます。APIはメール・他人の投票履歴・認証情報を公開レスポンスに含めません。
 
@@ -294,8 +294,8 @@ D1のbatchはトランザクションとして実行されます。SQL内で整�
 | PUT, DELETE /comments/:id/vote | 自分の票を設定・削除します。 |
 | GET /claims/:id/revisions/:n/accepts | 公開Accept一覧です。 |
 | PUT, DELETE /claims/:id/revisions/:n/accept | 自分のAccept設定・撤回です。 |
-| GET /users/:id | 公開プロフィールです。 |
-| GET /me, PATCH /me | 自己情報取得・bio編集です。 |
+| GET /users/:id | 公開活動ページです。 |
+| GET /me | 自己情報取得です。 |
 | GET /me/claims, /me/comments, /me/accepts | 自分の投稿一覧です。 |
 | GET, PATCH /me/notification-preferences | 通知設定です。 |
 | POST /notifications/unsubscribe | 署名tokenで通知区分を解除します。 |
@@ -309,11 +309,11 @@ D1のbatchはトランザクションとして実行されます。SQL内で整�
 
 ## 9. 削除・運営・安全性
 
-- コメント削除は本文を現在DBから消し、URLと返信関係を残します。旧本文はcomment_historyに保持します。公開API・検索・プロフィール・通知には削除前本文や編集履歴を返さず、UIは *deleted comment* を表示します。履歴は権限のある運営操作だけで取得し、取得操作も監査します。コメント操作ごとの同意の版・時刻は記録しません。ユーザー単位の規約同意記録は別に保持します。保存期限は設けず、自動消去しません。明示的な個人情報削除等の対応では、履歴も対象として消去・redactionする経路を別に持ちます。
+- コメント削除は本文を現在DBから消し、URLと返信関係を残します。旧本文はcomment_historyに保持します。公開API・検索・活動ページ・通知には削除前本文や編集履歴を返さず、UIは *deleted comment* を表示します。履歴は権限のある運営操作だけで取得し、取得操作も監査します。コメント操作ごとの同意の版・時刻は記録しません。ユーザー単位の規約同意記録は別に保持します。保存期限は設けず、自動消去しません。明示的な個人情報削除等の対応では、履歴も対象として消去・redactionする経路を別に持ちます。
 - 退会は本人確認後、session/token/email/preferencesを削除、claims/comments/comment_history/auditの本人関連をnull化し、票とAcceptを削除して集計し直し、usersを削除します。本文中の固有名や証拠リンクは別途確認します。削除処理は再開可能な運営ジョブにします。
 - 利用停止は退会とは分け、ログイン・投稿を禁止します。投稿非公開・アカウント停止・例外的本文削除は、サービスの趣旨・議論の秩序・安全性・運営上の必要性等を踏まえて運営が合理的に必要と判断した場合に行えます。スパム・権利侵害に限定せず、数学的正しさを認定する制度にはしません。理由・実施者・日時を監査に記録します。
 - 投稿制限の初期値は1人1日あたりClaim作成・改訂合計20件、コメント100件、初回版取込5版です。取込再試行5回/時は技術上の暫定値です。IP制限も併用し、必要ならTurnstileを追加します。共有IPだけで恒久BANしません。
-- body全体128KB以下、短文1000文字以下、長文10000文字以下を基本に、用途別で上限を設けます。bioは別途500 UTF-8 bytesです。
+- body全体128KB以下、短文1000文字以下、長文10000文字以下を基本に、用途別で上限を設けます。
 - SQLは全てbind、ユーザー文字列はplain textとしてescape、CSPを設定します。証拠URLはHTTP/HTTPSのみ受理します（B8確定）。非公開リンクも機械的には拒否しません。任意URLをサーバーでfetchしません。
 - session・メール・token・投稿本文を通常のリクエストログへ出しません。公開取得と本人用APIでキャッシュを分け、本人用レスポンスはno-storeです。
 - 未公開フォームはDB・localStorageへ保存しません。遷移時の確認と送信失敗時のタブ内保持を実装します。
@@ -435,7 +435,7 @@ Resendの別契約・有料プラン予算は不要です。メール超過料�
 | N3【確定】 | 通知対象 | 新規コメント時のReplyとClaim作者への通知だけです。メンション通知・コメント編集時の通知はありません。 |
 | N4【確定】 | 通知を即時に送るかまとめるか | 数分以内を目標とする非同期送信です。定期digestは初期には作りません。 |
 | N5【確定】 | メールの月次予算・日次上限到達時の動作 | メール込みCloudflare月$10を通知目安とし、料金による停止は手動です。月3,000通超過は従量課金で、自動停止しません。サービス側の日次quotaに達した場合は遅延させます。 |
-| N6【確定】 | GitHub名が変わった場合のプロフィール名と古いリンク | 数値IDは固定、次回ログインで表示名を更新します。恒久リンクは内部IDです。古い名前を永久aliasにするとGitHub名再利用と衝突するため、恒久aliasは持ちません。 |
+| N6【確定】 | GitHub名が変わった場合の表示名と古いリンク | 数値IDは固定、次回ログインで表示名を更新します。恒久リンクは内部IDです。古い名前を永久aliasにするとGitHub名再利用と衝突するため、恒久aliasは持ちません。 |
 | N7【確定】 | 送信の受付成否が不明な場合 | unknownとして自動再送を止め、運営確認へ回します。重複を抑える代わりに通知が欠ける場合がある点も了承済みです。 |
 
 ### L. 規約・退会・運営

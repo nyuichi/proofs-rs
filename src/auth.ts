@@ -234,7 +234,7 @@ export function authRoutes() {
       path: "/",
       maxAge: 30 * 86400,
     });
-    return c.redirect("/#/account" + (!er.ok ? "?email=retry" : ""));
+    return c.redirect(er.ok ? "/#/account" : "/#/settings?email=retry");
   });
   app.post("/logout", async (c) => {
     if (c.get("sessionHash"))

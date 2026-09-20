@@ -91,18 +91,6 @@ api.get("/me", async (c) => {
     terms_required: u.accepted_terms_version !== c.env.TERMS_VERSION,
   });
 });
-api.patch("/me", async (c) => {
-  const u = requireUser(c),
-    b = await jsonBody(c),
-    bio = text(b.bio, "Bio");
-  if (new TextEncoder().encode(bio).length > 500)
-    throw new Fault(400, "bio_too_long");
-  await batch(c.env.DB, [
-    activeGuard(c),
-    stmt(c.env.DB, "UPDATE users SET bio=? WHERE id=?", bio, u.id),
-  ]);
-  return c.json({ ok: true });
-});
 api.post("/me/terms-acceptance", async (c) => {
   const u = requireUser(c),
     b = await jsonBody(c);
@@ -606,7 +594,7 @@ api.on(["PUT", "DELETE"], "/claims/:id/revisions/:n/accept", async (c) => {
 api.get("/users/:id", async (c) => {
   const u = await one(
     c.env.DB,
-    "SELECT id,username,bio,created_at FROM users WHERE id=? OR username=? ORDER BY id=? DESC LIMIT 1",
+    "SELECT id,username,created_at FROM users WHERE id=? OR username=? ORDER BY id=? DESC LIMIT 1",
     c.req.param("id"),
     c.req.param("id"),
     c.req.param("id"),

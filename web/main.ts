@@ -90,7 +90,7 @@ function navigate(path: string) {
 async function refreshMe() {
   me = await request("/me");
   document.querySelector("#account-nav")!.innerHTML = me.user
-    ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">Profile (${me.karma} karma)</a><a href="#/my-claims">My claims</a><a href="#/my-comments">My comments</a><a href="#/my-accepts">My accepts</a><a href="#/settings">Email settings</a><button id="logout">Sign out</button></div></details>`
+    ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">My activity (${me.karma} karma)</a><a href="#/my-claims">My claims</a><a href="#/my-comments">My comments</a><a href="#/my-accepts">My accepts</a><a href="#/settings">Settings</a><button id="logout">Sign out</button></div></details>`
     : '<a href="#/login">Sign in with GitHub</a>';
   document.querySelector("#logout")?.addEventListener("click", async () => {
     try {
@@ -425,21 +425,11 @@ async function termsUpdate() {
     navigate("/account");
   });
 }
-async function profile(id: string, own = false) {
+async function activity(id: string) {
   const u = await request("/users/" + enc(id));
-  id = u.id;
-  root.innerHTML = `<h1>${esc(u.username)}</h1><p>${u.karma} karma · joined ${date(u.created_at)}</p><p class="preserve">${esc(u.bio)}</p>${own ? `<form id="bio"><label>Bio (500 UTF-8 bytes maximum)<textarea name="bio">${esc(u.bio)}</textarea></label><button>Save</button></form><p>Email: ${esc(me.email?.address || "Unavailable")} · <a href="#/settings">Email settings</a></p><p>Your GitHub username and verified primary email are refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}<p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>` : ""}<h2>Claims</h2><div id="claims"></div>`;
-  bind(
-    "#bio",
-    async (e) => {
-      await request("/me", "PATCH", { bio: new FormData(e.target).get("bio") });
-      await refreshMe();
-      await route();
-    },
-    "submit",
-  );
+  root.innerHTML = `<h1>${esc(u.username)}</h1><p><a href="https://github.com/${enc(u.username)}" rel="noopener noreferrer">GitHub profile</a></p><p>${u.karma} karma · joined ${date(u.created_at)}</p><h2>Claims</h2><div id="claims"></div>`;
   await claimsList(
-    "/users/" + enc(id) + "/claims",
+    "/users/" + enc(u.id) + "/claims",
     root.querySelector("#claims")!,
   );
 }
@@ -466,7 +456,7 @@ async function mine(kind: string) {
 async function settings() {
   if (!me.user) return login();
   const p = await request("/me/notification-preferences");
-  root.innerHTML = `<h1>Email notifications</h1><p>Verified primary GitHub email: ${esc(me.email?.address || "Unavailable")}</p>${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<p>Pending or uncertain deliveries: ${me.delayed_notifications || 0}</p><form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form>`;
+  root.innerHTML = `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Verified primary GitHub email: ${esc(me.email?.address || "Unavailable")}</p><p>Your GitHub username and verified primary email are refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}<p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p><h2>Email notifications</h2>${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<p>Pending or uncertain deliveries: ${me.delayed_notifications || 0}</p><form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form>`;
   bind(
     "#prefs",
     async (e) => {
@@ -707,9 +697,9 @@ async function route() {
     else if (p === "publish") await publish();
     else if (p === "login") login();
     else if (p === "terms-update") await termsUpdate();
-    else if (p === "user") await profile(id);
+    else if (p === "user") await activity(id);
     else if (p === "account") {
-      if (me.user) await profile(me.user.id, true);
+      if (me.user) await activity(me.user.id);
       else login();
     } else if (p.startsWith("my-")) await mine(p.slice(3));
     else if (p === "settings") await settings();
