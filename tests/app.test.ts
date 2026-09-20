@@ -530,11 +530,34 @@ test("frontend publish preview, revision links and nested comment deletion", asy
     );
     assert.equal(w.document.querySelector("#bio"), null);
     assert.match(
+      w.document.querySelector("#activity-comments")!.textContent!,
+      /Nested reply/,
+    );
+    assert.match(
+      w.document.querySelector("#activity-comments")!.textContent!,
+      /deleted comment/,
+    );
+    assert.doesNotMatch(
+      w.document.querySelector("#activity-comments")!.textContent!,
+      /Root comment/,
+    );
+    assert.match(
       w.document.querySelector("#account-nav")!.textContent!,
       /My activity/,
     );
     w.location.hash = "/settings?email=retry";
     await until("#prefs");
+    assert.deepEqual(
+      Array.from(
+        w.document.querySelectorAll("#app h2"),
+        (el) => el.textContent,
+      ),
+      ["Account", "Email notifications", "Delete my account"],
+    );
+    assert.doesNotMatch(
+      w.document.querySelector("#app")!.textContent!,
+      /Pending or uncertain deliveries/,
+    );
     assert.match(
       w.document.querySelector("#app")!.textContent!,
       /GitHub email lookup failed/,

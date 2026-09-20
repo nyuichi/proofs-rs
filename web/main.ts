@@ -427,10 +427,14 @@ async function termsUpdate() {
 }
 async function activity(id: string) {
   const u = await request("/users/" + enc(id));
-  root.innerHTML = `<h1>${esc(u.username)}</h1><p><a href="https://github.com/${enc(u.username)}" rel="noopener noreferrer">GitHub profile</a></p><p>${u.karma} karma · joined ${date(u.created_at)}</p><h2>Claims</h2><div id="claims"></div>`;
+  root.innerHTML = `<h1>${esc(u.username)}</h1><p><a href="https://github.com/${enc(u.username)}" rel="noopener noreferrer">GitHub profile</a></p><p>${u.karma} karma · joined ${date(u.created_at)}</p><h2>Claims</h2><div id="claims"></div><h2>Comments</h2><div id="activity-comments"></div>`;
   await claimsList(
     "/users/" + enc(u.id) + "/claims",
     root.querySelector("#claims")!,
+  );
+  await commentsList(
+    "/users/" + enc(u.id) + "/comments",
+    root.querySelector("#activity-comments")!,
   );
 }
 async function mine(kind: string) {
@@ -438,25 +442,26 @@ async function mine(kind: string) {
   root.innerHTML = `<h1>My ${esc(kind)}</h1><div id="items"></div>`;
   const box = root.querySelector<HTMLElement>("#items")!;
   if (kind !== "comments") return claimsList("/me/" + kind, box);
-  async function load(n = 0) {
-    const d = await request("/me/comments?cursor=" + n);
-    box.insertAdjacentHTML(
-      "beforeend",
-      d.items
-        .map(
-          (x: any) =>
-            `<article><p><a href="#/claim/${x.claim_id}?comment=${enc(x.id)}">Claim #${x.claim_id} · v${x.revision_no} · comment #${x.sequence_no}</a></p><p class="preserve">${x.deleted_at ? "<em>deleted comment</em>" : esc(x.body)}</p></article>`,
-        )
-        .join("") || "<p>No comments.</p>",
-    );
-    pager(d, load, box);
-  }
-  await load();
+  await commentsList("/me/comments", box);
+}
+async function commentsList(path: string, box: HTMLElement, cursor = 0) {
+  const d = await request(path + "?cursor=" + enc(String(cursor)));
+  box.insertAdjacentHTML(
+    "beforeend",
+    d.items
+      .map(
+        (x: any) =>
+          `<article><p><a href="#/claim/${x.claim_id}?comment=${enc(x.id)}">Claim #${x.claim_id} · v${x.revision_no} · comment #${x.sequence_no}</a> · ${date(x.created_at)}</p><p class="preserve">${x.deleted_at ? "<em>deleted comment</em>" : esc(x.body)}</p></article>`,
+      )
+      .join("") || "<p>No comments.</p>",
+  );
+  pager(d, (n) => commentsList(path, box, n), box);
 }
 async function settings() {
   if (!me.user) return login();
   const p = await request("/me/notification-preferences");
-  root.innerHTML = `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Verified primary GitHub email: ${esc(me.email?.address || "Unavailable")}</p><p>Your GitHub username and verified primary email are refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}<p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p><h2>Email notifications</h2>${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<p>Pending or uncertain deliveries: ${me.delayed_notifications || 0}</p><form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form>`;
+  root.innerHTML = `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Your GitHub username is refreshed when you sign in again.</p><h2>Email notifications</h2><p>Email: ${esc(me.email?.address || "Unavailable")}</p><p>This is the verified primary GitHub email. Your email is refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form><h2>Delete my account</h2><p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>`;
+
   bind(
     "#prefs",
     async (e) => {
