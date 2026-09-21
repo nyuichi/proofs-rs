@@ -560,3 +560,5 @@ erDiagram
     string token_id FK
   }
 ```
+
+投稿・改訂・プレビューでは `explanation` と `trusted_assumptions` の空文字を許容します。APIでは両キーは必須の文字列で、nullは不可です。各10,000文字上限と前後空白の除去は維持します。

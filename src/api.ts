@@ -259,17 +259,19 @@ async function validate(c: Ctx, b: any) {
     text(b.tool_version_id, "Tool version", 200, true),
   );
   if (!tv) throw new Fault(400, "tool_version_unavailable");
+  for (const field of ["explanation", "trusted_assumptions"]) {
+    if (typeof b[field] !== "string") throw new Fault(400, "invalid_field", field);
+  }
   return {
     api_item_id: a.id,
     property: b.property,
     title: text(b.title, "Title", 1000, true),
     precondition: pre,
-    explanation: text(b.explanation, "Explanation", 10000, true),
+    explanation: text(b.explanation, "Explanation", 10000),
     trusted_assumptions: text(
       b.trusted_assumptions,
       "Trusted assumptions",
       10000,
-      true,
     ),
     tool_version_id: tv.id,
     environment: text(b.environment, "Environment"),

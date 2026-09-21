@@ -5750,12 +5750,12 @@
           "explanation": {
             "type": "string",
             "maxLength": 10000,
-            "minLength": 1
+            "description": "May be an empty string."
           },
           "trusted_assumptions": {
             "type": "string",
             "maxLength": 10000,
-            "minLength": 1
+            "description": "May be an empty string."
           },
           "tool_version_id": {
             "type": "string",
