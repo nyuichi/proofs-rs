@@ -102,3 +102,21 @@ OAuth can remain unconfigured during this preparation phase. All callbacks and
 CSRF checks use the configured APP_ORIGIN. Production tokens/users are separate
 from staging. `scripts/domain-status.mjs` only reads onboarding status and cannot
 change nameservers. The Cloudflare account credentials remain in GitHub Secrets.
+
+## Staging demo fixtures
+
+`Seed staging demo` adds the original Sites-style examples to the existing staging
+D1 database only. It runs when its SQL/runner/workflow changes, or manually on main.
+It is separate from migrations and the Production workflow. The runner verifies
+both the staging health response and the exact database name before writing.
+All statements are INSERT OR IGNORE: repeats do not duplicate fixtures or overwrite
+existing rows. Current fixture set: 6 crates, 13 claims, 15 revisions, 16 comments,
+4 synthetic users, nested/deleted/edited comments, accepts and votes.
+
+Demo usernames use `demo_` and impossible negative GitHub IDs, no login sessions,
+email contacts or notification events. Version suffix `-demo.1` isolates these
+releases from real imports. Evidence URLs use example.com and text marks the data
+as synthetic. Demo API signatures are illustrative and have no doc_snapshots;
+they are for browsing, comments and voting, not publishing new claims or testing
+docs.rs import. Use a real release for publication tests. No proof was run.
+The generator and original sample data are retained in scripts/fixtures.

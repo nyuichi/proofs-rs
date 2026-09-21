@@ -1,0 +1,419 @@
+{
+  "crates": [
+    {
+      "name": "arrayvec",
+      "v": "0.7.6",
+      "desc": "Vector and string types backed by fixed-size arrays.",
+      "category": "Data structures",
+      "apis": [
+        "ArrayVec::push",
+        "ArrayVec::try_push",
+        "ArrayVec::pop",
+        "ArrayVec::get_unchecked",
+        "ArrayString::push_str",
+        "ArrayVec::new"
+      ],
+      "versions": [
+        "0.7.6",
+        "0.7.5"
+      ]
+    },
+    {
+      "name": "smallvec",
+      "v": "1.13.2",
+      "desc": "Small vectors with inline storage.",
+      "category": "Data structures",
+      "apis": [
+        "SmallVec::push",
+        "SmallVec::from_buf",
+        "SmallVec::truncate",
+        "SmallVec::into_vec"
+      ],
+      "versions": [
+        "1.13.2",
+        "1.13.1"
+      ]
+    },
+    {
+      "name": "bytes",
+      "v": "1.9.0",
+      "desc": "Types for working with byte buffers.",
+      "category": "Data structures",
+      "apis": [
+        "Bytes::slice",
+        "Bytes::split_to",
+        "Bytes::copy_from_slice",
+        "BytesMut::advance"
+      ],
+      "versions": [
+        "1.9.0"
+      ]
+    },
+    {
+      "name": "memchr",
+      "v": "2.7.4",
+      "desc": "Fast byte and substring search.",
+      "category": "Text processing",
+      "apis": [
+        "memchr",
+        "memrchr",
+        "memmem::find",
+        "memchr_iter"
+      ],
+      "versions": [
+        "2.7.4"
+      ]
+    },
+    {
+      "name": "slice-demo",
+      "v": "0.1.0",
+      "desc": "Slice operations with explicit contracts.",
+      "category": "Data structures",
+      "apis": [
+        "get",
+        "split_at",
+        "swap",
+        "first"
+      ],
+      "versions": [
+        "0.1.0"
+      ]
+    },
+    {
+      "name": "parser-demo",
+      "v": "0.2.0",
+      "desc": "A parser with explicit input bounds.",
+      "category": "Text processing",
+      "apis": [
+        "parse_u32",
+        "take",
+        "identifier"
+      ],
+      "versions": [
+        "0.2.0"
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "id": 17,
+      "crate": "arrayvec",
+      "api": "ArrayVec::push",
+      "property": "Panic contract",
+      "title": "Pushing into a non-full ArrayVec does not panic",
+      "author": "mira",
+      "method": "Kani · bounded model checking",
+      "scope": "T = u8; CAP = 8; x86_64; default features",
+      "condition": "The vector is valid and len(v) < 8. The new element is a u8.",
+      "formula": "∀ v : ArrayVec<u8, 8>, x : u8. valid(v) ∧ len(v) < 8 ⇒ ¬panics(v.push(x))",
+      "description": "For the stated concrete type and capacity, push does not panic when at least one slot is available.",
+      "comments": [
+        [
+          "nora",
+          "Question",
+          "Does this cover arbitrary capacities, or only CAP = 8? The original title reads as if this applies to all ArrayVec instantiations.",
+          "14 Sep · 10:42"
+        ],
+        [
+          "mira",
+          "Author",
+          "Only CAP = 8 and T = u8 in this harness. I have made the concrete instantiation explicit in revision 2. Generalizing over CAP is still open.",
+          "14 Sep · 12:18",
+          true
+        ],
+        [
+          "emil",
+          "Reproduction",
+          "I reproduced the bounded result using the same assumptions. Could you also include the exact compiler version in the evidence?",
+          "15 Sep · 09:06"
+        ],
+        [
+          "nora",
+          "Question",
+          "The scope is clearer now. One remaining question: can we link the valid(v) predicate to the initialization used in the harness?",
+          "16 Sep · 16:34"
+        ]
+      ],
+      "revision": 2
+    },
+    {
+      "id": 18,
+      "crate": "arrayvec",
+      "api": "ArrayVec::try_push",
+      "property": "Panic contract",
+      "title": "try_push returns an error at capacity",
+      "author": "emil",
+      "method": "Kani · bounded model checking",
+      "scope": "T = u8; CAP = 8; x86_64",
+      "condition": "A valid ArrayVec<u8, 8>; every possible length from 0 through 8.",
+      "formula": "∀ v : ArrayVec<u8, 8>, x : u8. valid(v) ⇒ ¬panics(v.try_push(x))",
+      "description": "The full-capacity case is included. The result may be Err; success is not claimed.",
+      "comments": [
+        [
+          "mira",
+          "Reproduction",
+          "I included the full-capacity case and reproduced the reported result.",
+          "12 Sep · 14:20"
+        ]
+      ],
+      "revision": 1
+    },
+    {
+      "id": 19,
+      "crate": "arrayvec",
+      "api": "ArrayVec::get_unchecked",
+      "property": "No undefined behavior",
+      "title": "Unchecked access within the initialized prefix",
+      "author": "soren",
+      "method": "Miri · example executions",
+      "scope": "T = u8; CAP = 4; four example states",
+      "condition": "i < len(v), valid storage, and no conflicting mutable borrow.",
+      "formula": "valid(v) ∧ i < len(v) ∧ shared_access_valid(v) ⇒ defined(v.get_unchecked(i))",
+      "description": "This is a proposed general statement. The attached example executions do not establish it for all inputs.",
+      "comments": [],
+      "revision": 1
+    },
+    {
+      "id": 23,
+      "crate": "smallvec",
+      "api": "SmallVec::push",
+      "property": "No undefined behavior",
+      "title": "The inline-to-heap transition preserves initialized elements",
+      "author": "nora",
+      "method": "Miri · example executions",
+      "scope": "SmallVec<[u8; 4]>; lengths 0–8",
+      "condition": "Valid initial state; allocator succeeds; no external aliasing.",
+      "formula": "valid(v) ∧ alloc_succeeds ⇒ defined(v.push(x))",
+      "description": "Example runs exercise the spill boundary. This is not a universal proof.",
+      "comments": [
+        [
+          "soren",
+          "Question",
+          "Have you also exercised zero-sized element types? The current evidence only covers u8.",
+          "16 Sep · 11:08"
+        ],
+        [
+          "nora",
+          "Author",
+          "Not yet. The claim is scoped to u8; a separate claim would be needed for other element types.",
+          "16 Sep · 13:22",
+          true
+        ]
+      ],
+      "revision": 1
+    },
+    {
+      "id": 26,
+      "crate": "bytes",
+      "api": "Bytes::slice",
+      "property": "Panic contract",
+      "title": "Slicing with ordered, in-bounds endpoints",
+      "author": "mira",
+      "method": "Kani · bounded model checking",
+      "scope": "Buffers up to 16 bytes; Range<usize>",
+      "condition": "0 ≤ start ≤ end ≤ len(b); a valid Bytes value.",
+      "formula": "∀ b, s, e. valid(b) ∧ len(b) ≤ 16 ∧ 0 ≤ s ≤ e ≤ len(b) ⇒ ¬panics(b.slice(s..e))",
+      "description": "The empty range and the endpoint at len(b) are included.",
+      "comments": [
+        [
+          "emil",
+          "Reproduction",
+          "Reproduced with empty buffers and empty ranges included.",
+          "15 Sep · 08:30"
+        ],
+        [
+          "soren",
+          "Note",
+          "Useful to make Range<usize> explicit: this does not cover every RangeBounds implementation.",
+          "15 Sep · 10:42"
+        ]
+      ],
+      "revision": 2
+    },
+    {
+      "id": 31,
+      "crate": "memchr",
+      "api": "memchr",
+      "property": "Panic contract",
+      "title": "Byte search on bounded slices",
+      "author": "emil",
+      "method": "Kani · bounded model checking",
+      "scope": "Scalar implementation; slices up to 32 bytes",
+      "condition": "Valid byte slice with length ≤ 32; SIMD disabled.",
+      "formula": "∀ needle : u8, h : &[u8]. len(h) ≤ 32 ⇒ ¬panics(memchr(needle, h))",
+      "description": "The scalar implementation is the only implementation in scope.",
+      "comments": [
+        [
+          "nora",
+          "Question",
+          "Please record how the scalar implementation was selected in this run.",
+          "16 Sep · 15:12"
+        ]
+      ],
+      "revision": 1
+    },
+    {
+      "id": 34,
+      "crate": "slice-demo",
+      "api": "get",
+      "property": "Panic contract",
+      "title": "Checked indexing over arbitrary valid slices",
+      "author": "soren",
+      "method": "Lean",
+      "scope": "Abstract valid slices; pure element access",
+      "condition": "A valid slice; i is any usize.",
+      "formula": "∀ s : &[T], i : usize. valid(s) ⇒ ¬panics(get(s, i))",
+      "description": "Out-of-bounds indices return None.",
+      "comments": [
+        [
+          "mira",
+          "Review",
+          "The None branch makes the boundary condition explicit.",
+          "13 Sep · 12:00"
+        ]
+      ],
+      "revision": 1
+    },
+    {
+      "id": 35,
+      "crate": "slice-demo",
+      "api": "split_at",
+      "property": "Panic contract",
+      "title": "Unconditional split_at claim",
+      "author": "mira",
+      "method": "Kani",
+      "scope": "Slice splitting",
+      "condition": "The original claim imposed no restriction on mid.",
+      "formula": "∀ s, mid. valid(s) ⇒ ¬panics(split_at(s, mid))",
+      "description": "Withdrawn after a counterexample. A revised claim needs mid ≤ len(s).",
+      "comments": [
+        [
+          "emil",
+          "Counterexample",
+          "An empty slice with mid = 1 panics. The precondition needs to bound mid by the slice length.",
+          "10 Sep · 11:00"
+        ],
+        [
+          "mira",
+          "Author",
+          "Agreed. I have withdrawn this claim rather than silently changing its statement.",
+          "10 Sep · 12:00",
+          true
+        ]
+      ],
+      "revision": 1
+    },
+    {
+      "id": 41,
+      "crate": "parser-demo",
+      "api": "parse_u32",
+      "property": "Panic contract",
+      "title": "Overflow is returned as a parse error",
+      "author": "nora",
+      "method": "Kani · bounded model checking",
+      "scope": "ASCII inputs of length 0–10",
+      "condition": "Input is ASCII and contains at most ten bytes.",
+      "formula": "ascii(s) ∧ len(s) ≤ 10 ⇒ ¬panics(parse_u32(s))",
+      "description": "Overflow and invalid digits are represented as errors by this API.",
+      "comments": [],
+      "revision": 1
+    },
+    {
+      "id": 101,
+      "crate": "arrayvec",
+      "api": "ArrayVec::push",
+      "property": "Panic contract",
+      "title": "No panic for u16 vectors with capacity 4",
+      "author": "emil",
+      "method": "Kani · bounded model checking",
+      "scope": "T = u16; CAP = 4",
+      "condition": "Valid vector with length less than 4.",
+      "formula": "∀ v : ArrayVec<u16, 4>, x : u16. valid(v) ∧ len(v) < 4 ⇒ ¬panics(v.push(x))",
+      "description": "A separate bounded claim with different element type and capacity.",
+      "comments": [],
+      "revision": 1
+    },
+    {
+      "id": 102,
+      "crate": "arrayvec",
+      "api": "ArrayVec::push",
+      "property": "No undefined behavior",
+      "title": "Initialized writes into spare capacity",
+      "author": "soren",
+      "method": "Miri · example executions",
+      "scope": "u8; CAP = 8; tested lengths 0–7",
+      "condition": "The vector is valid and len(v) < 8. The new element is a u8.",
+      "formula": "valid(v) ∧ len(v) < 8 ⇒ defined(v.push(x))",
+      "description": "A general proposition supported only by sample executions, not a universal proof.",
+      "comments": [],
+      "revision": 1
+    },
+    {
+      "id": 103,
+      "crate": "arrayvec",
+      "api": "ArrayVec::push",
+      "property": "No undefined behavior",
+      "title": "Push preserves the storage invariant for capacity 4",
+      "author": "nora",
+      "method": "Kani · bounded model checking",
+      "scope": "u8; CAP = 4; bounded model",
+      "condition": "Valid vector and len(v) < 4; standard allocator model.",
+      "formula": "valid(v) ∧ len(v) < 4 ⇒ defined(v.push(x)) ∧ valid(v′)",
+      "description": "A separate bounded verification record.",
+      "comments": [],
+      "revision": 1
+    }
+  ],
+  "tools": [
+    {
+      "id": "kani",
+      "name": "Kani",
+      "url": "https://model-checking.github.io/kani/",
+      "description": "A verifier for Rust programs that explores possible executions under the assumptions in a proof harness.",
+      "versions": [
+        "0.68.0",
+        "0.67.0"
+      ]
+    },
+    {
+      "id": "miri",
+      "name": "Miri",
+      "url": "https://github.com/rust-lang/miri",
+      "description": "An interpreter for Rust MIR that detects many kinds of undefined behavior in executed programs.",
+      "versions": [
+        "nightly-2026-09-16",
+        "nightly-2026-09-15"
+      ]
+    },
+    {
+      "id": "verus",
+      "name": "Verus",
+      "url": "https://github.com/verus-lang/verus",
+      "description": "A verification tool for Rust code with specifications and proofs, using automated solvers to check correctness.",
+      "versions": [
+        "0.2026.09.13.671956e",
+        "0.2026.09.06.8dea4a2"
+      ]
+    },
+    {
+      "id": "creusot",
+      "name": "Creusot",
+      "url": "https://github.com/creusot-rs/creusot",
+      "description": "A deductive verifier for Rust programs, using specifications to reason about their behavior.",
+      "versions": [
+        "0.13.0",
+        "0.12.0"
+      ]
+    },
+    {
+      "id": "lean",
+      "name": "Lean",
+      "url": "https://lean-lang.org/",
+      "description": "A programming language and interactive theorem prover for writing machine-checked mathematical proofs.",
+      "versions": [
+        "4.22.0",
+        "4.21.0"
+      ]
+    }
+  ]
+}

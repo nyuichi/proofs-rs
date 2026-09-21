@@ -1,0 +1,30 @@
+name: Seed staging demo
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - fixtures/staging-demo.sql
+      - scripts/seed-staging.mjs
+      - .github/workflows/seed-staging.yml
+permissions:
+  contents: read
+concurrency:
+  group: proofs-rs-staging
+  cancel-in-progress: false
+jobs:
+  seed:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - name: Add demo data only to the existing staging database
+        run: node scripts/seed-staging.mjs
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
