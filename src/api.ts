@@ -154,10 +154,6 @@ api.get("/home", async (c) =>
       publicReport +
         ` WHERE ${activeReport} AND ${reportLatest} ORDER BY p.id DESC LIMIT 12`,
     ),
-    crates: await rows(
-      c.env.DB,
-      `SELECT cr.id,cr.name,cr.description,MAX(p.created_at) updated_at,COUNT(DISTINCT c.id) claim_count FROM crates cr JOIN releases rel ON rel.crate_id=cr.id JOIN reports p ON p.release_id=rel.id JOIN claims c ON c.report_id=p.id JOIN claim_revisions r ON r.claim_id=c.id WHERE ${activeReport} AND ${latest} GROUP BY cr.id ORDER BY updated_at DESC LIMIT 12`,
-    ),
     discussion: await rows(
       c.env.DB,
       `SELECT cm.id,cm.report_id,cm.sequence_no,cm.revision_no,cm.body,cm.created_at,u.username,cm.author_id FROM report_comments cm JOIN reports p ON p.id=cm.report_id LEFT JOIN users u ON u.id=cm.author_id WHERE p.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL ORDER BY cm.created_at DESC,cm.id DESC LIMIT 12`,
@@ -174,16 +170,28 @@ api.get("/reports", async (c) =>
     ),
   ),
 );
-api.get("/crates", async (c) =>
-  c.json(
-    await listing(
-      c,
-      `SELECT cr.*,(SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport} AND ${latest}) claim_count FROM crates cr WHERE cr.name LIKE ? ESCAPE '\\' AND EXISTS(SELECT 1 FROM releases rel JOIN reports p ON p.release_id=rel.id WHERE rel.crate_id=cr.id AND ${activeReport})`,
-      ["%" + (c.req.query("q") || "").replace(/[\\%_]/g, "\\$&") + "%"],
-      [{ sql: "cr.name", key: "name" }],
-    ),
-  ),
-);
+api.get("/crates", async (c) => {
+  const published = `EXISTS(SELECT 1 FROM releases rel JOIN reports p ON p.release_id=rel.id WHERE rel.crate_id=cr.id AND ${activeReport})`;
+  const filter = "cr.name LIKE ? ESCAPE '\\'";
+  const query = "%" + (c.req.query("q") || "").replace(/[\\%_]/g, "\\$&") + "%";
+  const counts = await one(
+    c.env.DB,
+    `SELECT COUNT(*) total_count,COALESCE(SUM(${filter}),0) matching_count FROM crates cr WHERE ${published}`,
+    query,
+  );
+  const data = await listing(
+    c,
+    `SELECT cr.*,
+    (SELECT COUNT(DISTINCT a.display_path) FROM api_items a JOIN releases rel ON rel.id=a.release_id WHERE rel.crate_id=cr.id AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})) api_count,
+    (SELECT COUNT(*) FROM reports p JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport}) report_count,
+    (SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport} AND ${latest}) claim_count,
+    (SELECT MAX(p.updated_at) FROM reports p JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport}) updated_at
+    FROM crates cr WHERE ${filter} AND ${published}`,
+    [query],
+    [{ sql: "cr.name", key: "name" }],
+  );
+  return c.json({ ...data, ...counts });
+});
 api.get("/crates/:name/releases", async (c) => {
   const items = await rows(
     c.env.DB,

@@ -704,7 +704,7 @@
     "/api/v1/home": {
       "get": {
         "operationId": "get_api_v1_home",
-        "summary": "Recent reports, crates and discussion",
+        "summary": "Recent reports and discussion",
         "tags": ["Registry"],
         "description": "",
         "security": [
@@ -726,41 +726,6 @@
                       "type": "array",
                       "items": {
                         "$ref": "#/components/schemas/Report"
-                      }
-                    },
-                    "crates": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "integer",
-                            "minimum": 1
-                          },
-                          "name": {
-                            "type": "string",
-                            "maxLength": 10000
-                          },
-                          "description": {
-                            "type": "string",
-                            "maxLength": 10000
-                          },
-                          "updated_at": {
-                            "type": "string",
-                            "maxLength": 10000
-                          },
-                          "claim_count": {
-                            "type": "integer",
-                            "minimum": 1
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "description",
-                          "updated_at",
-                          "claim_count"
-                        ]
                       }
                     },
                     "discussion": {
@@ -812,7 +777,7 @@
                       }
                     }
                   },
-                  "required": ["reports", "crates", "discussion"]
+                  "required": ["reports", "discussion"]
                 }
               }
             }
@@ -895,33 +860,68 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "type": "object",
-                  "properties": {
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "allOf": [
-                          {
-                            "$ref": "#/components/schemas/crates"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "claim_count": {
-                                "type": "integer"
+                  "allOf": [
+                    {
+                      "type": "object",
+                      "properties": {
+                        "items": {
+                          "type": "array",
+                          "items": {
+                            "allOf": [
+                              {
+                                "$ref": "#/components/schemas/crates"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "api_count": {
+                                    "type": "integer",
+                                    "description": "Distinct API paths across versions with public, nonwithdrawn reports."
+                                  },
+                                  "report_count": {
+                                    "type": "integer"
+                                  },
+                                  "claim_count": {
+                                    "type": "integer"
+                                  },
+                                  "updated_at": {
+                                    "type": "string",
+                                    "maxLength": 10000,
+                                    "format": "date-time"
+                                  }
+                                },
+                                "required": [
+                                  "api_count",
+                                  "report_count",
+                                  "claim_count",
+                                  "updated_at"
+                                ]
                               }
-                            },
-                            "required": ["claim_count"]
+                            ]
                           }
-                        ]
-                      }
+                        },
+                        "next_cursor": {
+                          "type": ["string", "null"],
+                          "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                        }
+                      },
+                      "required": ["items", "next_cursor"]
                     },
-                    "next_cursor": {
-                      "type": ["string", "null"],
-                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                    {
+                      "type": "object",
+                      "properties": {
+                        "total_count": {
+                          "type": "integer",
+                          "description": "Total crates with public, nonwithdrawn reports, independent of query and cursor."
+                        },
+                        "matching_count": {
+                          "type": "integer",
+                          "description": "Total matches for q, independent of cursor."
+                        }
+                      },
+                      "required": ["total_count", "matching_count"]
                     }
-                  },
-                  "required": ["items", "next_cursor"]
+                  ]
                 }
               }
             }

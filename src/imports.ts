@@ -582,6 +582,16 @@ export async function importJob(env: Env, id: string) {
         r2key,
         now(),
       ),
+      ...(typeof meta.version.description === "string"
+        ? [
+            stmt(
+              db,
+              "UPDATE crates SET description=? WHERE id=?",
+              meta.version.description.replace(/\s+/g, " ").trim(),
+              rel.crate_id,
+            ),
+          ]
+        : []),
       stmt(
         db,
         "UPDATE releases SET checksum=?,yanked=? WHERE id=?",

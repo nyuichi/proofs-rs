@@ -113,7 +113,17 @@ report. History references are explicit, never silently rewritten.
 
 ## UI
 
-Home lists recent reports and crate activity. Reports have shared details, claim
+Home shows recent reports on the left and recent discussion on the right below
+the search field. `/home` has no crate-activity field or query. The crate directory
+shows total/matching counts and compact one-line rows: crate name, API count,
+report count, claim count and most recent report publication/revision date.
+API counts deduplicate public API paths across versions with visible, nonwithdrawn
+reports; report/claim counts use those same versions and current revisions.
+Crate descriptions are saved from crates.io version metadata during import, with
+whitespace normalized, and displayed only on the individual crate page.
+GitHub sign-in links go directly to OAuth; the short signup notice sits next to
+the header link. The signed-out Publish page only asks the visitor to sign in.
+All displayed reaction counts are labeled stars. Reports have shared details, claim
 links, independent stars, revision navigation and discussion. Claim pages show
 shared and individual evidence/assumptions and a prominent originating-report
 panel with author karma, report stars and comment count; they have no comment

@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { app } from "../src/worker";
 import { hash, Env } from "../src/core";
-import { extractAPIs } from "../src/imports";
+import { extractAPIs, importJob } from "../src/imports";
 function database() {
   const db = new DatabaseSync(":memory:");
   for (const f of readdirSync(new URL("../migrations/", import.meta.url))
@@ -823,13 +823,14 @@ test("frontend publish preview, revision links and nested comment deletion", asy
     },
   );
   const w = dom.window;
+  let signedInUser = "alice";
   w.fetch = async (path: any, init: any = {}) => {
     const p = String(path).replace("/api/v1", "");
     const result = await request(
       p,
       init.method || "GET",
       init.body ? JSON.parse(init.body) : undefined,
-      "alice",
+      signedInUser,
       init.headers || {},
     );
     return new Response(JSON.stringify(result.body), {
@@ -917,6 +918,14 @@ test("frontend publish preview, revision links and nested comment deletion", asy
     );
     w.location.hash = "/report/1";
     await until("#comment-form");
+    assert.equal(
+      w.document.querySelector('.report-actions a[href*="discussion"]'),
+      null,
+    );
+    assert.doesNotMatch(
+      w.document.querySelector("#app")!.textContent!,
+      /(?:report|claim) stars/,
+    );
     input("body", "Root comment");
     submit("#comment-form");
     await until("[data-reply]");
@@ -1000,6 +1009,55 @@ test("frontend publish preview, revision links and nested comment deletion", asy
       w.document.querySelector("#app")!.textContent!,
       /For account deletion/,
     );
+    w.location.hash = "/";
+    await until(".home-columns");
+    assert.deepEqual(
+      Array.from(
+        w.document.querySelectorAll(".home-columns > section > h2"),
+        (el) => el.textContent,
+      ),
+      ["Recent reports", "Latest discussion"],
+    );
+    assert.doesNotMatch(
+      w.document.querySelector("#app")!.textContent!,
+      /Recently updated crates/,
+    );
+    w.location.hash = "/crates";
+    await until("#crate-rows tr");
+    assert.equal(
+      w.document.querySelector("#crate-count")!.textContent,
+      "1 crate total",
+    );
+    assert.deepEqual(
+      Array.from(
+        w.document.querySelectorAll(".crate-list th"),
+        (el) => el.textContent,
+      ),
+      ["Crate", "APIs", "Reports", "Claims", "Updated"],
+    );
+    assert.equal(
+      w.document.querySelector("#crate-rows tr td:nth-child(2)")!.textContent,
+      "2",
+    );
+    signedInUser = "";
+    await w.eval("refreshMe()");
+    assert.equal(
+      w.document
+        .querySelector("#account-nav .signin > a")!
+        .getAttribute("href"),
+      "/auth/github",
+    );
+    assert.match(
+      w.document.querySelector(".signin-notice")!.textContent!,
+      /By signing up/,
+    );
+    w.location.hash = "/publish";
+    await until('#app a[href="/auth/github"]');
+    assert.equal(
+      w.document.querySelector("#app")!.textContent,
+      "PublishPlease sign in to publish.",
+    );
+    assert.equal(w.document.querySelector('#app a[href="#/terms"]'), null);
   } finally {
     w.close();
   }
@@ -1060,6 +1118,19 @@ test("staging fixture is repeatable and exposes report catalogue without importe
   const home = await request("/home");
   assert.equal(home.status, 200, JSON.stringify(home.body));
   assert.equal(home.body.reports.length, 7);
+  assert.equal("crates" in home.body, false);
+  const allCrates = await request("/crates");
+  assert.equal(allCrates.status, 200, JSON.stringify(allCrates.body));
+  assert.equal(allCrates.body.total_count, 6);
+  assert.equal(allCrates.body.matching_count, 6);
+  const found = await request("/crates?q=array");
+  assert.equal(found.body.total_count, 6);
+  assert.equal(found.body.matching_count, 1);
+  assert.equal(found.body.items[0].api_count, 6);
+  assert.equal(found.body.items[0].report_count, 2);
+  assert.equal(found.body.items[0].claim_count, 7);
+  assert.equal((await request("/crates?q=%25")).body.matching_count, 0);
+
   const list = await request("/crates/arrayvec/0.7.6-demo.1/apis");
   assert.equal(list.status, 200, JSON.stringify(list.body));
   assert.equal(list.body.items.length, 6);
@@ -1071,4 +1142,61 @@ test("staging fixture is repeatable and exposes report catalogue without importe
   const comments = await request("/reports/" + first.id + "/comments");
   assert.equal(comments.status, 200);
   assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);
+});
+
+test("import stores normalized crate description using the existing metadata request", async (t) => {
+  const { db, env } = await fixture();
+  db.exec(
+    "DELETE FROM doc_snapshots; INSERT INTO import_jobs(id,release_id,status,created_at) VALUES('description-import',1,'pending','2026-09-21T00:00:00.000Z')",
+  );
+  const urls: string[] = [];
+  t.mock.method(globalThis, "fetch", async (input: any) => {
+    const url = String(input);
+    urls.push(url);
+    if (url.startsWith("https://crates.io/"))
+      return Response.json({
+        version: {
+          num: "1.0.0",
+          checksum: "checksum",
+          yanked: false,
+          description: "A crate.\n  Short description.",
+        },
+      });
+    if (url.startsWith("https://docs.rs/"))
+      return Response.json({
+        format_version: 61,
+        root: 0,
+        crate_version: "1.0.0",
+        index: {
+          0: { name: "sample", inner: { module: { items: [1] } } },
+          1: {
+            name: "safe",
+            visibility: "public",
+            inner: {
+              function: {
+                header: { is_unsafe: false, abi: "Rust" },
+                generics: { params: [], where_predicates: [] },
+                sig: { inputs: [], output: null },
+              },
+            },
+          },
+        },
+      });
+    throw Error("Unexpected request: " + url);
+  });
+  assert.equal(await importJob(env, "description-import"), true);
+  assert.equal(
+    db
+      .prepare(
+        "SELECT status,error_code FROM import_jobs WHERE id='description-import'",
+      )
+      .get()!.status,
+    "ready",
+  );
+  assert.equal(
+    db.prepare("SELECT description FROM crates WHERE name='sample'").get()!
+      .description,
+    "A crate. Short description.",
+  );
+  assert.equal(urls.length, 2);
 });

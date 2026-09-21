@@ -584,3 +584,26 @@ textarea {
   box-sizing: border-box;
   margin: 10px 0;
 }
+
+/* Compact public navigation and crate catalogue. */
+.signin-notice {
+  max-width: 255px;
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+.crate-list th,
+.crate-list td {
+  white-space: nowrap;
+  padding: 7px 18px 7px 0;
+}
+.crate-list th:last-child,
+.crate-list td:last-child {
+  padding-right: 0;
+}
+.crate-list td:first-child {
+  width: 100%;
+}
+.home-columns > section {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}

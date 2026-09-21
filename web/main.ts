@@ -91,7 +91,7 @@ async function refreshMe() {
   me = await request("/me");
   document.querySelector("#account-nav")!.innerHTML = me.user
     ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">My activity (${me.karma} karma)</a><a href="#/my-reports">My reports</a><a href="#/my-comments">My comments</a><a href="#/my-starred-reports">Starred reports</a><a href="#/my-starred-claims">Starred claims</a><a href="#/settings">Settings</a><button id="logout">Sign out</button></div></details>`
-    : '<a href="#/login">Sign in with GitHub</a>';
+    : '<div class="signin"><a href="/auth/github">Sign in with GitHub</a><p class="signin-notice">By signing up, you agree to the <a href="#/terms">Terms</a> and acknowledge the <a href="#/privacy">Privacy Policy</a>.</p></div>';
   document.querySelector("#logout")?.addEventListener("click", async () => {
     try {
       await request("/auth/logout", "POST", {});
@@ -115,7 +115,7 @@ function needUser() {
   return true;
 }
 function claimItem(c: any) {
-  return `<article class="claim-item"><a href="#/claim/${enc(c.id)}?report_revision=${c.report_revision}">${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""} · ${c.star_count} claim stars</div><p class="meta"><a href="#/report/${c.report_id}">${esc(c.report_title)}</a> · ${c.report_star_count} report stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)} · ${c.author_karma} karma${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
+  return `<article class="claim-item"><a href="#/claim/${enc(c.id)}?report_revision=${c.report_revision}">${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""} · ${c.star_count} stars</div><p class="meta"><a href="#/report/${c.report_id}">${esc(c.report_title)}</a> · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)} · ${c.author_karma} karma${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
 }
 function reportItem(c: any) {
   return `<article class="claim-item"><a href="#/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${esc(c.crate)} ${esc(c.version)} · ${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.star_count} stars · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
@@ -156,7 +156,7 @@ async function claimsList(path: string, container: HTMLElement, cursor = 0) {
 }
 async function home() {
   const d = await request("/home");
-  root.innerHTML = `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p><form id="search" class="searchbar"><input name="q" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form></section><h2>Recent reports</h2>${d.reports.map(reportItem).join("") || "<p>No reports yet.</p>"}<div class="home-columns"><section><h2>Recently updated crates</h2>${d.crates.map((c: any) => `<article class="home-entry"><a href="#/crate/${enc(c.name)}">${esc(c.name)}</a> · ${c.claim_count} claims<p class="meta">${date(c.updated_at)}</p></article>`).join("") || "<p>No published claims yet.</p>"}</section><section><h2>Latest discussion</h2>${d.discussion.map((c: any) => `<article class="home-entry"><a href="#/report/${c.report_id}?comment=${enc(c.id)}">Report #${c.report_id} · comment #${c.sequence_no}</a><p>${esc(c.body.slice(0, 200))}</p><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)}</p></article>`).join("") || "<p>No comments yet.</p>"}</section></div>`;
+  root.innerHTML = `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p><form id="search" class="searchbar"><input name="q" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form></section><div class="home-columns"><section><h2>Recent reports</h2>${d.reports.map(reportItem).join("") || "<p>No reports yet.</p>"}</section><section><h2>Latest discussion</h2>${d.discussion.map((c: any) => `<article class="home-entry"><a href="#/report/${c.report_id}?comment=${enc(c.id)}">Report #${c.report_id} · comment #${c.sequence_no}</a><p>${esc(c.body.slice(0, 200))}</p><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)}</p></article>`).join("") || "<p>No comments yet.</p>"}</section></div>`;
   bind(
     "#search",
     (e) =>
@@ -166,7 +166,7 @@ async function home() {
 }
 async function crates() {
   const q = current().searchParams.get("q") || "";
-  root.innerHTML = `<h1>Crates</h1><form id="search" class="searchbar"><input name="q" aria-label="Crate name" value="${esc(q)}"><button>Search</button></form><div id="results"></div>`;
+  root.innerHTML = `<h1>Crates</h1><form id="search" class="searchbar"><input name="q" aria-label="Crate name" value="${esc(q)}"><button>Search</button></form><p id="crate-count" class="meta"></p><div id="results"><div class="table-wrap"><table class="crate-list"><thead><tr><th>Crate</th><th class="numeric" title="Distinct API paths across versions with public reports">APIs</th><th class="numeric">Reports</th><th class="numeric">Claims</th><th>Updated</th></tr></thead><tbody id="crate-rows"></tbody></table></div></div>`;
   bind(
     "#search",
     (e) =>
@@ -174,18 +174,25 @@ async function crates() {
     "submit",
   );
   const target = root.querySelector<HTMLElement>("#results")!;
-  async function load(n = 0) {
-    const d = await request("/crates?q=" + enc(q) + "&cursor=" + n);
-    target.insertAdjacentHTML(
-      "beforeend",
-      d.items
-        .map(
-          (c: any) =>
-            `<p><a href="#/crate/${enc(c.name)}">${esc(c.name)}</a> · ${c.claim_count} claims</p>`,
-        )
-        .join("") ||
-        (!n ? "<p>No matching crates with published claims.</p>" : ""),
+  async function load(cursor: any = 0) {
+    const d = await request(
+      "/crates?q=" + enc(q) + "&cursor=" + enc(String(cursor)),
     );
+    root.querySelector("#crate-count")!.textContent =
+      (q ? `${d.matching_count} matching · ` : "") +
+      `${d.total_count} ${d.total_count === 1 ? "crate" : "crates"} total`;
+    root
+      .querySelector("#crate-rows")!
+      .insertAdjacentHTML(
+        "beforeend",
+        d.items
+          .map(
+            (c: any) =>
+              `<tr><td><a href="#/crate/${enc(c.name)}">${esc(c.name)}</a></td><td class="numeric">${c.api_count}</td><td class="numeric">${c.report_count}</td><td class="numeric">${c.claim_count}</td><td><time datetime="${esc(c.updated_at)}" title="${date(c.updated_at)}">${esc(c.updated_at?.slice(0, 10) || "—")}</time></td></tr>`,
+          )
+          .join("") ||
+          (!cursor ? '<tr><td colspan="5">No matching crates.</td></tr>' : ""),
+      );
     pager(d, load, target);
   }
   await load();
@@ -255,7 +262,7 @@ function evidence(label: string, value: any) {
 function starButton(kind: string, c: any) {
   return me.user
     ? `<button class="star" data-star="${kind}" data-id="${esc(c.id)}" data-on="${!!c.my_star}" aria-pressed="${!!c.my_star}">${c.my_star ? "★ Starred" : "☆ Star"} · ${c.star_count}</button>`
-    : `<a href="#/login">☆ ${c.star_count} ${kind} stars</a>`;
+    : `<a href="/auth/github">☆ ${c.star_count} stars</a>`;
 }
 function bindStars() {
   bind("[data-star]", async (e) => {
@@ -281,7 +288,7 @@ async function claimPage(id: string) {
   const c = await request(
     "/claims/" + enc(id) + (n ? "?report_revision=" + enc(n) : ""),
   );
-  root.innerHTML = `<aside class="report-context"><p>Part of report #${c.report_id} · revision ${c.report_revision}</p><h2><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)}</a></h2><p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.report_star_count} report stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments · Discuss this report →</a></p></aside>${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c)}${starButton("claim", c)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
+  root.innerHTML = `<aside class="report-context"><p>Part of report #${c.report_id} · revision ${c.report_revision}</p><h2><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)}</a></h2><p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments · Discuss this report →</a></p></aside>${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c)}${starButton("claim", c)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
   bindStars();
 }
 let commentReply: any = null;
@@ -302,7 +309,7 @@ async function reportPage(id: number) {
     cursor = page.next_cursor;
   } while (cursor);
   commentReply = null;
-  root.innerHTML = `<p><a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.crate)} ${esc(c.version)}</a> / Report #${id}</p>${reportContent(c)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${starButton("report", c)} <a href="#/report/${id}?discussion=1">${base.comment_count} comments</a>${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <a href="#/publish?update=${id}">Publish new revision</a> · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map((x: any) => claimItem(x) + starButton("claim", x)).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="#/login">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `<p><a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.crate)} ${esc(c.version)}</a> / Report #${id}</p>${reportContent(c)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${starButton("report", c)}${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <a href="#/publish?update=${id}">Publish new revision</a> · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map((x: any) => claimItem(x) + starButton("claim", x)).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
   bindStars();
   bind("#withdraw", async () => {
     if (
@@ -450,7 +457,7 @@ function renderComment(cm: any, container: HTMLElement, claimID: number) {
   return children;
 }
 function login() {
-  root.innerHTML = `<h1>Sign in</h1><p>Use your GitHub account to sign in or create an account.</p><p>By signing up, you agree to the <a href="#/terms">Terms</a> and acknowledge the <a href="#/privacy">Privacy Policy</a>.</p>${config.oauth_configured ? '<a href="/auth/github">Continue with GitHub</a>' : "<p>GitHub sign-in is currently unavailable.</p>"}`;
+  root.innerHTML = `<h1>Sign in</h1>${config.oauth_configured ? '<p><a href="/auth/github">Sign in with GitHub</a></p>' : "<p>GitHub sign-in is currently unavailable.</p>"}`;
 }
 async function termsUpdate(returnTo = "/account") {
   if (!me.user) return login();
@@ -606,6 +613,11 @@ async function toolsPage(id?: string) {
   root.innerHTML = `<h1>Verification tools</h1>${d.items.map((t: any) => `<article><h2><a href="#/tool/${enc(t.id)}">${esc(t.name)}</a></h2><p>${esc(t.description)}</p></article>`).join("") || "<p>No tools have been registered yet.</p>"}<p><a href="https://github.com/nyuichi/proofs-rs/issues/new">Request a tool or version</a></p>`;
 }
 async function publish() {
+  if (!me?.user) {
+    root.innerHTML =
+      '<h1>Publish</h1><p>Please <a href="/auth/github">sign in</a> to publish.</p>';
+    return;
+  }
   if (!needUser()) return;
   const p = current().searchParams,
     update = Number(p.get("update") || 0);
