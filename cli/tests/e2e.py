@@ -1,0 +1,221 @@
+"""Exercise the real binary against local Git + an in-memory proofs.rs API."""
+import copy
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import threading
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+binary = str(Path(sys.argv[1]).resolve())
+reports = {}
+history = {}
+keys = {}
+next_claim = 0
+polls = 0
+lose_reply = False
+race = False
+
+
+def normalize(body):
+    result = copy.deepcopy(body)
+    for field in ['title', 'explanation', 'trusted_assumptions', 'environment', 'evidence_url', 'limitations']:
+        result.setdefault(field, '')
+    for claim in result['claims']:
+        claim.setdefault('id', None)
+        for field in ['title', 'explanation', 'trusted_assumptions', 'limitations', 'evidence_url']:
+            claim.setdefault(field, '')
+        if not claim['title']:
+            claim['title'] = f"{claim['property']} for {claim['api_item_id']}"
+    return result
+
+
+class Handler(BaseHTTPRequestHandler):
+    def log_message(self, *_):
+        pass
+
+    def reply(self, status, data):
+        self.send_response(status)
+        self.send_header('Content-Type', 'application/json')
+        self.end_headers()
+        self.wfile.write(json.dumps(data).encode())
+
+    def do_GET(self):
+        assert self.headers.get('Authorization') == 'Bearer fixture-token'
+        if self.path == '/api/v1/me':
+            return self.reply(200, {'user': {'id': 'author'}})
+        if self.path == '/api/v1/tools':
+            return self.reply(200, {'items': [{'id': 'kani', 'name': 'Kani', 'active': 1}], 'versions': [{'id': 'kani-version', 'tool_id': 'kani', 'version': '0.66.0', 'selectable': 1}]})
+        if self.path.startswith('/api/v1/resolve-api?'):
+            from urllib.parse import parse_qs, urlparse
+            path = parse_qs(urlparse(self.path).query)['path'][0]
+            if path not in ['f', 'g']:
+                return self.reply(404, {'error': 'api_not_found'})
+            return self.reply(200, {'id': 'api-' + path})
+        if self.path.startswith('/api/v1/reports/'):
+            parts = self.path.split('/')
+            report_id = int(parts[4])
+            result = history[(report_id, int(parts[6]))] if len(parts) > 5 else reports[report_id]
+            return self.reply(200, result)
+        raise AssertionError(self.path)
+
+    def do_POST(self):
+        global next_claim, polls, lose_reply, race
+        body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        if self.path == '/auth/device/code':
+            assert body == {'client_id': 'proofs-cli', 'scope': 'publish'}
+            return self.reply(200, {'device_code': 'fixture-device', 'user_code': 'ABCD-EFGH', 'verification_uri': origin + '/#/device', 'expires_in': 60, 'interval': 1})
+        if self.path == '/auth/device/token':
+            polls += 1
+            assert body['device_code'] == 'fixture-device'
+            if polls == 1:
+                return self.reply(400, {'error': 'authorization_pending'})
+            return self.reply(200, {'access_token': 'fixture-token', 'expires_in': 3600})
+        assert self.headers.get('Authorization') == 'Bearer fixture-token'
+        if self.path == '/api/v1/tokens/revoke':
+            return self.reply(200, {'ok': True})
+        if self.path == '/api/v1/publish/prepare':
+            return self.reply(200, {'status': 'ready'})
+        if self.path == '/api/v1/reports/validate':
+            assert body['title']
+            assert 1 <= len(body['claims']) <= 100
+            if race:
+                race = False
+                web_edit()
+            return self.reply(200, normalize(body))
+        key = self.headers['Idempotency-Key']
+        if key in keys:
+            assert keys[key][0] == body, 'idempotency key reused with changed payload'
+            return self.reply(201, keys[key][1])
+        if self.path == '/api/v1/reports':
+            report_id, revision = len(reports) + 1, 1
+        else:
+            report_id = int(self.path.split('/')[4])
+            if body['expected_revision'] != reports[report_id]['revision_no']:
+                return self.reply(409, {'error': 'conflict'})
+            revision = body['expected_revision'] + 1
+        result = normalize(body)
+        for claim in result['claims']:
+            if not claim['id']:
+                next_claim += 1
+                claim['id'] = f'claim-{next_claim}'
+        result.update(id=report_id, revision_no=revision, author_id='author', withdrawn_at=None)
+        reports[report_id] = result
+        history[report_id, revision] = copy.deepcopy(result)
+        response = {'id': report_id, 'revision_no': revision}
+        keys[key] = (body, response)
+        if lose_reply:
+            lose_reply = False
+            return self.reply(500, {'error': 'simulated_lost_reply_after_commit'})
+        self.reply(201, response)
+
+
+def web_edit():
+    report = reports[1]
+    report['title'] = 'Web title'
+    report['claims'][0]['title'] = 'Preserve my claim title'
+    report['revision_no'] += 1
+    history[1, report['revision_no']] = copy.deepcopy(report)
+
+
+with tempfile.TemporaryDirectory() as tmp:
+    root = Path(tmp)
+    work = root / 'work'
+    work.mkdir()
+    real_git = shutil.which('git')
+
+    def git(*args):
+        return subprocess.run([real_git, *args], cwd=work, check=True, capture_output=True, text=True).stdout.strip()
+
+    git('init', '-q')
+    git('config', 'user.name', 'Test')
+    git('config', 'user.email', 'test@example.test')
+    git('init', '--bare', '-q', str(root / 'remote.git'))
+    git('remote', 'add', 'origin', str(root / 'remote.git'))
+    (work / 'src').mkdir()
+    (work / 'Cargo.toml').write_text('[package]\nname="fixture"\nversion="1.0.0"\nedition="2021"\n')
+    # Preserve Cargo metadata's lock file behavior without making it an unrelated dirty file.
+    (work / '.gitignore').write_text('/target/\n/Cargo.lock\n')
+    source = '#[cfg_attr(kani, kani::requires(x > 0))]\npub fn f(x:u8) {}\n#[cfg(kani)]\n#[kani::proof_for_contract(f)]\nfn check_f() {}\n'
+    extra = 'pub fn g() {}\n#[cfg(kani)]\n#[kani::proof_for_contract(g)]\nfn check_g() {}\n'
+    (work / 'src/lib.rs').write_text(source)
+    wrapper = root / 'bin'
+    wrapper.mkdir()
+    script = wrapper / 'git'
+    # Only fake GitHub's advertised URL. Fetch/ancestry checks use the real local remote.
+    script.write_text('#!/bin/sh\nif [ "$1" = remote ] && [ "$2" = get-url ]; then\n echo https://github.com/fixture/source\nelse\n exec "$TEST_REAL_GIT" "$@"\nfi\n')
+    script.chmod(0o755)
+    env = dict(os.environ, PATH=str(wrapper) + os.pathsep + os.environ['PATH'], TEST_REAL_GIT=real_git, PROOFS_CONFIG_DIR=str(root / 'credentials'))
+    server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
+    origin = f'http://127.0.0.1:{server.server_port}'
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+
+    def cli(*args, ok=True):
+        output = subprocess.run([binary, 'proofs', '--server', origin, *args], cwd=work, env=env, input='', capture_output=True, text=True, timeout=30)
+        assert (output.returncode == 0) == ok, (args, output.stdout, output.stderr)
+        return output.stdout + output.stderr
+
+    def commit_push():
+        git('add', 'src/lib.rs', 'Cargo.toml', '.gitignore')
+        git('commit', '-qm', 'fixture change')
+        git('push', '-q', 'origin', 'HEAD:refs/heads/main')
+
+    try:
+        cli('init', '--title', 'My report', '--tool-version', '0.66.0')
+        cli('login', '--no-browser')
+        git('add', 'src/lib.rs', 'Cargo.toml', '.gitignore')
+        git('commit', '-qm', 'fixture')
+        assert 'not reachable' in cli('publish', ok=False)
+        git('push', '-q', 'origin', 'HEAD:refs/heads/main')
+        cli('publish', '--dry-run')
+        assert not reports
+        cli('publish')
+        assert len(reports[1]['claims']) == 2
+        original_ids = [c['id'] for c in reports[1]['claims']]
+        assert all(c['precondition'] == '(x > 0)' for c in reports[1]['claims'])
+        assert all('/blob/' in c['evidence_url'] and '#L3-L5' in c['evidence_url'] for c in reports[1]['claims'])
+        assert 'No changes' in cli('publish')
+        assert reports[1]['revision_no'] == 1
+        web_edit()
+        assert 'conflict' in cli('publish', ok=False)
+        cli('publish', '--force')
+        assert [c['id'] for c in reports[1]['claims']] == original_ids
+        assert reports[1]['claims'][0]['title'] == 'Preserve my claim title'
+        (work / 'src/lib.rs').write_text(source + extra)
+        assert 'Commit changes' in cli('publish', ok=False)
+        commit_push()
+        cli('publish')
+        added_ids = [c['id'] for c in reports[1]['claims'][2:]]
+        assert len(reports[1]['claims']) == 4
+        (work / 'src/lib.rs').write_text(source)
+        commit_push()
+        assert 'Deletion requires confirmation' in cli('publish', ok=False)
+        cli('publish', '--yes')
+        assert len(reports[1]['claims']) == 2
+        (work / 'src/lib.rs').write_text(source + extra)
+        commit_push()
+        cli('publish')
+        assert [c['id'] for c in reports[1]['claims'][2:]] == added_ids
+        (work / 'proofs.toml').write_text((work / 'proofs.toml').read_text().replace('My report', 'Changed report'))
+        race = True
+        assert '409' in cli('publish', ok=False)
+        # Definite conflict cleared its pending journal; a fresh forced publish works.
+        cli('publish', '--force')
+        (work / 'proofs.toml').write_text((work / 'proofs.toml').read_text().replace('Changed report', 'Retry report'))
+        lose_reply = True
+        assert '--resume' in cli('publish', ok=False)
+        revision = reports[1]['revision_no']
+        assert 'interrupted publication' in cli('publish', ok=False)
+        cli('publish', '--resume')
+        assert reports[1]['revision_no'] == revision
+        assert 'No changes' in cli('publish')
+        cli('logout')
+        assert 'Not logged in' in cli('publish', ok=False)
+        print('End-to-end: login, discovery, Git, dry-run, create, no-op, conflict, force, removal, restore, retry, logout passed')
+    finally:
+        server.shutdown()
+        thread.join()
