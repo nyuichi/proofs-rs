@@ -285,9 +285,35 @@ function evidence(label: string, value: any) {
     : "";
 }
 function starButton(kind: string, c: any) {
-  return me.user
-    ? `<button class="star" data-star="${kind}" data-id="${esc(c.id)}" data-on="${!!c.my_star}" aria-pressed="${!!c.my_star}">${c.my_star ? "★ Starred" : "☆ Star"} · ${c.star_count}</button>`
-    : `<a href="/auth/github">☆ ${c.star_count} stars</a>`;
+  return `<div class="star-controls">${
+    me?.user
+      ? `<button class="star" data-star="${kind}" data-id="${esc(c.id)}" data-on="${!!c.my_star}" aria-pressed="${!!c.my_star}">${c.my_star ? "★ Starred" : "☆ Star"}</button>`
+      : `<a href="/auth/github">☆ Star</a>`
+  } <a href="#/${kind}/${enc(c.id)}/stars">${c.star_count} stars</a></div>`;
+}
+function titleWithStars(kind: string, c: any) {
+  return `<div class="title-row"><h1>${esc(c.title)}</h1>${starButton(kind, c)}</div>`;
+}
+async function starsPage(kind: string, id: string) {
+  const item = await request(`/${kind}s/${enc(id)}`);
+  root.innerHTML = `<p><a href="#/${kind}/${enc(id)}">${esc(item.title)}</a></p><h1>Stars</h1><div id="stargazers">${loading}</div>`;
+  const container = root.querySelector<HTMLElement>("#stargazers")!;
+  async function load(cursor: any = 0) {
+    const data = await request(
+      `/${kind}s/${enc(id)}/stars?cursor=${enc(cursor)}`,
+    );
+    container.querySelector("[data-loading]")?.remove();
+    container.insertAdjacentHTML(
+      "beforeend",
+      data.items.length
+        ? `<ul>${data.items.map((u: any) => `<li>${user(u.id, u.username)}</li>`).join("")}</ul>`
+        : cursor === 0
+          ? "<p>No stars yet.</p>"
+          : "",
+    );
+    pager(data, load, container);
+  }
+  await load();
 }
 function bindStars() {
   bind("[data-star]", async (e) => {
@@ -302,18 +328,18 @@ function bindStars() {
     await route();
   });
 }
-function reportContent(c: any) {
-  return `<h1>${esc(c.title)}</h1><p>${esc(c.crate)} ${esc(c.version)} · ${esc(c.tool)} ${esc(c.tool_version)}</p><dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
+function reportContent(c: any, stars = false) {
+  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p>${esc(c.crate)} ${esc(c.version)} · ${esc(c.tool)} ${esc(c.tool_version)}</p><dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
 }
-function claimContent(c: any) {
-  return `<h1>${esc(c.title)}</h1><p><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Tool", `${c.tool} ${c.tool_version}`)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
+function claimContent(c: any, stars = false) {
+  return `${stars ? titleWithStars("claim", c) : `<h1>${esc(c.title)}</h1>`}<p><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Tool", `${c.tool} ${c.tool_version}`)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
 }
 async function claimPage(id: string) {
   const n = current().searchParams.get("report_revision");
   const c = await request(
     "/claims/" + enc(id) + (n ? "?report_revision=" + enc(n) : ""),
   );
-  root.innerHTML = `<aside class="report-context"><p>Part of report #${c.report_id} · revision ${c.report_revision}</p><h2><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)}</a></h2><p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments · Discuss this report →</a></p></aside>${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c)}${starButton("claim", c)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
+  root.innerHTML = `<aside class="report-context"><p>Part of report #${c.report_id} · revision ${c.report_revision}</p><h2><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)}</a></h2><p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments · Discuss this report →</a></p></aside>${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c, true)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
   bindStars();
 }
 let commentReply: any = null;
@@ -334,7 +360,7 @@ async function reportPage(id: number) {
     cursor = page.next_cursor;
   } while (cursor);
   commentReply = null;
-  root.innerHTML = `<p class="breadcrumbs"><a href="#/crates">crates</a> / <a href="#/crate/${enc(c.crate)}">${esc(c.crate)}</a> / <a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.version)}</a> / Report #${id}</p>${reportContent(c)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${starButton("report", c)}${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <a href="#/publish?update=${id}">Publish new revision</a> · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `<p class="breadcrumbs"><a href="#/crates">crates</a> / <a href="#/crate/${enc(c.crate)}">${esc(c.crate)}</a> / <a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.version)}</a> / Report #${id}</p>${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <a href="#/publish?update=${id}">Publish new revision</a> · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
   bindStars();
   bind("#withdraw", async () => {
     if (
@@ -853,30 +879,9 @@ async function unsubscribe() {
   });
 }
 function pageShell(page: string | undefined, id: string | undefined) {
-  const title =
-    page === "crate"
-      ? id || "Crate"
-      : page === "report"
-        ? `Report #${id || ""}`
-        : page === "tool"
-          ? id || "Tool"
-          : (
-              {
-                api: "API",
-                claim: "Claim",
-                settings: "Settings",
-                publish: "Publish a report",
-                account: "My activity",
-                user: "Profile",
-                device: "Authorize proofs CLI",
-                login: "Sign in",
-                "terms-update": "Updated terms",
-              } as Record<string, string>
-            )[page || ""] ||
-            (page?.startsWith("my-")
-              ? "My " + page.slice(3).replaceAll("-", " ")
-              : "Loading");
-  root.innerHTML = `<h1>${esc(title)}</h1>${loading}`;
+  // Only show headings known to remain after loading. All other titles depend on data or auth.
+  root.innerHTML =
+    page === "crate" && id ? `<h1>${esc(id)}</h1>${loading}` : loading;
 }
 let startupError: unknown = null;
 const startupReady = Promise.allSettled([
@@ -919,7 +924,10 @@ async function route() {
         "unsubscribe",
       ].includes(p) ||
       p in legal;
-    if (!publicPage) {
+    if (
+      !publicPage &&
+      !(["report", "claim"].includes(p) && parts[2] === "stars")
+    ) {
       await startupReady;
       if (generation !== routeID) throw new NavigationChanged();
       if (startupError)
@@ -958,6 +966,8 @@ async function route() {
       );
       navigate("/api/" + a.id);
     } else if (p === "api") await apiPage(id);
+    else if ((p === "report" || p === "claim") && parts[2] === "stars")
+      await starsPage(p, id);
     else if (p === "claim") await claimPage(id);
     else if (p === "report") await reportPage(Number(id));
     else if (p === "reports") {

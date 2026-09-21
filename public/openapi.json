@@ -2404,6 +2404,118 @@
         }
       }
     },
+    "/api/v1/reports/{id}/stars": {
+      "get": {
+        "operationId": "get_api_v1_reports_id_stars",
+        "summary": "List people who starred this report",
+        "tags": ["Reports"],
+        "description": "Public. Newest stars first, ordered by user ID for ties. Uses the same visibility rules as the target, including withdrawn reports and removed claims.",
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000,
+              "description": "Opaque next_cursor from the preceding response. Page size is 30."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "maxLength": 10000
+                          },
+                          "username": {
+                            "type": "string",
+                            "maxLength": 10000
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "maxLength": 10000,
+                            "format": "date-time"
+                          }
+                        },
+                        "required": ["id", "username", "created_at"]
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"],
+                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                    }
+                  },
+                  "required": ["items", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
     "/api/v1/reports/{id}/star": {
       "put": {
         "operationId": "put_api_v1_reports_id_star",
@@ -2611,6 +2723,118 @@
                             "required": ["starred_at"]
                           }
                         ]
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"],
+                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                    }
+                  },
+                  "required": ["items", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/v1/claims/{id}/stars": {
+      "get": {
+        "operationId": "get_api_v1_claims_id_stars",
+        "summary": "List people who starred this claim",
+        "tags": ["Claims"],
+        "description": "Public. Newest stars first, ordered by user ID for ties. Uses the same visibility rules as the target, including withdrawn reports and removed claims.",
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000,
+              "description": "Opaque next_cursor from the preceding response. Page size is 30."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "maxLength": 10000
+                          },
+                          "username": {
+                            "type": "string",
+                            "maxLength": 10000
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "maxLength": 10000,
+                            "format": "date-time"
+                          }
+                        },
+                        "required": ["id", "username", "created_at"]
                       }
                     },
                     "next_cursor": {

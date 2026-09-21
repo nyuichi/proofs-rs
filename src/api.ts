@@ -593,6 +593,28 @@ api.put("/reports/:id/withdrawal", async (c) => {
   return c.json({ ok: true });
 });
 for (const kind of ["report", "claim"] as const) {
+  api.get(`/${kind}s/:id/stars`, async (c) => {
+    const item =
+      kind === "report"
+        ? await visible(c.env.DB, positive(c.req.param("id")))
+        : await one(
+            c.env.DB,
+            "SELECT c.* FROM claims c JOIN reports p ON p.id=c.report_id WHERE c.id=? AND p.visibility='public'",
+            c.req.param("id"),
+          );
+    if (!item) throw new Fault(404, kind + "_not_found");
+    return c.json(
+      await listing(
+        c,
+        `SELECT u.id,u.username,s.created_at FROM ${kind}_stars s JOIN users u ON u.id=s.user_id WHERE s.${kind}_id=?`,
+        [item.id],
+        [
+          { sql: "s.created_at", key: "created_at", desc: true },
+          { sql: "u.id", key: "id" },
+        ],
+      ),
+    );
+  });
   api.on(["PUT", "DELETE"], `/${kind}s/:id/star`, async (c) => {
     const u = requireUser(c);
     const item =
@@ -850,6 +872,28 @@ for (const prefix of ["/users/:id", "/me"]) {
   );
 }
 for (const kind of ["report", "claim"] as const) {
+  api.get(`/${kind}s/:id/stars`, async (c) => {
+    const item =
+      kind === "report"
+        ? await visible(c.env.DB, positive(c.req.param("id")))
+        : await one(
+            c.env.DB,
+            "SELECT c.* FROM claims c JOIN reports p ON p.id=c.report_id WHERE c.id=? AND p.visibility='public'",
+            c.req.param("id"),
+          );
+    if (!item) throw new Fault(404, kind + "_not_found");
+    return c.json(
+      await listing(
+        c,
+        `SELECT u.id,u.username,s.created_at FROM ${kind}_stars s JOIN users u ON u.id=s.user_id WHERE s.${kind}_id=?`,
+        [item.id],
+        [
+          { sql: "s.created_at", key: "created_at", desc: true },
+          { sql: "u.id", key: "id" },
+        ],
+      ),
+    );
+  });
   api.get("/me/starred-" + kind + "s", async (c) =>
     c.json(
       await listing(

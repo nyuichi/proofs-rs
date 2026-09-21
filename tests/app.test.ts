@@ -912,6 +912,7 @@ test("frontend publish preview, revision links and nested comment deletion", asy
     w.location.hash = claimLink;
     await until(".report-context");
     assert.equal(w.document.querySelector("#comment-form"), null);
+    assert.ok(w.document.querySelector('.title-row [data-star="claim"]'));
     assert.match(
       w.document.querySelector("#app")!.textContent!,
       /No undefined behavior for sample::safe/,
@@ -931,6 +932,14 @@ test("frontend publish preview, revision links and nested comment deletion", asy
       w.document.querySelector(".breadcrumbs")!.textContent,
       "crates / sample / 1.0.0 / Report #1",
     );
+    assert.ok(w.document.querySelector('.title-row [data-star="report"]'));
+    (
+      w.document.querySelector('.star-controls a[href$="/stars"]') as any
+    ).click();
+    await until("#stargazers");
+    assert.equal(w.document.querySelector("h1")!.textContent, "Stars");
+    w.location.hash = "/report/1";
+    await until("#comment-form");
     input("body", "Root comment");
     submit("#comment-form");
     await until("[data-reply]");
@@ -1326,7 +1335,73 @@ test("static page content renders before requests, remains usable, and survives 
     });
     await tick();
     assert.equal(d.querySelector("h1")!.textContent, "About proofs.rs");
+    for (const path of [
+      "/report/8",
+      "/claim/example",
+      "/tool/kani",
+      "/user/alice",
+      "/api/safe",
+    ]) {
+      w.location.hash = path;
+      await tick();
+      assert.equal(d.querySelector("#app h1"), null, path);
+      assert.ok(d.querySelector("[data-loading]"), path);
+    }
   } finally {
     w.close();
   }
+});
+
+test("public stargazers paginate without duplicates and respect target visibility", async () => {
+  const { request, db } = await fixture();
+  const id = (await request("/reports", "POST", reportInput)).body.id;
+  const claim = (await request(`/reports/${id}`)).body.claims[0].id;
+  for (let n = 0; n < 35; n++) {
+    const uid = `star-user-${String(n).padStart(2, "0")}`;
+    db.prepare(
+      "INSERT INTO users(id,github_id,username,created_at,accepted_terms_version,terms_accepted_at) VALUES(?,?,?,?,'test','2026-01-01')",
+    ).run(uid, 100 + n, uid, "2026-01-01");
+    db.prepare("INSERT INTO report_stars VALUES(?,?,?)").run(
+      id,
+      uid,
+      "2026-01-01",
+    );
+    db.prepare("INSERT INTO claim_stars VALUES(?,?,?)").run(
+      claim,
+      uid,
+      "2026-01-01",
+    );
+  }
+  for (const path of [`/reports/${id}/stars`, `/claims/${claim}/stars`]) {
+    const first = await request(path, "GET", undefined, "");
+    assert.equal(first.status, 200);
+    assert.equal(first.body.items.length, 30);
+    assert.deepEqual(Object.keys(first.body.items[0]).sort(), [
+      "created_at",
+      "id",
+      "username",
+    ]);
+    const second = await request(
+      path + "?cursor=" + encodeURIComponent(first.body.next_cursor),
+      "GET",
+      undefined,
+      "",
+    );
+    assert.equal(second.body.items.length, 5);
+    assert.equal(second.body.next_cursor, null);
+    assert.equal(
+      new Set([...first.body.items, ...second.body.items].map((x: any) => x.id))
+        .size,
+      35,
+    );
+  }
+  db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(id);
+  assert.equal(
+    (await request(`/reports/${id}/stars`, "GET", undefined, "")).status,
+    404,
+  );
+  assert.equal(
+    (await request(`/claims/${claim}/stars`, "GET", undefined, "")).status,
+    404,
+  );
 });

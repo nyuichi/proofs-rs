@@ -18,8 +18,11 @@ to permanent identities and survive revisions. Self-stars are allowed but exclud
 from karma. The initial karma policy counts non-self stars on public, nonwithdrawn
 reports. Claim stars and comment votes do not affect karma. The policy in
 `src/core.ts` provides both profile computation and SQL projections, so list/detail
-scores cannot silently use a different algorithm. Individual starred lists are
-private; aggregate counts are public.
+scores cannot silently use a different algorithm. Account-level consolidated starred lists are private. Counts and per-target stargazer
+lists are public, with profile links and 30-item keyset pagination. Detail-page star
+controls appear to the right of the title; the count opens the stargazer list.
+Loading shells only show headings that remain after loading; data-dependent or
+auth-dependent titles use an explicit loading message instead.
 
 ## Relationships
 
@@ -97,6 +100,7 @@ excluded from the public contract.
 | Per-API discovery | GET `/apis/:id/claims` |
 | Permanent claim | GET `/claims/:id`, optional `report_revision` |
 | Independent stars | PUT/DELETE `/reports/:id/star`, `/claims/:id/star` |
+| Stargazers | GET `/reports/:id/stars`, `/claims/:id/stars` |
 | Starred lists | GET `/me/starred-reports`, `/me/starred-claims` |
 | Report discussion | GET/POST `/reports/:id/comments` |
 | Comment operations | GET/PATCH/DELETE `/comments/:id`, PUT/DELETE `/comments/:id/vote` |
@@ -142,7 +146,7 @@ account link, code and Authorize button.
 Public page rendering does not wait for `/config` or `/me`: these bootstrap
 requests run in parallel with public data loading. Home/search and Tools headings
 and fixed links render before list responses; legal pages render without an API
-request. Account-dependent pages display a heading/loading state while waiting
+request. Account-dependent pages display an explicit loading message while waiting
 for authentication. A route generation guard discards stale responses, while
 global account/config requests survive navigation. Errors preserve static page
 content and search controls rather than replacing them with a blank page.

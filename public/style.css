@@ -607,3 +607,21 @@ textarea {
   min-width: 0;
   overflow-wrap: anywhere;
 }
+
+.title-row {
+  display: flex;
+  align-items: baseline;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+.title-row h1 {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.star-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  white-space: nowrap;
+}
