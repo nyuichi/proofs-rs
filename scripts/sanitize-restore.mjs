@@ -21,17 +21,22 @@ try {
       ).run(e.user_id);
       db.prepare("DELETE FROM users WHERE id=?").run(e.user_id);
     } else if (e.action === "redact_comment") {
-      db.prepare("UPDATE comment_history SET body=NULL WHERE comment_id=?").run(
+      db.prepare(
+        "UPDATE report_comment_history SET body=NULL WHERE comment_id=?",
+      ).run(e.target);
+      db.prepare(
+        "UPDATE report_comments SET body=NULL,deleted_at=COALESCE(deleted_at,?) WHERE id=?",
+      ).run(e.created_at, e.target);
+      db.prepare("DELETE FROM report_comment_votes WHERE comment_id=?").run(
         e.target,
       );
-      db.prepare(
-        "UPDATE comments SET body=NULL,deleted_at=COALESCE(deleted_at,?) WHERE id=?",
-      ).run(e.created_at, e.target);
-      db.prepare("DELETE FROM comment_votes WHERE comment_id=?").run(e.target);
     } else if (e.action === "redact_revision") {
       db.exec("INSERT OR IGNORE INTO maintenance VALUES(1)");
       db.prepare(
-        "UPDATE claim_revisions SET title='[Redacted]',precondition='',explanation='[Redacted]',trusted_assumptions='',environment='',evidence_url='https://example.invalid/redacted',limitations='' WHERE claim_id=? AND revision_no=?",
+        "UPDATE report_revisions SET title='[Redacted]',explanation='[Redacted]',trusted_assumptions='',environment='',evidence_url='https://example.invalid/redacted',limitations='' WHERE report_id=? AND revision_no=?",
+      ).run(e.target, e.revision_no);
+      db.prepare(
+        "UPDATE claim_revisions SET title='[Redacted]',precondition='',explanation='[Redacted]',trusted_assumptions='',evidence_url='',limitations='' WHERE report_id=? AND report_revision=?",
       ).run(e.target, e.revision_no);
       db.exec("DELETE FROM maintenance");
     } else throw Error("Unknown erasure marker");

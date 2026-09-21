@@ -48,6 +48,7 @@
       fields(s) +
       `<details><summary>JSON schema</summary><pre>${esc(JSON.stringify(s, null, 2))}</pre></details>`;
     const groups = [
+      "Reports",
       "Claims",
       "Comments",
       "Imports",

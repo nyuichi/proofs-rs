@@ -47,19 +47,19 @@ app.use("*", async (c, next) => {
     const readable =
       c.req.method === "GET" &&
       (path === "/api/v1/me" ||
-        path === "/api/v1/me/claims" ||
-        /^\/api\/v1\/(crates|apis|claims|tools|resolve-api|imports|health|config|terms)(\/|$)/.test(
+        path === "/api/v1/me/reports" ||
+        /^\/api\/v1\/(crates|apis|claims|reports|tools|resolve-api|imports|health|config|terms)(\/|$)/.test(
           path,
         ));
     const writable =
       c.req.method === "POST" &&
       ([
         "/api/v1/publish/prepare",
-        "/api/v1/claims",
-        "/api/v1/claims/validate",
+        "/api/v1/reports",
+        "/api/v1/reports/validate",
         "/api/v1/tokens/revoke",
       ].includes(path) ||
-        /^\/api\/v1\/claims\/[^/]+\/revisions$/.test(path));
+        /^\/api\/v1\/reports\/[^/]+\/revisions$/.test(path));
     if (!readable && !writable) throw new Fault(403, "insufficient_scope");
   }
   if (write && !publicDevicePaths.has(path)) {

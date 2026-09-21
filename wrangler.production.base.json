@@ -2,7 +2,7 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "proofs-rs",
   "main": "src/worker.ts",
-  "compatibility_date": "2026-09-20",
+  "compatibility_date": "2026-09-21",
   "compatibility_flags": [
     "nodejs_compat"
   ],
@@ -19,13 +19,13 @@
     "EMAIL_FROM": "",
     "EMAIL_ALLOWLIST": "",
     "ADMIN_GITHUB_IDS": "540144",
-    "TERMS_VERSION": "2026-09-20",
+    "TERMS_VERSION": "2026-09-21",
     "EMAIL_DISABLED": "true"
   },
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "proofs-rs-production-v1",
+      "database_name": "proofs-rs-production-reports-v1",
       "database_id": "00000000-0000-0000-0000-000000000001",
       "migrations_dir": "migrations"
     }
@@ -33,22 +33,22 @@
   "r2_buckets": [
     {
       "binding": "ARCHIVE",
-      "bucket_name": "proofs-rs-production-v1"
+      "bucket_name": "proofs-rs-production-reports-v1"
     }
   ],
   "queues": {
     "producers": [
       {
         "binding": "JOBS",
-        "queue": "proofs-rs-production-jobs"
+        "queue": "proofs-rs-production-reports-jobs"
       }
     ],
     "consumers": [
       {
-        "queue": "proofs-rs-production-jobs",
+        "queue": "proofs-rs-production-reports-jobs",
         "max_batch_size": 5,
         "max_retries": 3,
-        "dead_letter_queue": "proofs-rs-production-dead"
+        "dead_letter_queue": "proofs-rs-production-reports-dead"
       }
     ]
   },

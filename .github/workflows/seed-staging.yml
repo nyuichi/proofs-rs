@@ -1,12 +1,6 @@
 name: Seed staging demo
 on:
   workflow_dispatch:
-  push:
-    branches: [main]
-    paths:
-      - fixtures/staging-demo.sql
-      - scripts/seed-staging.mjs
-      - .github/workflows/seed-staging.yml
 permissions:
   contents: read
 concurrency:

@@ -33,7 +33,7 @@ admin.get("/comments/:id/history", async (c) => {
     "INSERT INTO audit_events VALUES(?,?,?,?,?,?)",
     uid(),
     requireUser(c).id,
-    "read_comment_history",
+    "read_report_comment_history",
     c.req.param("id"),
     "Administrative review",
     now(),
@@ -41,7 +41,7 @@ admin.get("/comments/:id/history", async (c) => {
   return c.json({
     items: await rows(
       c.env.DB,
-      "SELECT * FROM comment_history WHERE comment_id=? ORDER BY history_no",
+      "SELECT * FROM report_comment_history WHERE comment_id=? ORDER BY history_no",
       c.req.param("id"),
     ),
   });
@@ -73,11 +73,11 @@ admin.post("/action", async (c) => {
       ),
     ];
   switch (b.action) {
-    case "claim_visibility":
+    case "report_visibility":
       if (!["public", "hidden"].includes(b.value))
         throw new Fault(400, "invalid_visibility");
       ss.push(
-        stmt(db, "UPDATE claims SET visibility=? WHERE id=?", b.value, target),
+        stmt(db, "UPDATE reports SET visibility=? WHERE id=?", b.value, target),
       );
       break;
     case "comment_visibility":
@@ -86,7 +86,7 @@ admin.post("/action", async (c) => {
       ss.push(
         stmt(
           db,
-          "UPDATE comments SET visibility=? WHERE id=?",
+          "UPDATE report_comments SET visibility=? WHERE id=?",
           b.value,
           target,
         ),
@@ -132,16 +132,16 @@ admin.post("/action", async (c) => {
       ss.push(
         stmt(
           db,
-          "UPDATE comment_history SET body=NULL WHERE comment_id=?",
+          "UPDATE report_comment_history SET body=NULL WHERE comment_id=?",
           target,
         ),
         stmt(
           db,
-          "UPDATE comments SET body=NULL,deleted_at=COALESCE(deleted_at,?),edit_version=edit_version+1 WHERE id=?",
+          "UPDATE report_comments SET body=NULL,deleted_at=COALESCE(deleted_at,?),edit_version=edit_version+1 WHERE id=?",
           now(),
           target,
         ),
-        stmt(db, "DELETE FROM comment_votes WHERE comment_id=?", target),
+        stmt(db, "DELETE FROM report_comment_votes WHERE comment_id=?", target),
       );
       break;
     case "redact_revision":
@@ -160,7 +160,13 @@ admin.post("/action", async (c) => {
         stmt(db, "INSERT INTO maintenance VALUES(1)"),
         stmt(
           db,
-          "UPDATE claim_revisions SET title='[Redacted]',precondition='',explanation='[Redacted]',trusted_assumptions='',environment='',evidence_url='https://example.invalid/redacted',limitations='' WHERE claim_id=? AND revision_no=?",
+          "UPDATE report_revisions SET title='[Redacted]',explanation='[Redacted]',trusted_assumptions='',environment='',evidence_url='https://example.invalid/redacted',limitations='' WHERE report_id=? AND revision_no=?",
+          target,
+          Number(b.revision_no),
+        ),
+        stmt(
+          db,
+          "UPDATE claim_revisions SET title='[Redacted]',precondition='',explanation='[Redacted]',trusted_assumptions='',evidence_url='',limitations='' WHERE report_id=? AND report_revision=?",
           target,
           Number(b.revision_no),
         ),

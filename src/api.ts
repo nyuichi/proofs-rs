@@ -21,6 +21,8 @@ import {
   paged,
   idempotent,
   publicClaim,
+  publicReport,
+  reportLatest,
   latest,
   karmaPolicy,
   hash,
@@ -29,10 +31,10 @@ import {
 } from "./core";
 const api = new Hono<App>();
 const visible = (db: D1Database, id: number) =>
-  one(db, "SELECT * FROM claims WHERE id=? AND visibility=?", id, "public");
-async function claim(c: Ctx) {
+  one(db, "SELECT * FROM reports WHERE id=? AND visibility=?", id, "public");
+async function report(c: Ctx) {
   const q = await visible(c.env.DB, positive(c.req.param("id")));
-  if (!q) throw new Fault(404, "claim_not_found");
+  if (!q) throw new Fault(404, "report_not_found");
   return q;
 }
 const activeGuard = (c: Ctx) =>
@@ -63,7 +65,8 @@ api.get("/terms/current", (c) =>
   c.json({
     version: c.env.TERMS_VERSION,
     url: "/#/terms",
-    summary: "Terms for the proofs.rs verification-claim registry.",
+    summary:
+      "Report publication, permanent claim links, independent stars and report discussions.",
     requires_agreement:
       !!c.get("user") &&
       c.get("user")!.accepted_terms_version !== c.env.TERMS_VERSION,
@@ -109,7 +112,7 @@ api.get("/me/notification-preferences", async (c) =>
   c.json(
     await one(
       c.env.DB,
-      "SELECT replies,claim_comments FROM notification_preferences WHERE user_id=?",
+      "SELECT replies,report_comments FROM notification_preferences WHERE user_id=?",
       requireUser(c).id,
     ),
   ),
@@ -117,13 +120,13 @@ api.get("/me/notification-preferences", async (c) =>
 api.patch("/me/notification-preferences", async (c) => {
   const u = requireUser(c),
     b = await jsonBody(c);
-  if (typeof b.replies !== "boolean" || typeof b.claim_comments !== "boolean")
+  if (typeof b.replies !== "boolean" || typeof b.report_comments !== "boolean")
     throw new Fault(400, "invalid_preferences");
   await stmt(
     c.env.DB,
-    "UPDATE notification_preferences SET replies=?,claim_comments=? WHERE user_id=?",
+    "UPDATE notification_preferences SET replies=?,report_comments=? WHERE user_id=?",
     +b.replies,
-    +b.claim_comments,
+    +b.report_comments,
     u.id,
   ).run();
   return c.json({ ok: true });
@@ -138,65 +141,86 @@ api.post("/notifications/unsubscribe", async (c) => {
     throw new Fault(403, "invalid_token");
   await stmt(
     c.env.DB,
-    "UPDATE notification_preferences SET replies=0,claim_comments=0 WHERE user_id=?",
+    "UPDATE notification_preferences SET replies=0,report_comments=0 WHERE user_id=?",
     b.user,
   ).run();
   return c.json({ ok: true });
 });
-api.get("/home", async (c) => {
-  const db = c.env.DB;
-  const crates = await rows(
-    db,
-    `SELECT cr.id,cr.name,cr.description,MAX(c.updated_at) updated_at,COUNT(c.id) claim_count FROM crates cr JOIN releases rel ON rel.crate_id=cr.id JOIN api_items a ON a.release_id=rel.id JOIN claims c ON c.api_item_id=a.id WHERE c.visibility='public' GROUP BY cr.id ORDER BY updated_at DESC LIMIT 12`,
-  );
-  const discussion = await rows(
-    db,
-    `SELECT cm.id,cm.claim_id,cm.sequence_no,cm.revision_no,cm.body,cm.created_at,u.username,cm.author_id FROM comments cm JOIN claims c ON c.id=cm.claim_id LEFT JOIN users u ON u.id=cm.author_id WHERE c.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL ORDER BY cm.created_at DESC,cm.id DESC LIMIT 12`,
-  );
-  return c.json({ crates, discussion });
-});
+const activeReport = "p.visibility='public' AND p.withdrawn_at IS NULL";
+api.get("/home", async (c) =>
+  c.json({
+    reports: await rows(
+      c.env.DB,
+      publicReport +
+        ` WHERE ${activeReport} AND ${reportLatest} ORDER BY p.id DESC LIMIT 12`,
+    ),
+    crates: await rows(
+      c.env.DB,
+      `SELECT cr.id,cr.name,cr.description,MAX(p.created_at) updated_at,COUNT(DISTINCT c.id) claim_count FROM crates cr JOIN releases rel ON rel.crate_id=cr.id JOIN reports p ON p.release_id=rel.id JOIN claims c ON c.report_id=p.id JOIN claim_revisions r ON r.claim_id=c.id WHERE ${activeReport} AND ${latest} GROUP BY cr.id ORDER BY updated_at DESC LIMIT 12`,
+    ),
+    discussion: await rows(
+      c.env.DB,
+      `SELECT cm.id,cm.report_id,cm.sequence_no,cm.revision_no,cm.body,cm.created_at,u.username,cm.author_id FROM report_comments cm JOIN reports p ON p.id=cm.report_id LEFT JOIN users u ON u.id=cm.author_id WHERE p.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL ORDER BY cm.created_at DESC,cm.id DESC LIMIT 12`,
+    ),
+  }),
+);
+api.get("/reports", async (c) =>
+  c.json(
+    await listing(
+      c,
+      publicReport + ` WHERE ${activeReport} AND ${reportLatest}`,
+      [],
+      [{ sql: "p.id", key: "id", desc: true }],
+    ),
+  ),
+);
 api.get("/crates", async (c) =>
   c.json(
     await listing(
       c,
-      `SELECT cr.*,(SELECT COUNT(*) FROM claims c JOIN api_items a ON c.api_item_id=a.id JOIN releases r ON a.release_id=r.id WHERE r.crate_id=cr.id AND c.visibility='public') claim_count FROM crates cr WHERE name LIKE ? ESCAPE '\\' AND EXISTS(SELECT 1 FROM releases r JOIN api_items a ON a.release_id=r.id JOIN claims c ON c.api_item_id=a.id WHERE r.crate_id=cr.id AND c.visibility='public')`,
+      `SELECT cr.*,(SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport} AND ${latest}) claim_count FROM crates cr WHERE cr.name LIKE ? ESCAPE '\\' AND EXISTS(SELECT 1 FROM releases rel JOIN reports p ON p.release_id=rel.id WHERE rel.crate_id=cr.id AND ${activeReport})`,
       ["%" + (c.req.query("q") || "").replace(/[\\%_]/g, "\\$&") + "%"],
       [{ sql: "cr.name", key: "name" }],
     ),
   ),
 );
 api.get("/crates/:name/releases", async (c) => {
-  const releases = await rows(
+  const items = await rows(
     c.env.DB,
-    `SELECT r.* FROM releases r JOIN crates cr ON cr.id=r.crate_id WHERE cr.name=? AND EXISTS(SELECT 1 FROM api_items a JOIN claims c ON c.api_item_id=a.id WHERE a.release_id=r.id AND c.visibility='public')`,
+    `SELECT rel.* FROM releases rel JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})`,
     c.req.param("name"),
   );
-  releases.sort((a, b) => semver.rcompare(a.version, b.version));
+  items.sort((a, b) => semver.rcompare(a.version, b.version));
   return c.json({
-    items: releases,
+    items,
     default_version:
-      releases.find((x) => !semver.prerelease(x.version))?.version ||
-      releases[0]?.version,
+      items.find((x) => !semver.prerelease(x.version))?.version ||
+      items[0]?.version,
   });
 });
-api.get("/crates/:name/:version/apis", async (c) =>
-  c.json(
+api.get("/crates/:name/:version/apis", async (c) => {
+  const count = (property: string) =>
+    `(SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id WHERE c.api_item_id=a.id AND c.property='${property}' AND ${activeReport} AND ${latest})`;
+  return c.json(
     await listing(
       c,
-      `SELECT a.*,(SELECT COUNT(*) FROM claims c WHERE c.api_item_id=a.id AND c.property='no_ub' AND c.visibility='public') no_ub_count,(SELECT COUNT(*) FROM claims c WHERE c.api_item_id=a.id AND c.property='panic_contract' AND c.visibility='public') panic_count FROM api_items a JOIN releases r ON r.id=a.release_id JOIN crates cr ON cr.id=r.crate_id JOIN doc_snapshots ds ON ds.release_id=r.id WHERE cr.name=? AND r.version=? AND a.display_path LIKE ?`,
+      `SELECT a.*,${count("no_ub")} no_ub_count,${count("panic_contract")} panic_count FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND rel.version=? AND a.display_path LIKE ?`,
       [
         c.req.param("name"),
         c.req.param("version"),
         "%" + (c.req.query("q") || "") + "%",
       ],
-      [{ sql: "a.display_path", key: "display_path" }],
+      [
+        { sql: "a.display_path", key: "display_path" },
+        { sql: "a.id", key: "id" },
+      ],
     ),
-  ),
-);
+  );
+});
 api.get("/apis/:id", async (c) => {
   const item = await one(
     c.env.DB,
-    `SELECT a.*,cr.name crate,r.version,r.yanked,ds.target,ds.features_json,ds.rustdoc_format FROM api_items a JOIN releases r ON a.release_id=r.id JOIN crates cr ON cr.id=r.crate_id JOIN doc_snapshots ds ON ds.release_id=r.id WHERE a.id=?`,
+    `SELECT a.*,cr.name crate,rel.version,rel.yanked,ds.target,ds.features_json,ds.rustdoc_format FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN doc_snapshots ds ON ds.release_id=rel.id WHERE a.id=?`,
     c.req.param("id"),
   );
   if (!item) throw new Fault(404, "api_not_found");
@@ -206,124 +230,290 @@ api.get("/apis/:id/claims", async (c) =>
   c.json(
     await listing(
       c,
-      publicClaim +
-        ` WHERE c.api_item_id=? AND c.visibility='public' AND ${latest}`,
+      publicClaim + ` WHERE c.api_item_id=? AND ${activeReport} AND ${latest}`,
       [c.req.param("id")],
-      [{ sql: "c.id", key: "id", desc: true }],
+      [
+        { sql: "c.created_at", key: "created_at", desc: true },
+        { sql: "c.id", key: "id", desc: true },
+      ],
     ),
   ),
 );
+api.get("/reports/:id/revisions", async (c) => {
+  const p = await report(c);
+  return c.json(
+    await listing(
+      c,
+      "SELECT revision_no,created_at FROM report_revisions WHERE report_id=?",
+      [p.id],
+      [{ sql: "revision_no", key: "revision_no", desc: true }],
+    ),
+  );
+});
+async function reportDetail(c: Ctx, revision?: number) {
+  const p = await report(c);
+  const r = await one(
+    c.env.DB,
+    publicReport +
+      ` WHERE p.id=? AND ${revision ? "rr.revision_no=?" : reportLatest}`,
+    p.id,
+    ...(revision ? [revision] : []),
+  );
+  if (!r) throw new Fault(404, "revision_not_found");
+  const claims = await rows(
+    c.env.DB,
+    publicClaim + " WHERE p.id=? AND r.report_revision=? ORDER BY r.position",
+    p.id,
+    r.revision_no,
+  );
+  const myStars = await rows(
+    c.env.DB,
+    "SELECT s.claim_id FROM claim_stars s JOIN claims c ON c.id=s.claim_id WHERE s.user_id=? AND c.report_id=?",
+    c.get("user")?.id || "",
+    p.id,
+  );
+  const mine = new Set(myStars.map((x) => x.claim_id));
+  return c.json({
+    ...r,
+    my_star: !!(await one(
+      c.env.DB,
+      "SELECT 1 FROM report_stars WHERE report_id=? AND user_id=?",
+      p.id,
+      c.get("user")?.id || "",
+    )),
+    claims: claims.map((x) => ({ ...x, my_star: mine.has(x.id) })),
+  });
+}
+api.get("/reports/:id", (c) => reportDetail(c));
+api.get("/reports/:id/revisions/:n", (c) =>
+  reportDetail(c, positive(c.req.param("n"))),
+);
 api.get("/claims/:id", async (c) => {
-  await claim(c);
-  const q = await one(
+  const n = c.req.query("report_revision");
+  const item = await one(
     c.env.DB,
-    publicClaim + ` WHERE c.id=? AND ${latest}`,
-    positive(c.req.param("id")),
+    publicClaim +
+      ` WHERE c.id=? AND p.visibility='public' AND r.report_revision=${n ? "?" : "(SELECT MAX(v.report_revision) FROM claim_revisions v WHERE v.claim_id=c.id)"}`,
+    c.req.param("id"),
+    ...(n ? [positive(n)] : []),
   );
-  const versions = await rows(
-    c.env.DB,
-    "SELECT revision_no,created_at FROM claim_revisions WHERE claim_id=? ORDER BY revision_no DESC",
-    q.id,
-  );
-  return c.json({ ...q, versions });
+  if (!item) throw new Fault(404, "claim_not_found");
+  return c.json({
+    ...item,
+    my_star: !!(await one(
+      c.env.DB,
+      "SELECT 1 FROM claim_stars WHERE claim_id=? AND user_id=?",
+      item.id,
+      c.get("user")?.id || "",
+    )),
+  });
 });
-api.get("/claims/:id/revisions/:n", async (c) => {
-  await claim(c);
-  const q = await one(
+const optionalURL = (v: any) => (text(v, "Evidence URL", 1000) ? url(v) : "");
+async function validate(c: Ctx, b: any, existing?: any) {
+  const rel = await one(
     c.env.DB,
-    publicClaim + " WHERE c.id=? AND r.revision_no=?",
-    positive(c.req.param("id")),
-    positive(c.req.param("n")),
+    "SELECT rel.*,cr.name crate FROM releases rel JOIN crates cr ON cr.id=rel.crate_id JOIN doc_snapshots ds ON ds.release_id=rel.id WHERE cr.name=? AND rel.version=?",
+    text(b.crate, "Crate", 100, true),
+    text(b.version, "Version", 100, true),
   );
-  if (!q) throw new Fault(404, "revision_not_found");
-  return c.json(q);
-});
-async function validate(c: Ctx, b: any) {
-  const a = await one(
-    c.env.DB,
-    "SELECT a.* FROM api_items a JOIN doc_snapshots ds ON ds.release_id=a.release_id WHERE a.id=?",
-    text(b.api_item_id, "API", 200, true),
-  );
-  if (!a) throw new Fault(400, "api_not_imported");
-  if (!["no_ub", "panic_contract"].includes(b.property))
-    throw new Fault(400, "invalid_property");
-  const pre = text(
-    b.precondition,
-    "Preconditions",
-    10000,
-    b.property === "panic_contract" || !!a.is_unsafe,
-  );
+  if (!rel) throw new Fault(400, "release_not_imported");
+  if (existing && existing.release_id !== rel.id)
+    throw new Fault(400, "immutable_release");
   const tv = await one(
     c.env.DB,
-    "SELECT tv.id FROM tool_versions tv JOIN tools t ON t.id=tv.tool_id WHERE tv.id=? AND tv.selectable=1 AND t.active=1",
+    "SELECT tv.*,t.name FROM tool_versions tv JOIN tools t ON t.id=tv.tool_id WHERE tv.id=? AND tv.selectable=1 AND t.active=1",
     text(b.tool_version_id, "Tool version", 200, true),
   );
   if (!tv) throw new Fault(400, "tool_version_unavailable");
-  for (const field of ["explanation", "trusted_assumptions"]) {
-    if (typeof b[field] !== "string") throw new Fault(400, "invalid_field", field);
-  }
-  return {
-    api_item_id: a.id,
-    property: b.property,
-    title: text(b.title, "Title", 1000, true),
-    precondition: pre,
-    explanation: text(b.explanation, "Explanation", 10000),
-    trusted_assumptions: text(
-      b.trusted_assumptions,
-      "Trusted assumptions",
-      10000,
-    ),
-    tool_version_id: tv.id,
+  if (!Array.isArray(b.claims) || b.claims.length < 1 || b.claims.length > 100)
+    throw new Fault(
+      400,
+      "invalid_claims",
+      "A report must contain 1–100 claims.",
+    );
+  const v: any = {
+    release_id: rel.id,
+    crate: rel.crate,
+    version: rel.version,
+    title: text(b.title, "Report title", 1000, true),
+    explanation: text(b.explanation, "Explanation"),
+    trusted_assumptions: text(b.trusted_assumptions, "Trusted assumptions"),
     environment: text(b.environment, "Environment"),
-    evidence_url: url(b.evidence_url),
+    evidence_url: optionalURL(b.evidence_url),
     limitations: text(b.limitations, "Limitations"),
+    tool_version_id: tv.id,
+    tool: tv.name,
+    tool_version: tv.version,
+    claims: [],
   };
+  const ids = new Set();
+  for (let i = 0; i < b.claims.length; i++) {
+    try {
+      const x = b.claims[i];
+      if (!x || typeof x !== "object" || Array.isArray(x))
+        throw new Fault(400, "invalid_claim");
+      const a = await one(
+        c.env.DB,
+        "SELECT * FROM api_items WHERE id=? AND release_id=?",
+        text(x.api_item_id, "API", 200, true),
+        rel.id,
+      );
+      if (!a) throw new Fault(400, "api_not_in_release");
+      if (!["no_ub", "panic_contract"].includes(x.property))
+        throw new Fault(400, "invalid_property");
+      const id = x.id === undefined ? null : text(x.id, "Claim ID", 100, true);
+      if (id) {
+        if (ids.has(id)) throw new Fault(400, "duplicate_claim_id");
+        ids.add(id);
+        const old =
+          existing &&
+          (await one(
+            c.env.DB,
+            "SELECT * FROM claims WHERE id=? AND report_id=?",
+            id,
+            existing.id,
+          ));
+        if (!old) throw new Fault(400, "invalid_claim_id");
+        if (old.api_item_id !== a.id || old.property !== x.property)
+          throw new Fault(400, "immutable_claim_target");
+      }
+      const title =
+        text(x.title, "Claim title", 1000) ||
+        `${x.property === "no_ub" ? "No undefined behavior" : "Panic contract"} for ${a.display_path} (with ${tv.name} ${tv.version})`;
+      const evidence_url = optionalURL(x.evidence_url);
+      if (!evidence_url && !v.evidence_url)
+        throw new Fault(400, "evidence_required");
+      v.claims.push({
+        id,
+        api_item_id: a.id,
+        property: x.property,
+        title,
+        precondition: text(
+          x.precondition,
+          "Preconditions",
+          10000,
+          x.property === "panic_contract" || !!a.is_unsafe,
+        ),
+        explanation: text(x.explanation, "Explanation"),
+        trusted_assumptions: text(x.trusted_assumptions, "Trusted assumptions"),
+        evidence_url,
+        limitations: text(x.limitations, "Limitations"),
+        display_path: a.display_path,
+        is_unsafe: a.is_unsafe,
+        signature: a.signature,
+      });
+    } catch (e) {
+      if (e instanceof Fault)
+        throw new Fault(e.status, e.code, `Claim ${i + 1}: ${e.message}`);
+      throw e;
+    }
+  }
+  const previous = existing
+    ? await rows(
+        c.env.DB,
+        `SELECT c.id FROM claims c JOIN claim_revisions r ON r.claim_id=c.id WHERE c.report_id=? AND r.report_revision=(SELECT MAX(revision_no) FROM report_revisions WHERE report_id=?)`,
+        existing.id,
+        existing.id,
+      )
+    : [];
+  v.changes = {
+    added: v.claims.filter((x: any) => !x.id).length,
+    retained: v.claims.filter((x: any) => !!x.id).map((x: any) => x.id),
+    removed: previous.filter((x) => !ids.has(x.id)).map((x) => x.id),
+  };
+  return v;
 }
-const revisionValues = (v: any) => [
-  v.title,
-  v.precondition,
-  v.explanation,
-  v.trusted_assumptions,
-  v.tool_version_id,
-  v.environment,
-  v.evidence_url,
-  v.limitations,
-  now(),
-];
-api.post("/claims/validate", async (c) => {
-  requireUser(c);
-  return c.json(await validate(c, await jsonBody(c)));
+function revisionStatements(
+  c: Ctx,
+  v: any,
+  reportID: number | string,
+  n: number,
+  byKey = false,
+) {
+  const db = c.env.DB;
+  const select = byKey ? "(SELECT id FROM reports WHERE create_key=?)" : "?";
+  const ss = [
+    stmt(
+      db,
+      `INSERT INTO report_revisions VALUES(${select},?,?,?,?,?,?,?,?,?)`,
+      reportID,
+      n,
+      v.title,
+      v.explanation,
+      v.trusted_assumptions,
+      v.tool_version_id,
+      v.environment,
+      v.evidence_url,
+      v.limitations,
+      now(),
+    ),
+  ];
+  v.claims.forEach((x: any, i: number) => {
+    const id = x.id || uid();
+    if (!x.id)
+      ss.push(
+        stmt(
+          db,
+          `INSERT INTO claims VALUES(?,${select},?,?,?)`,
+          id,
+          reportID,
+          x.api_item_id,
+          x.property,
+          now(),
+        ),
+      );
+    ss.push(
+      stmt(
+        db,
+        `INSERT INTO claim_revisions VALUES(?,${select},?,?,?,?,?,?,?,?)`,
+        id,
+        reportID,
+        n,
+        i,
+        x.title,
+        x.precondition,
+        x.explanation,
+        x.trusted_assumptions,
+        x.evidence_url,
+        x.limitations,
+      ),
+    );
+  });
+  return ss;
+}
+api.post("/reports/validate", async (c) => {
+  const u = requireUser(c),
+    b = await jsonBody(c);
+  let p;
+  if (b.report_id !== undefined) {
+    p = await visible(c.env.DB, positive(b.report_id));
+    if (!p || p.author_id !== u.id) throw new Fault(403, "not_author");
+  }
+  return c.json(await validate(c, b, p));
 });
-api.post("/claims", async (c) => {
+api.post("/reports", async (c) => {
   const u = requireUser(c),
     b = await jsonBody(c),
-    v = await validate(c, b),
-    resource = uid();
-  const key = await idempotent(c, "claim", b, resource, async (createKey) => [
+    v = await validate(c, b);
+  await idempotent(c, "report", b, "pending", async (key) => [
     activeGuard(c),
-    quota(c.env.DB, u.id, "claim", 20),
+    quota(c.env.DB, u.id, "report", 20),
     stmt(
       c.env.DB,
-      "INSERT INTO claims(create_key,api_item_id,property,author_id,created_at,updated_at) VALUES(?,?,?,?,?,?)",
-      createKey,
-      v.api_item_id,
-      v.property,
+      "INSERT INTO reports(create_key,release_id,author_id,created_at,updated_at) VALUES(?,?,?,?,?)",
+      key,
+      v.release_id,
       u.id,
       now(),
       now(),
     ),
+    ...revisionStatements(c, v, key, 1, true),
     stmt(
       c.env.DB,
-      "INSERT INTO claim_revisions SELECT id,1,?,?,?,?,?,?,?,?,? FROM claims WHERE create_key=?",
-      ...revisionValues(v),
-      createKey,
-    ),
-    stmt(
-      c.env.DB,
-      "UPDATE idempotency_keys SET resource_id=(SELECT CAST(id AS TEXT) FROM claims WHERE create_key=?) WHERE user_id=? AND operation=? AND key=?",
-      createKey,
+      "UPDATE idempotency_keys SET resource_id=(SELECT CAST(id AS TEXT) FROM reports WHERE create_key=?) WHERE user_id=? AND operation=? AND key=?",
+      key,
       u.id,
-      "claim",
+      "report",
       c.req.header("Idempotency-Key"),
     ),
   ]);
@@ -331,66 +521,96 @@ api.post("/claims", async (c) => {
     c.env.DB,
     "SELECT resource_id FROM idempotency_keys WHERE user_id=? AND operation=? AND key=?",
     u.id,
-    "claim",
+    "report",
     c.req.header("Idempotency-Key"),
   );
   return c.json({ id: Number(result.resource_id) }, 201);
 });
-api.post("/claims/:id/revisions", async (c) => {
-  const q = await claim(c),
+api.post("/reports/:id/revisions", async (c) => {
+  const p = await report(c),
     u = requireUser(c);
-  if (q.author_id !== u.id) throw new Fault(403, "not_author");
+  if (p.author_id !== u.id) throw new Fault(403, "not_author");
+  if (p.withdrawn_at) throw new Fault(409, "report_withdrawn");
   const b = await jsonBody(c),
-    v = await validate(c, b),
-    expected = positive(b.expected_revision);
-  if (v.api_item_id !== q.api_item_id || v.property !== q.property)
-    throw new Fault(400, "immutable_target");
-  const n = expected + 1;
-  await idempotent(c, "revision:" + q.id, b, String(n), async () => [
+    v = await validate(c, b, p),
+    expected = positive(b.expected_revision),
+    n = expected + 1;
+  await idempotent(c, "report_revision:" + p.id, b, String(n), async () => [
     activeGuard(c),
     guard(
       c.env.DB,
-      "(SELECT MAX(revision_no) FROM claim_revisions WHERE claim_id=?)=? AND EXISTS(SELECT 1 FROM claims WHERE id=? AND author_id=? AND visibility='public')",
-      q.id,
+      "(SELECT MAX(revision_no) FROM report_revisions WHERE report_id=?)=? AND EXISTS(SELECT 1 FROM reports WHERE id=? AND author_id=? AND visibility='public' AND withdrawn_at IS NULL)",
+      p.id,
       expected,
-      q.id,
+      p.id,
       u.id,
     ),
-    quota(c.env.DB, u.id, "claim", 20),
-    stmt(
-      c.env.DB,
-      "INSERT INTO claim_revisions VALUES(?,?,?,?,?,?,?,?,?,?,?)",
-      q.id,
-      n,
-      ...revisionValues(v),
-    ),
-    stmt(c.env.DB, "UPDATE claims SET updated_at=? WHERE id=?", now(), q.id),
+    quota(c.env.DB, u.id, "report", 20),
+    ...revisionStatements(c, v, p.id, n),
+    stmt(c.env.DB, "UPDATE reports SET updated_at=? WHERE id=?", now(), p.id),
   ]);
-  return c.json({ id: q.id, revision_no: n }, 201);
+  return c.json({ id: p.id, revision_no: n }, 201);
 });
-api.put("/claims/:id/withdrawal", async (c) => {
-  const q = await claim(c),
+api.put("/reports/:id/withdrawal", async (c) => {
+  const p = await report(c),
     u = requireUser(c);
-  if (q.author_id !== u.id) throw new Fault(403, "not_author");
+  if (p.author_id !== u.id) throw new Fault(403, "not_author");
   await batch(c.env.DB, [
     activeGuard(c),
     stmt(
       c.env.DB,
-      "UPDATE claims SET withdrawn_at=COALESCE(withdrawn_at,?) WHERE id=? AND author_id=?",
+      "UPDATE reports SET withdrawn_at=COALESCE(withdrawn_at,?) WHERE id=? AND author_id=?",
       now(),
-      q.id,
+      p.id,
       u.id,
     ),
   ]);
   return c.json({ ok: true });
 });
-const commentSelect = `SELECT cm.*,u.username,COALESCE((SELECT SUM(value) FROM comment_votes WHERE comment_id=cm.id),0) score,(SELECT value FROM comment_votes WHERE comment_id=cm.id AND user_id=?) my_vote,(SELECT COUNT(*) FROM comments ch WHERE ch.reply_to_id=cm.id) reply_count FROM comments cm LEFT JOIN users u ON u.id=cm.author_id`;
-api.get("/claims/:id/comments", async (c) => {
-  const q = await claim(c);
+for (const kind of ["report", "claim"] as const) {
+  api.on(["PUT", "DELETE"], `/${kind}s/:id/star`, async (c) => {
+    const u = requireUser(c);
+    const item =
+      kind === "report"
+        ? await visible(c.env.DB, positive(c.req.param("id")))
+        : await one(
+            c.env.DB,
+            "SELECT c.* FROM claims c JOIN reports p ON p.id=c.report_id WHERE c.id=? AND p.visibility='public'",
+            c.req.param("id"),
+          );
+    if (!item) throw new Fault(404, kind + "_not_found");
+    await batch(c.env.DB, [
+      activeGuard(c),
+      guard(
+        c.env.DB,
+        "EXISTS(SELECT 1 FROM reports WHERE id=? AND visibility='public')",
+        kind === "report" ? item.id : item.report_id,
+      ),
+      c.req.method === "PUT"
+        ? stmt(
+            c.env.DB,
+            `INSERT INTO ${kind}_stars VALUES(?,?,?) ON CONFLICT DO NOTHING`,
+            item.id,
+            u.id,
+            now(),
+          )
+        : stmt(
+            c.env.DB,
+            `DELETE FROM ${kind}_stars WHERE ${kind}_id=? AND user_id=?`,
+            item.id,
+            u.id,
+          ),
+    ]);
+    return c.json({ ok: true });
+  });
+}
+const commentSelect = `SELECT cm.*,u.username,COALESCE((SELECT SUM(value) FROM report_comment_votes WHERE comment_id=cm.id),0) score,(SELECT value FROM report_comment_votes WHERE comment_id=cm.id AND user_id=?) my_vote,(SELECT COUNT(*) FROM report_comments ch WHERE ch.reply_to_id=cm.id) reply_count FROM report_comments cm LEFT JOIN users u ON u.id=cm.author_id`;
+api.get("/reports/:id/comments", async (c) => {
+  const q = await report(c);
   return c.json(
     await listing(
       c,
-      commentSelect + " WHERE cm.claim_id=? AND cm.reply_to_id IS ?",
+      commentSelect + " WHERE cm.report_id=? AND cm.reply_to_id IS ?",
       [c.get("user")?.id || "", q.id, c.req.query("parent_id") || null],
       [{ sql: "cm.sequence_no", key: "sequence_no" }],
       publicComment,
@@ -404,11 +624,11 @@ api.get("/comments/:id", async (c) => {
     c.get("user")?.id || "",
     c.req.param("id"),
   );
-  if (!cm || !(await visible(c.env.DB, cm.claim_id)))
+  if (!cm || !(await visible(c.env.DB, cm.report_id)))
     throw new Fault(404, "comment_not_found");
   const ancestors = await rows(
     c.env.DB,
-    `WITH RECURSIVE chain(id,reply_to_id,depth) AS (SELECT id,reply_to_id,0 FROM comments WHERE id=? UNION ALL SELECT p.id,p.reply_to_id,chain.depth+1 FROM comments p JOIN chain ON p.id=chain.reply_to_id) SELECT id FROM chain ORDER BY depth DESC`,
+    `WITH RECURSIVE chain(id,reply_to_id,depth) AS (SELECT id,reply_to_id,0 FROM report_comments WHERE id=? UNION ALL SELECT p.id,p.reply_to_id,chain.depth+1 FROM report_comments p JOIN chain ON p.id=chain.reply_to_id) SELECT id FROM chain ORDER BY depth DESC`,
     cm.id,
   );
   return c.json({
@@ -416,8 +636,8 @@ api.get("/comments/:id", async (c) => {
     ancestors: ancestors.map((x) => x.id),
   });
 });
-api.post("/claims/:id/comments", async (c) => {
-  const q = await claim(c),
+api.post("/reports/:id/comments", async (c) => {
+  const q = await report(c),
     u = requireUser(c),
     b = await jsonBody(c),
     body = text(b.body, "Comment", 5000, true),
@@ -429,13 +649,13 @@ api.post("/claims/:id/comments", async (c) => {
     activeGuard(c),
     guard(
       c.env.DB,
-      "EXISTS(SELECT 1 FROM claims WHERE id=? AND visibility='public')",
+      "EXISTS(SELECT 1 FROM reports WHERE id=? AND visibility='public')",
       q.id,
     ),
     quota(c.env.DB, u.id, "comment", 100),
     stmt(
       c.env.DB,
-      "INSERT INTO comments(id,claim_id,sequence_no,revision_no,author_id,reply_to_id,body,created_at) SELECT ?,?,COALESCE(MAX(sequence_no),0)+1,?,?,?,?,? FROM comments WHERE claim_id=?",
+      "INSERT INTO report_comments(id,report_id,sequence_no,revision_no,author_id,reply_to_id,body,created_at) SELECT ?,?,COALESCE(MAX(sequence_no),0)+1,?,?,?,?,? FROM report_comments WHERE report_id=?",
       id,
       q.id,
       rev,
@@ -447,7 +667,7 @@ api.post("/claims/:id/comments", async (c) => {
     ),
     stmt(
       c.env.DB,
-      "INSERT INTO comment_history VALUES(?,1,?,?,?,?)",
+      "INSERT INTO report_comment_history VALUES(?,1,?,?,?,?)",
       id,
       "create",
       body,
@@ -471,8 +691,8 @@ async function editComment(c: Ctx, deleting: boolean) {
   const u = requireUser(c),
     b = await jsonBody(c),
     id = c.req.param("id"),
-    cm = await one(c.env.DB, "SELECT * FROM comments WHERE id=?", id);
-  if (!cm || !(await visible(c.env.DB, cm.claim_id)))
+    cm = await one(c.env.DB, "SELECT * FROM report_comments WHERE id=?", id);
+  if (!cm || !(await visible(c.env.DB, cm.report_id)))
     throw new Fault(404, "comment_not_found");
   if (cm.author_id !== u.id) throw new Fault(403, "not_author");
   const expected = positive(b.edit_version),
@@ -481,14 +701,14 @@ async function editComment(c: Ctx, deleting: boolean) {
     activeGuard(c),
     guard(
       c.env.DB,
-      "EXISTS(SELECT 1 FROM comments cm JOIN claims c ON c.id=cm.claim_id WHERE cm.id=? AND cm.author_id=? AND cm.edit_version=? AND cm.deleted_at IS NULL AND cm.visibility='public' AND c.visibility='public')",
+      "EXISTS(SELECT 1 FROM report_comments cm JOIN reports c ON c.id=cm.report_id WHERE cm.id=? AND cm.author_id=? AND cm.edit_version=? AND cm.deleted_at IS NULL AND cm.visibility='public' AND c.visibility='public')",
       id,
       u.id,
       expected,
     ),
     stmt(
       c.env.DB,
-      "INSERT INTO comment_history VALUES(?,?,?,?,?,?)",
+      "INSERT INTO report_comment_history VALUES(?,?,?,?,?,?)",
       id,
       expected + 1,
       deleting ? "delete" : "edit",
@@ -498,14 +718,20 @@ async function editComment(c: Ctx, deleting: boolean) {
     ),
     stmt(
       c.env.DB,
-      "UPDATE comments SET body=?,edit_version=edit_version+1,edited_at=?,deleted_at=? WHERE id=?",
+      "UPDATE report_comments SET body=?,edit_version=edit_version+1,edited_at=?,deleted_at=? WHERE id=?",
       body,
       now(),
       deleting ? now() : null,
       id,
     ),
     ...(deleting
-      ? [stmt(c.env.DB, "DELETE FROM comment_votes WHERE comment_id=?", id)]
+      ? [
+          stmt(
+            c.env.DB,
+            "DELETE FROM report_comment_votes WHERE comment_id=?",
+            id,
+          ),
+        ]
       : []),
   ]);
   return c.json({ ok: true, edit_version: expected + 1 });
@@ -515,8 +741,12 @@ api.delete("/comments/:id", (c) => editComment(c, true));
 api.on(["PUT", "DELETE"], "/comments/:id/vote", async (c) => {
   const u = requireUser(c),
     id = c.req.param("id");
-  const cm = await one(c.env.DB, "SELECT * FROM comments WHERE id=?", id);
-  if (!cm || !(await visible(c.env.DB, cm.claim_id)))
+  const cm = await one(
+    c.env.DB,
+    "SELECT * FROM report_comments WHERE id=?",
+    id,
+  );
+  if (!cm || !(await visible(c.env.DB, cm.report_id)))
     throw new Fault(404, "comment_not_found");
   if (cm.author_id === u.id || cm.deleted_at || cm.visibility !== "public")
     throw new Fault(403, "vote_forbidden");
@@ -527,67 +757,22 @@ api.on(["PUT", "DELETE"], "/comments/:id/vote", async (c) => {
     activeGuard(c),
     guard(
       c.env.DB,
-      "EXISTS(SELECT 1 FROM claims WHERE id=? AND visibility='public')",
-      cm.claim_id,
+      "EXISTS(SELECT 1 FROM reports WHERE id=? AND visibility='public')",
+      cm.report_id,
     ),
     c.req.method === "DELETE"
       ? stmt(
           c.env.DB,
-          "DELETE FROM comment_votes WHERE comment_id=? AND user_id=?",
+          "DELETE FROM report_comment_votes WHERE comment_id=? AND user_id=?",
           id,
           u.id,
         )
       : stmt(
           c.env.DB,
-          "INSERT INTO comment_votes VALUES(?,?,?,?) ON CONFLICT(comment_id,user_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
+          "INSERT INTO report_comment_votes VALUES(?,?,?,?) ON CONFLICT(comment_id,user_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
           id,
           u.id,
           b.value,
-          now(),
-        ),
-  ]);
-  return c.json({ ok: true });
-});
-api.get("/claims/:id/revisions/:n/accepts", async (c) => {
-  const q = await claim(c);
-  return c.json(
-    await listing(
-      c,
-      "SELECT a.user_id,u.username,a.created_at FROM accepts a JOIN users u ON u.id=a.user_id WHERE claim_id=? AND revision_no=?",
-      [q.id, positive(c.req.param("n"))],
-      [
-        { sql: "a.created_at", key: "created_at" },
-        { sql: "a.user_id", key: "user_id" },
-      ],
-    ),
-  );
-});
-api.on(["PUT", "DELETE"], "/claims/:id/revisions/:n/accept", async (c) => {
-  const q = await claim(c),
-    u = requireUser(c),
-    n = positive(c.req.param("n"));
-  if (q.author_id === u.id) throw new Fault(403, "self_accept");
-  await batch(c.env.DB, [
-    activeGuard(c),
-    guard(
-      c.env.DB,
-      "EXISTS(SELECT 1 FROM claims WHERE id=? AND visibility='public')",
-      q.id,
-    ),
-    c.req.method === "DELETE"
-      ? stmt(
-          c.env.DB,
-          "DELETE FROM accepts WHERE claim_id=? AND revision_no=? AND user_id=?",
-          q.id,
-          n,
-          u.id,
-        )
-      : stmt(
-          c.env.DB,
-          "INSERT INTO accepts VALUES(?,?,?,?) ON CONFLICT DO NOTHING",
-          q.id,
-          n,
-          u.id,
           now(),
         ),
   ]);
@@ -609,14 +794,14 @@ api.get("/users/:id", async (c) => {
   });
 });
 for (const prefix of ["/users/:id", "/me"]) {
-  api.get(prefix + "/claims", async (c) =>
+  api.get(prefix + "/reports", async (c) =>
     c.json(
       await listing(
         c,
-        publicClaim +
-          ` WHERE c.author_id=? AND c.visibility='public' AND ${latest}`,
+        publicReport +
+          ` WHERE p.author_id=? AND p.visibility='public' AND ${reportLatest}`,
         [prefix === "/me" ? requireUser(c).id : c.req.param("id")],
-        [{ sql: "c.id", key: "id", desc: true }],
+        [{ sql: "p.id", key: "id", desc: true }],
       ),
     ),
   );
@@ -625,7 +810,7 @@ for (const prefix of ["/users/:id", "/me"]) {
       await listing(
         c,
         commentSelect +
-          " JOIN claims c ON c.id=cm.claim_id WHERE cm.author_id=? AND c.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL",
+          " JOIN reports c ON c.id=cm.report_id WHERE cm.author_id=? AND c.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL",
         [
           c.get("user")?.id || "",
           prefix === "/me" ? requireUser(c).id : c.req.param("id"),
@@ -639,24 +824,26 @@ for (const prefix of ["/users/:id", "/me"]) {
     ),
   );
 }
-api.get("/me/accepts", async (c) =>
-  c.json(
-    await listing(
-      c,
-      publicClaim.replace(
-        "SELECT c.id",
-        "SELECT ac.created_at accepted_at,c.id",
-      ) +
-        " JOIN accepts ac ON ac.claim_id=c.id AND ac.revision_no=r.revision_no WHERE ac.user_id=? AND c.visibility='public'",
-      [requireUser(c).id],
-      [
-        { sql: "ac.created_at", key: "accepted_at", desc: true },
-        { sql: "c.id", key: "id", desc: true },
-        { sql: "r.revision_no", key: "revision_no", desc: true },
-      ],
+for (const kind of ["report", "claim"] as const) {
+  api.get("/me/starred-" + kind + "s", async (c) =>
+    c.json(
+      await listing(
+        c,
+        (kind === "report"
+          ? publicReport.replace("SELECT ", "SELECT s.created_at starred_at,") +
+            ` JOIN report_stars s ON s.report_id=p.id WHERE ${reportLatest}`
+          : publicClaim.replace("SELECT ", "SELECT s.created_at starred_at,") +
+            ` JOIN claim_stars s ON s.claim_id=c.id WHERE r.report_revision=(SELECT MAX(v.report_revision) FROM claim_revisions v WHERE v.claim_id=c.id)`) +
+          " AND s.user_id=? AND p.visibility='public'",
+        [requireUser(c).id],
+        [
+          { sql: "s.created_at", key: "starred_at", desc: true },
+          { sql: kind === "report" ? "p.id" : "c.id", key: "id", desc: true },
+        ],
+      ),
     ),
-  ),
-);
+  );
+}
 api.get("/tools", async (c) =>
   c.json({
     items: await rows(c.env.DB, "SELECT * FROM tools ORDER BY name"),
@@ -682,13 +869,13 @@ api.get("/tools/:slug", async (c) => {
     ),
   });
 });
-api.get("/tools/:slug/claims", async (c) =>
+api.get("/tools/:slug/reports", async (c) =>
   c.json(
     await listing(
       c,
-      publicClaim + ` WHERE t.id=? AND c.visibility='public' AND ${latest}`,
+      publicReport + ` WHERE t.id=? AND ${activeReport} AND ${reportLatest}`,
       [c.req.param("slug")],
-      [{ sql: "c.id", key: "id", desc: true }],
+      [{ sql: "p.id", key: "id", desc: true }],
     ),
   ),
 );

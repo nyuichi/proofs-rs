@@ -7,6 +7,7 @@ for (const path of [
   "/openapi.json",
   "/api/v1/health",
   "/api/v1/home",
+  "/api/v1/reports",
   "/api/v1/crates",
   "/api/v1/tools",
   "/api/v1/me",

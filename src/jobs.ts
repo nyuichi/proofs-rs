@@ -58,19 +58,19 @@ async function createNotifications(env: Env, event: any) {
   const db = env.DB,
     cm = await one(
       db,
-      `SELECT cm.*,c.author_id claim_author,c.visibility claim_visibility,p.author_id reply_author FROM comments cm JOIN claims c ON c.id=cm.claim_id LEFT JOIN comments p ON p.id=cm.reply_to_id WHERE cm.id=?`,
+      `SELECT cm.*,c.author_id report_author,c.visibility report_visibility,p.author_id reply_author FROM report_comments cm JOIN reports c ON c.id=cm.report_id LEFT JOIN report_comments p ON p.id=cm.reply_to_id WHERE cm.id=?`,
       event.aggregate_id,
     );
   const recipients = new Map<string, string[]>();
   if (
     cm &&
     cm.visibility === "public" &&
-    cm.claim_visibility === "public" &&
+    cm.report_visibility === "public" &&
     !cm.deleted_at
   ) {
     for (const [id, category] of [
       [cm.reply_author, "replies"],
-      [cm.claim_author, "claim_comments"],
+      [cm.report_author, "report_comments"],
     ])
       if (id && id !== cm.author_id) {
         const pref = await one(
@@ -128,19 +128,19 @@ async function deliver(env: Env, id: string) {
     return;
   const cm = await one(
     db,
-    `SELECT cm.*,c.visibility claim_visibility,u.username FROM comments cm JOIN claims c ON c.id=cm.claim_id LEFT JOIN users u ON u.id=cm.author_id WHERE cm.id=?`,
+    `SELECT cm.*,c.visibility report_visibility,u.username FROM report_comments cm JOIN reports c ON c.id=cm.report_id LEFT JOIN users u ON u.id=cm.author_id WHERE cm.id=?`,
     d.aggregate_id,
   );
   const contact = await one(
     db,
-    `SELECT ec.*,p.replies,p.claim_comments,u.status user_status FROM email_contacts ec JOIN notification_preferences p ON p.user_id=ec.user_id JOIN users u ON u.id=ec.user_id WHERE ec.user_id=?`,
+    `SELECT ec.*,p.replies,p.report_comments,u.status user_status FROM email_contacts ec JOIN notification_preferences p ON p.user_id=ec.user_id JOIN users u ON u.id=ec.user_id WHERE ec.user_id=?`,
     d.user_id,
   );
   const skip =
     !cm ||
     cm.deleted_at ||
     cm.visibility !== "public" ||
-    cm.claim_visibility !== "public" ||
+    cm.report_visibility !== "public" ||
     !contact ||
     contact.user_status !== "active" ||
     !contact.address ||
@@ -198,8 +198,8 @@ async function deliver(env: Env, id: string) {
     const result = await env.EMAIL.send({
       from: env.EMAIL_FROM,
       to: contact.address,
-      subject: `New comment on proofs.rs claim #${cm.claim_id}`,
-      text: `${cm.username || "ghost"} posted a comment.\n\n${env.APP_ORIGIN}/#/claim/${cm.claim_id}?comment=${cm.id}\n\nEmail settings: ${env.APP_ORIGIN}/#/settings\nUnsubscribe: ${unsubscribe}`,
+      subject: `New comment on proofs.rs report #${cm.report_id}`,
+      text: `${cm.username || "ghost"} posted a comment.\n\n${env.APP_ORIGIN}/#/report/${cm.report_id}?comment=${cm.id}\n\nEmail settings: ${env.APP_ORIGIN}/#/settings\nUnsubscribe: ${unsubscribe}`,
     });
     await stmt(
       db,

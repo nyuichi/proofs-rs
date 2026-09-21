@@ -10,22 +10,31 @@ def listing(v):return obj({'items':arr(v),'next_cursor':{'type':['string','null'
 sc={}
 db=sqlite3.connect(':memory:')
 for p in sorted(Path('migrations').glob('*.sql')):db.executescript(p.read_text())
-for table in ['crates','releases','api_items','claims','claim_revisions','comments','tools','tool_versions']:
+for table in ['crates','releases','api_items','tools','tool_versions','report_comments']:
  fields={}
  for _,name,typ,notnull,default,pk in db.execute('pragma table_info('+table+')'):
   typ='integer' if typ=='INTEGER' else 'string'
   fields[name]={'type':typ if notnull or pk else [typ,'null']}
  sc[table]=obj(fields)
-# Exact public projections; internal keys are never part of these contracts.
-sc['Claim']=obj({k:v for name in ['claims','claim_revisions'] for k,v in sc[name]['properties'].items() if k not in ['create_key','claim_id']})
-for k in ['display_path','signature','upstream_url','crate','version','username','tool','tool_version']:sc['Claim']['properties'][k]=S()
-for k in ['latest_revision_no','is_unsafe','yanked','comment_count','accept_count']:sc['Claim']['properties'][k]={'type':'integer'}
-sc['Claim']['required']=list(sc['Claim']['properties'])
-sc['Comment']=obj({**{k:v for k,v in sc['comments']['properties'].items() if k!='visibility'},'username':{'type':['string','null']},'score':{'type':'integer'},'my_vote':{'type':['integer','null']},'reply_count':{'type':'integer'},'hidden':B})
 sc['Error']=obj({'error':S(),'message':S(),'request_id':S()},['error'])
 sc['Ok']=obj({'ok':{'const':True}})
-sc['ClaimInput']=obj({'api_item_id':S(200,minLength=1),'property':{'enum':['no_ub','panic_contract']},'title':S(1000,minLength=1),'precondition':S(description='Required for panic_contract and unsafe APIs. May be omitted for safe no_ub claims.'),'explanation':S(description='May be an empty string.'),'trusted_assumptions':S(description='May be an empty string.'),'tool_version_id':S(200,minLength=1),'environment':S(),'evidence_url':S(1000,format='uri',pattern='^https?://'),'limitations':S()},['api_item_id','property','title','explanation','trusted_assumptions','tool_version_id','evidence_url'])
-sc['RevisionInput']={'allOf':[ref('ClaimInput'),obj({'expected_revision':I})]}
+sc['ClaimInput']=obj({'id':S(format='uuid',description='Only for an existing claim in a report revision. Omit for new claims.'),'api_item_id':S(200,minLength=1),'property':{'enum':['no_ub','panic_contract']},'title':S(1000,description='Optional. Empty or omitted titles are generated from the property, API path and report tool/version.'),'precondition':S(description='Required for panic_contract and unsafe APIs.'),'explanation':S(),'trusted_assumptions':S(),'evidence_url':S(1000,description='HTTP(S) URL or empty. At least the shared or individual evidence URL is required for each claim.'),'limitations':S()},['api_item_id','property'])
+sc['ReportInput']=obj({'crate':S(100,minLength=1),'version':S(100,minLength=1),'title':S(1000,minLength=1),'tool_version_id':S(200,minLength=1),'explanation':S(),'trusted_assumptions':S(),'environment':S(),'evidence_url':S(1000),'limitations':S(),'claims':dict(arr(ref('ClaimInput')),minItems=1,maxItems=100)},['crate','version','title','tool_version_id','claims'])
+sc['RevisionInput']={'allOf':[ref('ReportInput'),obj({'expected_revision':I})]}
+sc['ValidationInput']={'allOf':[ref('ReportInput'),obj({'report_id':I},[])]}
+sc['NormalizedClaimInput']=obj({**sc['ClaimInput']['properties'],'id':{'type':['string','null'],'format':'uuid'},'display_path':S(),'is_unsafe':{'type':'integer'}})
+sc['ValidationResult']=obj({**sc['ReportInput']['properties'],'claims':arr(ref('NormalizedClaimInput')),'release_id':I,'tool':S(),'tool_version':S(),'changes':obj({'added':{'type':'integer'},'retained':arr(S()),'removed':arr(S())})})
+reportFields={k:S() for k in ['title','explanation','trusted_assumptions','environment','evidence_url','limitations','tool_version_id','created_at','updated_at','crate','version','tool','tool_version','visibility']}
+reportFields.update({k:{'type':'integer'} for k in ['id','release_id','revision_no','latest_revision_no','star_count','comment_count','claim_count','author_karma','yanked']})
+reportFields.update({k:{'type':['string','null']} for k in ['author_id','username','withdrawn_at']})
+sc['Report']=obj(reportFields)
+claimFields={k:S() for k in ['id','api_item_id','property','created_at','title','precondition','explanation','trusted_assumptions','evidence_url','limitations','display_path','signature','upstream_url','report_title','shared_explanation','shared_trusted_assumptions','shared_evidence_url','shared_limitations','environment','tool_version_id','crate','version','tool','tool_version','visibility']}
+claimFields.update({k:{'type':'integer'} for k in ['report_id','report_revision','latest_report_revision','position','star_count','report_star_count','report_comment_count','author_karma','is_unsafe','in_current_report']})
+claimFields.update({k:{'type':['string','null']} for k in ['author_id','username','withdrawn_at']})
+sc['Claim']=obj(claimFields)
+sc['ClaimDetail']={'allOf':[ref('Claim'),obj({'my_star':B})]}
+sc['ReportDetail']={'allOf':[ref('Report'),obj({'my_star':B,'claims':arr(ref('ClaimDetail'))})]}
+sc['Comment']=obj({**{k:v for k,v in sc['report_comments']['properties'].items() if k!='visibility'},'username':{'type':['string','null']},'score':{'type':'integer'},'my_vote':{'type':['integer','null']},'reply_count':{'type':'integer'},'hidden':B})
 sc['Token']=obj({'id':S(format='uuid'),'created_at':S(format='date-time'),'last_used_at':{'type':['string','null'],'format':'date-time'},'expires_at':S(format='date-time')})
 sc['User']=obj({'id':S(),'github_id':I,'username':S(),'role':S(),'status':S(),'accepted_terms_version':S(),'terms_accepted_at':S(format='date-time')})
 sc['Import']=obj({'id':S(),'status':{'enum':['pending','running','retry','ready','failed']},'error_code':{'type':['string','null']},'crate':S(),'version':S()},['id','status'])
@@ -38,7 +47,7 @@ def add(path,method,summary,body=None,out=None,security=None,description='',stat
  if method!='get' and any('session' in x for x in security):params.append(dict(name='Origin',**{'in':'header'},required=False,schema=S(),description='Required for browser-session writes; must equal this service origin.'))
  responses={str(status):dict(description='Success',content={'application/json':{'schema':out or ref('Ok')}})}
  for code,desc in [(400,'Invalid input'),(401,'Authentication required or token invalid/expired'),(403,'Forbidden, insufficient scope, suspended account, or invalid Origin/CSRF'),(404,'Resource not found'),(409,'Conflict, stale revision, or idempotency mismatch'),(413,'Body exceeds 128 KiB'),(415,'Unsupported content type'),(428,'Terms changed: sign in in the browser and accept the current terms'),(429,'Rate limit exceeded'),(500,'Internal error'),(503,'Service unavailable')]:responses[str(code)]=dict(description=desc,content={'application/json':{'schema':ref('Error')}})
- tag='Authentication' if path.startswith('/auth') else ('Tokens' if '/tokens' in path else ('Claims' if '/claims' in path else ('Comments' if '/comments' in path else ('Imports' if '/imports' in path or '/prepare' in path else 'Registry'))))
+ tag='Authentication' if path.startswith('/auth') else ('Tokens' if '/tokens' in path else ('Reports' if '/reports' in path else ('Claims' if '/claims' in path else ('Comments' if '/comments' in path else ('Imports' if '/imports' in path or '/prepare' in path else 'Registry')))))
  op=dict(operationId=method+'_'+re.sub(r'[^a-zA-Z0-9]+','_',path).strip('_'),summary=summary,tags=[tag],description=description,security=security,parameters=params,responses=responses)
  if body:op['requestBody']=dict(required=True,content={mime:{'schema':body} for mime in (['application/json','application/x-www-form-urlencoded'] if form else ['application/json'])})
  paths.setdefault(path,{})[method]=op
@@ -49,38 +58,41 @@ add(P+'/config','get','Public service configuration',out=obj({'environment':S(),
 add(P+'/terms/current','get','Current terms',out=obj({'version':S(),'url':S(),'summary':S(),'requires_agreement':B}))
 add(P+'/me','get','Current account',out={'oneOf':[obj({'user':{'type':'null'}}),obj({'user':ref('User'),'csrf':S(),'email':{'oneOf':[{'type':'null'},obj({'address':{'type':['string','null']},'delivery_status':S()})]},'delayed_notifications':{'type':'integer'},'karma':{'type':'integer'},'terms_required':B})]})
 add(P+'/me/terms-acceptance','post','Accept current terms',obj({'version':S()}),security=session)
-add(P+'/me/notification-preferences','get','Email notification preferences',out=obj({'replies':{'enum':[0,1]},'claim_comments':{'enum':[0,1]}}),security=sessionRead)
-add(P+'/me/notification-preferences','patch','Update email notification preferences',obj({'replies':B,'claim_comments':B}),security=session)
+add(P+'/me/notification-preferences','get','Email notification preferences',out=obj({'replies':{'enum':[0,1]},'report_comments':{'enum':[0,1]}}),security=sessionRead)
+add(P+'/me/notification-preferences','patch','Update email notification preferences',obj({'replies':B,'report_comments':B}),security=session)
 add(P+'/notifications/unsubscribe','post','Unsubscribe with signed link',obj({'user':S(),'signature':S()}),security=[],description='Requires the signed unsubscribe value and a same-origin Origin header.')
-add(P+'/home','get','Recent crates and discussion',out=obj({'crates':arr(obj({'id':I,'name':S(),'description':S(),'updated_at':S(),'claim_count':I})),'discussion':arr(obj({'id':S(),'claim_id':I,'sequence_no':I,'revision_no':I,'body':S(),'created_at':S(),'username':S(),'author_id':S()}))}))
+add(P+'/home','get','Recent reports, crates and discussion',out=obj({'reports':arr(ref('Report')),'crates':arr(obj({'id':I,'name':S(),'description':S(),'updated_at':S(),'claim_count':I})),'discussion':arr(obj({'id':S(),'report_id':I,'sequence_no':I,'revision_no':I,'body':S(),'created_at':S(),'username':{'type':['string','null']},'author_id':{'type':['string','null']}}))}))
 add(P+'/crates','get','Search crates with claims',out=listing({'allOf':[ref('crates'),obj({'claim_count':{'type':'integer'}})]}),queries=cursor+[('q',S(),False)])
 add(P+'/crates/{name}/releases','get','List releases with claims',out=obj({'items':arr(ref('releases')),'default_version':S()},['items']))
 add(P+'/crates/{name}/{version}/apis','get','List imported public functions and inherent methods',out=listing({'allOf':[ref('api_items'),obj({'no_ub_count':{'type':'integer'},'panic_count':{'type':'integer'}})]}),queries=cursor+[('q',S(),False)])
 add(P+'/apis/{id}','get','Get imported API',out={'allOf':[ref('api_items'),obj({'crate':S(),'version':S(),'yanked':{'type':'integer'},'target':S(),'features_json':S(),'rustdoc_format':I})]})
 add(P+'/resolve-api','get','Resolve a crate API path to its ID',out=obj({'id':S()}),queries=[(x,S(),True) for x in ['crate','version','path']])
 add(P+'/apis/{id}/claims','get','List latest claims for an API',out=listing(ref('Claim')),queries=cursor)
-add(P+'/claims/{id}','get','Get latest claim',out={'allOf':[ref('Claim'),obj({'versions':arr(obj({'revision_no':I,'created_at':S()}))})]})
-add(P+'/claims/{id}/revisions/{n}','get','Get claim revision',out=ref('Claim'))
-add(P+'/claims/validate','post','Validate and normalize claim input',ref('ClaimInput'),ref('ClaimInput'))
-add(P+'/claims','post','Publish a claim',ref('ClaimInput'),obj({'id':I}),status=201,idem=True,description='20 claims or revisions per user per UTC day. Evidence is a URL; proofs are not executed by this service.')
-add(P+'/claims/{id}/revisions','post','Revise your claim',ref('RevisionInput'),obj({'id':I,'revision_no':I}),status=201,idem=True,description='API and property are immutable. expected_revision must match the latest revision. Uses the shared daily claim quota.')
-add(P+'/claims/{id}/withdrawal','put','Withdraw your claim',security=session)
-add(P+'/claims/{id}/comments','get','List root comments or replies',out=listing(ref('Comment')),queries=cursor+[('parent_id',S(),False)],description='Omit parent_id for roots. Deleted or hidden comments remain as tombstones; body is null.')
+add(P+'/claims/{id}','get','Read a claim and its shared report context',out=ref('ClaimDetail'),queries=[('report_revision',I,False)],description='Default: last report revision containing this claim. in_current_report is 0 if removed. The permanent ID and stars survive removal and revision. Comments are only available on the report.')
+add(P+'/reports','get','List current reports',out=listing(ref('Report')),queries=cursor)
+add(P+'/reports','post','Publish a report and all its claims atomically',ref('ReportInput'),obj({'id':I}),status=201,idem=True,description='20 report publications or revisions per user per UTC day. No drafts. All claims must target this exact crate version. Prepare the catalogue first. Repeating an API/property with different scope is allowed. At most 100 claims, subject to the 128 KiB total request limit.')
+add(P+'/reports/validate','post','Validate without saving and preview generated titles and membership changes',ref('ValidationInput'),out=ref('ValidationResult'),description='Include report_id when previewing a revision; only its author may do so. Returns indexed claim validation errors. New claim IDs are null in the preview; omit them when publishing.')
+add(P+'/reports/{id}','get','Read current report and all claims',out=ref('ReportDetail'))
+add(P+'/reports/{id}/revisions','get','List report revisions',out=listing(obj({'revision_no':I,'created_at':S()})),queries=cursor)
+add(P+'/reports/{id}/revisions/{n}','get','Read a specific immutable report revision',out=ref('ReportDetail'))
+add(P+'/reports/{id}/revisions','post','Publish a complete replacement report revision atomically',ref('RevisionInput'),obj({'id':I,'revision_no':I}),status=201,idem=True,description='Author only. expected_revision must match. Include IDs for retained claims; omit IDs for new claims. Omitted existing claims are removed from the new revision but retain history, permanent URLs and stars. API/property and report crate/version are immutable. Withdrawn reports cannot be revised.')
+add(P+'/reports/{id}/withdrawal','put','Withdraw a report; retain public history and discussion',security=session)
+for kind in ['report','claim']:
+ for method in ['put','delete']:add(P+'/'+kind+'s/{id}/star',method,'Star '+kind if method=='put' else 'Unstar '+kind,security=session,description='Idempotent. Stars are independent of revisions. Self-stars are allowed; they do not add karma. Only report stars contribute to karma.')
+ add(P+'/me/starred-'+kind+'s','get','List your starred '+kind+'s',out=listing({'allOf':[ref(kind.title()),obj({'starred_at':S()})]}),queries=cursor,security=sessionRead)
+add(P+'/reports/{id}/comments','get','List root comments or replies',out=listing(ref('Comment')),queries=cursor+[('parent_id',S(),False)],description='Omit parent_id for roots. Deleted or hidden comments remain as tombstones; body is null.')
 add(P+'/comments/{id}','get','Get comment and ancestor IDs',out={'allOf':[ref('Comment'),obj({'ancestors':arr(S())})]})
-add(P+'/claims/{id}/comments','post','Post a comment or reply',obj({'body':S(5000,minLength=1),'revision_no':I,'reply_to_id':S(100)},['body','revision_no']),obj({'id':S()}),security=session,status=201,idem=True,description='100 new comments per user per UTC day.')
+add(P+'/reports/{id}/comments','post','Post a comment or reply',obj({'body':S(5000,minLength=1),'revision_no':I,'reply_to_id':S(100)},['body','revision_no']),obj({'id':S()}),security=session,status=201,idem=True,description='100 new comments per user per UTC day.')
 add(P+'/comments/{id}','patch','Edit your comment',obj({'body':S(5000,minLength=1),'edit_version':I}),obj({'ok':B,'edit_version':I}),security=session)
 add(P+'/comments/{id}','delete','Delete your comment',obj({'edit_version':I}),obj({'ok':B,'edit_version':I}),security=session,description='Requires JSON body. Leaves a discussion tombstone; history is private.')
 for method in ['put','delete']:
  add(P+'/comments/{id}/vote',method,'Set comment vote' if method=='put' else 'Remove comment vote',obj({'value':{'enum':[-1,1]}}) if method=='put' else None,security=session)
- add(P+'/claims/{id}/revisions/{n}/accept',method,'Accept revision' if method=='put' else 'Remove acceptance',security=session)
-add(P+'/claims/{id}/revisions/{n}/accepts','get','List revision acceptors',out=listing(obj({'user_id':S(),'username':S(),'created_at':S()})),queries=cursor)
 add(P+'/users/{id}','get','Get public account activity profile',out=obj({'id':S(),'username':S(),'created_at':S(),'karma':{'type':'integer'},'algorithm_version':S()}))
 for prefix in ['/users/{id}','/me']:
- for suffix,schema in [('claims','Claim'),('comments','Comment')]:add(P+prefix+'/'+suffix,'get','List user '+suffix,out=listing(ref(schema)),queries=cursor,security=([{'session':[]},{'bearer':[]}] if suffix=='claims' else sessionRead) if prefix=='/me' else None,description='Deleted comments are excluded from activity.')
-add(P+'/me/accepts','get','List your accepted revisions',out=listing({'allOf':[ref('Claim'),obj({'accepted_at':S()})]}),queries=cursor,security=sessionRead)
+ for suffix,schema in [('reports','Report'),('comments','Comment')]:add(P+prefix+'/'+suffix,'get','List user '+suffix,out=listing(ref(schema)),queries=cursor,security=([{'session':[]},{'bearer':[]}] if suffix=='reports' else sessionRead) if prefix=='/me' else None,description='Deleted comments are excluded from activity.')
 add(P+'/tools','get','List registered tools and versions',out=obj({'items':arr(ref('tools')),'versions':arr(ref('tool_versions'))}))
 add(P+'/tools/{slug}','get','Get registered tool',out={'allOf':[ref('tools'),obj({'versions':arr(ref('tool_versions'))})]})
-add(P+'/tools/{slug}/claims','get','List claims using a tool',out=listing(ref('Claim')),queries=cursor)
+add(P+'/tools/{slug}/reports','get','List reports using a tool',out=listing(ref('Report')),queries=cursor)
 add(P+'/publish/prepare','post','Prepare exact crate version',obj({'crate':S(64,minLength=1),'version':S(100,minLength=1)}),obj({'status':{'const':'ready'},'crate':S(),'version':S()}),description='Returns 200 when cached, otherwise 202 with an import job ID. Poll GET /imports/{id}. 5 new imports per user per UTC day, 50 per IP. No proof execution.')
 paths[P+'/publish/prepare']['post']['responses']['202']={'description':'Import pending or running','content':{'application/json':{'schema':ref('Import')}}}
 add(P+'/imports/{id}','get','Check import status',out=ref('Import'),security=[{'session':[]},{'bearer':[]}])
@@ -98,10 +110,10 @@ for path,params in [('/auth/github',[('return_to',S(description='Only /#/device 
 # Match actual accepted Bearer routes rather than advertising unsupported token permissions.
 for path,methods in paths.items():
  for method,op in methods.items():
-  allowed=method=='get' and (path in [P+'/me',P+'/me/claims'] or re.match(r'^/api/v1/(crates|apis|claims|tools|resolve-api|imports|health|config|terms)(/|$)',path)) or method=='post' and (path in [P+'/claims',P+'/claims/validate',P+'/publish/prepare',P+'/tokens/revoke'] or re.match(r'^/api/v1/claims/[^/]+/revisions$',path))
+  allowed=method=='get' and (path in [P+'/me',P+'/me/reports'] or re.match(r'^/api/v1/(crates|apis|claims|reports|tools|resolve-api|imports|health|config|terms)(/|$)',path)) or method=='post' and (path in [P+'/reports',P+'/reports/validate',P+'/publish/prepare',P+'/tokens/revoke'] or re.match(r'^/api/v1/reports/[^/]+/revisions$',path))
   if not allowed:op['security']=[x for x in op['security'] if 'bearer' not in x]
   if method=='get':op['parameters']=[x for x in op['parameters'] if x['name']!='Origin']
-spec=dict(openapi='3.1.1',info=dict(title='proofs.rs API',version='1.0.0',description='Public registry API and browser-assisted CLI authentication. CLI tokens have publish scope and a 90-day lifetime. Browser writes require same-origin Origin and X-CSRF-Token from GET /api/v1/me. Lists use opaque keyset cursors and 30 items per page unless noted. Non-2xx responses contain an error code. Request bodies are limited to 128 KiB. Current terms must be accepted in the browser before publishing. Local CLI token storage is the responsibility of the client.'),servers=[{'url':'/'}],paths=paths,components=dict(securitySchemes={'session':{'type':'apiKey','in':'cookie','name':'__Host-proofsr_session'},'csrf':{'type':'apiKey','in':'header','name':'X-CSRF-Token'},'bearer':{'type':'http','scheme':'bearer','bearerFormat':'Opaque 256-bit token'}},schemas=sc))
+spec=dict(openapi='3.1.1',info=dict(title='proofs.rs API',version='1.1.0',description='Public registry API and browser-assisted CLI authentication. CLI tokens have publish scope and a 90-day lifetime. Browser writes require same-origin Origin and X-CSRF-Token from GET /api/v1/me. Lists use opaque keyset cursors and 30 items per page unless noted. Non-2xx responses contain an error code. Request bodies are limited to 128 KiB. Current terms must be accepted in the browser before publishing. Local CLI token storage is the responsibility of the client.'),servers=[{'url':'/'}],paths=paths,components=dict(securitySchemes={'session':{'type':'apiKey','in':'cookie','name':'__Host-proofsr_session'},'csrf':{'type':'apiKey','in':'header','name':'X-CSRF-Token'},'bearer':{'type':'http','scheme':'bearer','bearerFormat':'Opaque 256-bit token'}},schemas=sc))
 # Reuse error responses so the checked-in document stays readable and small.
 common={}
 for methods in paths.values():

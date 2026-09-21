@@ -1,6 +1,6 @@
 # proofs.rs
 
-A registry of human-reviewed verification claims for Rust APIs. The service records evidence URLs; it does not run proofs or certify correctness.
+A registry of verification reports and per-API claims for Rust APIs. The service records evidence URLs; it does not run proofs or certify correctness.
 
 Cloudflare Workers (Hono/TypeScript), D1, private R2, Queues, Cron, Workers Assets, GitHub OAuth and optional Cloudflare Email Service. The frontend retains the approved plain-document design. See [backend design](docs/backend-design.md) and [operations](docs/operations.md).
 
@@ -8,7 +8,7 @@ Cloudflare Workers (Hono/TypeScript), D1, private R2, Queues, Cron, Workers Asse
 
 Requires Node 24. `npm ci`, `npm run build`, `npm run db:local`, then `npm run dev`. Copy `.dev.vars.example` to `.dev.vars` and configure a development GitHub OAuth app to enable sign-in. Callback: `http://localhost:8787/auth/github/callback`. No local auth bypass is exposed by the Worker. `npm test` uses an in-memory SQLite adapter and fixture rustdoc JSON, never a live docs.rs request or email send.
 
-`npm run typecheck`, `npm test`, `npm run build` are the deployment gates. The first migration creates immutable revisions, transaction guards, comment history, accepts, votes, outbox events and delivery states. A keyset cursor is used for lists. The tool catalogue starts empty. Tools and versions are stored in D1 and can be added or updated through the audited admin API without a deployment.
+`npm run typecheck`, `npm test`, `npm run build` are the deployment gates. The first migration creates immutable revisions, transaction guards, comment history, independent report/claim stars, comment votes, outbox events and delivery states. A keyset cursor is used for lists. The tool catalogue starts empty. Tools and versions are stored in D1 and can be added or updated through the audited admin API without a deployment.
 
 ## Staging
 
@@ -17,7 +17,7 @@ Pushes to `main` run `.github/workflows/deploy.yml`. `scripts/provision.mjs` cre
 Required GitHub Actions secrets:
 
 - `CLOUDFLARE_ACCOUNT_ID`
-- `CLOUDFLARE_API_TOKEN`: scoped to the account, Workers Scripts edit, D1 edit, R2 edit, Queues edit, and account/subdomain read as required by Cloudflare. R2 and Queues must be enabled. Staging currently uses Workers Free with no custom CPU limit. Email sending is explicitly disabled.
+- `CLOUDFLARE_API_TOKEN`: scoped to the account, Workers Scripts edit, D1 edit, R2 edit, Queues edit, and account/subdomain read as required by Cloudflare. R2 and Queues must be enabled. The account uses Workers Paid. Email sending is explicitly disabled.
 
 Optional integration settings (missing integrations are visibly marked, not silently simulated):
 
@@ -32,14 +32,16 @@ No GitHub tokens or client secrets are committed or included in the browser buil
 ## Data and behavior
 
 - First explicit preparation of a crate/version imports crates.io metadata plus one docs.rs rustdoc JSON; later publications reuse D1. Unsupported rustdoc formats fail closed. Initial allowlist: format 61. No whole-registry crawl, no re-run of proofs, no HTML scraping fallback.
-- Claim target is immutable. Other changes append revisions. Accepts are per revision; karma policy is replaceable in `src/core.ts`.
+- Reports publish one crate/version and tool/version with 1–100 claims in one transaction. Claim API/property and IDs are immutable. Shared and individual fields are additive; empty claim titles are generated. Full-report revisions retain stars and history.
+- Independent report/claim stars survive revisions. Only non-self report stars contribute to karma; one replaceable policy in `src/core.ts` supplies profile and list/detail scores.
+- Comments belong only to reports. Removed claims keep permanent links to their historical report revision.
 - Replies form an unbounded-depth tree; every reply level indents. Deleted comments retain a public tombstone and private history.
 - Notifications arise only from new comments, deduplicate recipients and skip the author. Unknown send outcomes are not automatically retried.
 - Admin APIs require the same session/CSRF/terms guards plus the admin role. Every moderation action and history read is audited. There is no public history endpoint.
 
-## Free staging mode
+## Email disabled
 
-`EMAIL_DISABLED=true` skips new email notifications and cancels pending/retry deliveries; it never accumulates a backlog for later sending. The email binding and email-event consumer are omitted. Existing user preferences are retained. docs.rs imports are implemented, but their CPU usage on the Free plan has not been verified. No live import or email tests are run. Enabling arbitrary-recipient email later requires Workers Paid and deliberate configuration changes.
+`EMAIL_DISABLED=true` skips new email notifications and cancels pending/retry deliveries; it never accumulates a backlog for later sending. The email binding and email-event consumer are omitted. Existing user preferences are retained. docs.rs imports are implemented. No live import or email tests are run. Enabling arbitrary-recipient email later requires Workers Paid and deliberate configuration changes.
 
 ## Release boundary
 

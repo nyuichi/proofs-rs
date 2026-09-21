@@ -2,7 +2,7 @@
   "openapi": "3.1.1",
   "info": {
     "title": "proofs.rs API",
-    "version": "1.0.0",
+    "version": "1.1.0",
     "description": "Public registry API and browser-assisted CLI authentication. CLI tokens have publish scope and a 90-day lifetime. Browser writes require same-origin Origin and X-CSRF-Token from GET /api/v1/me. Lists use opaque keyset cursors and 30 items per page unless noted. Non-2xx responses contain an error code. Request bodies are limited to 128 KiB. Current terms must be accepted in the browser before publishing. Local CLI token storage is the responsibility of the client."
   },
   "servers": [
@@ -15,9 +15,7 @@
       "get": {
         "operationId": "get_api_v1_health",
         "summary": "Service health",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -45,10 +43,7 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": [
-                    "ok",
-                    "environment"
-                  ]
+                  "required": ["ok", "environment"]
                 }
               }
             }
@@ -93,9 +88,7 @@
       "get": {
         "operationId": "get_api_v1_config",
         "summary": "Public service configuration",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -184,9 +177,7 @@
       "get": {
         "operationId": "get_api_v1_terms_current",
         "summary": "Current terms",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -272,9 +263,7 @@
       "get": {
         "operationId": "get_api_v1_me",
         "summary": "Current account",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -300,9 +289,7 @@
                           "type": "null"
                         }
                       },
-                      "required": [
-                        "user"
-                      ]
+                      "required": ["user"]
                     },
                     {
                       "type": "object",
@@ -323,20 +310,14 @@
                               "type": "object",
                               "properties": {
                                 "address": {
-                                  "type": [
-                                    "string",
-                                    "null"
-                                  ]
+                                  "type": ["string", "null"]
                                 },
                                 "delivery_status": {
                                   "type": "string",
                                   "maxLength": 10000
                                 }
                               },
-                              "required": [
-                                "address",
-                                "delivery_status"
-                              ]
+                              "required": ["address", "delivery_status"]
                             }
                           ]
                         },
@@ -404,9 +385,7 @@
       "post": {
         "operationId": "post_api_v1_me_terms_acceptance",
         "summary": "Accept current terms",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {
@@ -483,9 +462,7 @@
                     "maxLength": 10000
                   }
                 },
-                "required": [
-                  "version"
-                ]
+                "required": ["version"]
               }
             }
           }
@@ -496,9 +473,7 @@
       "get": {
         "operationId": "get_api_v1_me_notification_preferences",
         "summary": "Email notification preferences",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {
@@ -515,22 +490,13 @@
                   "type": "object",
                   "properties": {
                     "replies": {
-                      "enum": [
-                        0,
-                        1
-                      ]
+                      "enum": [0, 1]
                     },
-                    "claim_comments": {
-                      "enum": [
-                        0,
-                        1
-                      ]
+                    "report_comments": {
+                      "enum": [0, 1]
                     }
                   },
-                  "required": [
-                    "replies",
-                    "claim_comments"
-                  ]
+                  "required": ["replies", "report_comments"]
                 }
               }
             }
@@ -573,9 +539,7 @@
       "patch": {
         "operationId": "patch_api_v1_me_notification_preferences",
         "summary": "Update email notification preferences",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {
@@ -650,14 +614,11 @@
                   "replies": {
                     "type": "boolean"
                   },
-                  "claim_comments": {
+                  "report_comments": {
                     "type": "boolean"
                   }
                 },
-                "required": [
-                  "replies",
-                  "claim_comments"
-                ]
+                "required": ["replies", "report_comments"]
               }
             }
           }
@@ -668,9 +629,7 @@
       "post": {
         "operationId": "post_api_v1_notifications_unsubscribe",
         "summary": "Unsubscribe with signed link",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "Requires the signed unsubscribe value and a same-origin Origin header.",
         "security": [],
         "parameters": [],
@@ -735,10 +694,7 @@
                     "maxLength": 10000
                   }
                 },
-                "required": [
-                  "user",
-                  "signature"
-                ]
+                "required": ["user", "signature"]
               }
             }
           }
@@ -748,10 +704,8 @@
     "/api/v1/home": {
       "get": {
         "operationId": "get_api_v1_home",
-        "summary": "Recent crates and discussion",
-        "tags": [
-          "Registry"
-        ],
+        "summary": "Recent reports, crates and discussion",
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -768,6 +722,12 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "reports": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Report"
+                      }
+                    },
                     "crates": {
                       "type": "array",
                       "items": {
@@ -812,7 +772,7 @@
                             "type": "string",
                             "maxLength": 10000
                           },
-                          "claim_id": {
+                          "report_id": {
                             "type": "integer",
                             "minimum": 1
                           },
@@ -833,17 +793,15 @@
                             "maxLength": 10000
                           },
                           "username": {
-                            "type": "string",
-                            "maxLength": 10000
+                            "type": ["string", "null"]
                           },
                           "author_id": {
-                            "type": "string",
-                            "maxLength": 10000
+                            "type": ["string", "null"]
                           }
                         },
                         "required": [
                           "id",
-                          "claim_id",
+                          "report_id",
                           "sequence_no",
                           "revision_no",
                           "body",
@@ -854,10 +812,7 @@
                       }
                     }
                   },
-                  "required": [
-                    "crates",
-                    "discussion"
-                  ]
+                  "required": ["reports", "crates", "discussion"]
                 }
               }
             }
@@ -902,9 +857,7 @@
       "get": {
         "operationId": "get_api_v1_crates",
         "summary": "Search crates with claims",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -958,25 +911,17 @@
                                 "type": "integer"
                               }
                             },
-                            "required": [
-                              "claim_count"
-                            ]
+                            "required": ["claim_count"]
                           }
                         ]
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -1021,9 +966,7 @@
       "get": {
         "operationId": "get_api_v1_crates_name_releases",
         "summary": "List releases with claims",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -1064,9 +1007,7 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": [
-                    "items"
-                  ]
+                  "required": ["items"]
                 }
               }
             }
@@ -1111,9 +1052,7 @@
       "get": {
         "operationId": "get_api_v1_crates_name_version_apis",
         "summary": "List imported public functions and inherent methods",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -1188,26 +1127,17 @@
                                 "type": "integer"
                               }
                             },
-                            "required": [
-                              "no_ub_count",
-                              "panic_count"
-                            ]
+                            "required": ["no_ub_count", "panic_count"]
                           }
                         ]
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -1252,9 +1182,7 @@
       "get": {
         "operationId": "get_api_v1_apis_id",
         "summary": "Get imported API",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -1367,9 +1295,7 @@
       "get": {
         "operationId": "get_api_v1_resolve_api",
         "summary": "Resolve a crate API path to its ID",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -1422,9 +1348,7 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": [
-                    "id"
-                  ]
+                  "required": ["id"]
                 }
               }
             }
@@ -1469,9 +1393,7 @@
       "get": {
         "operationId": "get_api_v1_apis_id_claims",
         "summary": "List latest claims for an API",
-        "tags": [
-          "Claims"
-        ],
+        "tags": ["Claims"],
         "description": "",
         "security": [
           {},
@@ -1518,17 +1440,11 @@
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -1572,11 +1488,9 @@
     "/api/v1/claims/{id}": {
       "get": {
         "operationId": "get_api_v1_claims_id",
-        "summary": "Get latest claim",
-        "tags": [
-          "Claims"
-        ],
-        "description": "",
+        "summary": "Read a claim and its shared report context",
+        "tags": ["Claims"],
+        "description": "Default: last report revision containing this claim. in_current_report is 0 if removed. The permanent ID and stars survive removal and revision. Comments are only available on the report.",
         "security": [
           {},
           {
@@ -1595,6 +1509,15 @@
               "type": "string",
               "maxLength": 10000
             }
+          },
+          {
+            "name": "report_revision",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
           }
         ],
         "responses": {
@@ -1603,39 +1526,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "allOf": [
-                    {
-                      "$ref": "#/components/schemas/Claim"
-                    },
-                    {
-                      "type": "object",
-                      "properties": {
-                        "versions": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "revision_no": {
-                                "type": "integer",
-                                "minimum": 1
-                              },
-                              "created_at": {
-                                "type": "string",
-                                "maxLength": 10000
-                              }
-                            },
-                            "required": [
-                              "revision_no",
-                              "created_at"
-                            ]
-                          }
-                        }
-                      },
-                      "required": [
-                        "versions"
-                      ]
-                    }
-                  ]
+                  "$ref": "#/components/schemas/ClaimDetail"
                 }
               }
             }
@@ -1676,13 +1567,11 @@
         }
       }
     },
-    "/api/v1/claims/{id}/revisions/{n}": {
+    "/api/v1/reports": {
       "get": {
-        "operationId": "get_api_v1_claims_id_revisions_n",
-        "summary": "Get claim revision",
-        "tags": [
-          "Claims"
-        ],
+        "operationId": "get_api_v1_reports",
+        "summary": "List current reports",
+        "tags": ["Reports"],
         "description": "",
         "security": [
           {},
@@ -1695,98 +1584,14 @@
         ],
         "parameters": [
           {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "n",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Claim"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error400"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error409"
-          },
-          "413": {
-            "$ref": "#/components/responses/Error413"
-          },
-          "415": {
-            "$ref": "#/components/responses/Error415"
-          },
-          "428": {
-            "$ref": "#/components/responses/Error428"
-          },
-          "429": {
-            "$ref": "#/components/responses/Error429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
-          }
-        }
-      }
-    },
-    "/api/v1/claims/validate": {
-      "post": {
-        "operationId": "post_api_v1_claims_validate",
-        "summary": "Validate and normalize claim input",
-        "tags": [
-          "Claims"
-        ],
-        "description": "",
-        "security": [
-          {
-            "session": [],
-            "csrf": []
-          },
-          {
-            "bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "Origin",
-            "in": "header",
+            "name": "cursor",
+            "in": "query",
             "required": false,
             "schema": {
               "type": "string",
-              "maxLength": 10000
-            },
-            "description": "Required for browser-session writes; must equal this service origin."
+              "maxLength": 10000,
+              "description": "Opaque next_cursor from the preceding response. Page size is 30."
+            }
           }
         ],
         "responses": {
@@ -1795,7 +1600,20 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/ClaimInput"
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Report"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"],
+                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                    }
+                  },
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -1833,27 +1651,13 @@
           "503": {
             "$ref": "#/components/responses/Error503"
           }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ClaimInput"
-              }
-            }
-          }
         }
-      }
-    },
-    "/api/v1/claims": {
+      },
       "post": {
-        "operationId": "post_api_v1_claims",
-        "summary": "Publish a claim",
-        "tags": [
-          "Claims"
-        ],
-        "description": "20 claims or revisions per user per UTC day. Evidence is a URL; proofs are not executed by this service.",
+        "operationId": "post_api_v1_reports",
+        "summary": "Publish a report and all its claims atomically",
+        "tags": ["Reports"],
+        "description": "20 report publications or revisions per user per UTC day. No drafts. All claims must target this exact crate version. Prepare the catalogue first. Repeating an API/property with different scope is allowed. At most 100 claims, subject to the 128 KiB total request limit.",
         "security": [
           {
             "session": [],
@@ -1900,9 +1704,7 @@
                       "minimum": 1
                     }
                   },
-                  "required": [
-                    "id"
-                  ]
+                  "required": ["id"]
                 }
               }
             }
@@ -1946,21 +1748,281 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/ClaimInput"
+                "$ref": "#/components/schemas/ReportInput"
               }
             }
           }
         }
       }
     },
-    "/api/v1/claims/{id}/revisions": {
+    "/api/v1/reports/validate": {
       "post": {
-        "operationId": "post_api_v1_claims_id_revisions",
-        "summary": "Revise your claim",
-        "tags": [
-          "Claims"
+        "operationId": "post_api_v1_reports_validate",
+        "summary": "Validate without saving and preview generated titles and membership changes",
+        "tags": ["Reports"],
+        "description": "Include report_id when previewing a revision; only its author may do so. Returns indexed claim validation errors. New claim IDs are null in the preview; omit them when publishing.",
+        "security": [
+          {
+            "session": [],
+            "csrf": []
+          },
+          {
+            "bearer": []
+          }
         ],
-        "description": "API and property are immutable. expected_revision must match the latest revision. Uses the shared daily claim quota.",
+        "parameters": [
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            },
+            "description": "Required for browser-session writes; must equal this service origin."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationResult"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ValidationInput"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{id}": {
+      "get": {
+        "operationId": "get_api_v1_reports_id",
+        "summary": "Read current report and all claims",
+        "tags": ["Reports"],
+        "description": "",
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{id}/revisions": {
+      "get": {
+        "operationId": "get_api_v1_reports_id_revisions",
+        "summary": "List report revisions",
+        "tags": ["Reports"],
+        "description": "",
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000,
+              "description": "Opaque next_cursor from the preceding response. Page size is 30."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "revision_no": {
+                            "type": "integer",
+                            "minimum": 1
+                          },
+                          "created_at": {
+                            "type": "string",
+                            "maxLength": 10000
+                          }
+                        },
+                        "required": ["revision_no", "created_at"]
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"],
+                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                    }
+                  },
+                  "required": ["items", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_api_v1_reports_id_revisions",
+        "summary": "Publish a complete replacement report revision atomically",
+        "tags": ["Reports"],
+        "description": "Author only. expected_revision must match. Include IDs for retained claims; omit IDs for new claims. Omitted existing claims are removed from the new revision but retain history, permanent URLs and stars. API/property and report crate/version are immutable. Withdrawn reports cannot be revised.",
         "security": [
           {
             "session": [],
@@ -2020,10 +2082,7 @@
                       "minimum": 1
                     }
                   },
-                  "required": [
-                    "id",
-                    "revision_no"
-                  ]
+                  "required": ["id", "revision_no"]
                 }
               }
             }
@@ -2074,13 +2133,93 @@
         }
       }
     },
-    "/api/v1/claims/{id}/withdrawal": {
-      "put": {
-        "operationId": "put_api_v1_claims_id_withdrawal",
-        "summary": "Withdraw your claim",
-        "tags": [
-          "Claims"
+    "/api/v1/reports/{id}/revisions/{n}": {
+      "get": {
+        "operationId": "get_api_v1_reports_id_revisions_n",
+        "summary": "Read a specific immutable report revision",
+        "tags": ["Reports"],
+        "description": "",
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
         ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "n",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ReportDetail"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{id}/withdrawal": {
+      "put": {
+        "operationId": "put_api_v1_reports_id_withdrawal",
+        "summary": "Withdraw a report; retain public history and discussion",
+        "tags": ["Reports"],
         "description": "",
         "security": [
           {
@@ -2156,13 +2295,521 @@
         }
       }
     },
-    "/api/v1/claims/{id}/comments": {
-      "get": {
-        "operationId": "get_api_v1_claims_id_comments",
-        "summary": "List root comments or replies",
-        "tags": [
-          "Claims"
+    "/api/v1/reports/{id}/star": {
+      "put": {
+        "operationId": "put_api_v1_reports_id_star",
+        "summary": "Star report",
+        "tags": ["Reports"],
+        "description": "Idempotent. Stars are independent of revisions. Self-stars are allowed; they do not add karma. Only report stars contribute to karma.",
+        "security": [
+          {
+            "session": [],
+            "csrf": []
+          }
         ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            },
+            "description": "Required for browser-session writes; must equal this service origin."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_api_v1_reports_id_star",
+        "summary": "Unstar report",
+        "tags": ["Reports"],
+        "description": "Idempotent. Stars are independent of revisions. Self-stars are allowed; they do not add karma. Only report stars contribute to karma.",
+        "security": [
+          {
+            "session": [],
+            "csrf": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            },
+            "description": "Required for browser-session writes; must equal this service origin."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/v1/me/starred-reports": {
+      "get": {
+        "operationId": "get_api_v1_me_starred_reports",
+        "summary": "List your starred reports",
+        "tags": ["Registry"],
+        "description": "",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000,
+              "description": "Opaque next_cursor from the preceding response. Page size is 30."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Report"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "starred_at": {
+                                "type": "string",
+                                "maxLength": 10000
+                              }
+                            },
+                            "required": ["starred_at"]
+                          }
+                        ]
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"],
+                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                    }
+                  },
+                  "required": ["items", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/v1/claims/{id}/star": {
+      "put": {
+        "operationId": "put_api_v1_claims_id_star",
+        "summary": "Star claim",
+        "tags": ["Claims"],
+        "description": "Idempotent. Stars are independent of revisions. Self-stars are allowed; they do not add karma. Only report stars contribute to karma.",
+        "security": [
+          {
+            "session": [],
+            "csrf": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            },
+            "description": "Required for browser-session writes; must equal this service origin."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "delete": {
+        "operationId": "delete_api_v1_claims_id_star",
+        "summary": "Unstar claim",
+        "tags": ["Claims"],
+        "description": "Idempotent. Stars are independent of revisions. Self-stars are allowed; they do not add karma. Only report stars contribute to karma.",
+        "security": [
+          {
+            "session": [],
+            "csrf": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            },
+            "description": "Required for browser-session writes; must equal this service origin."
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Ok"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/v1/me/starred-claims": {
+      "get": {
+        "operationId": "get_api_v1_me_starred_claims",
+        "summary": "List your starred claims",
+        "tags": ["Registry"],
+        "description": "",
+        "security": [
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000,
+              "description": "Opaque next_cursor from the preceding response. Page size is 30."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "allOf": [
+                          {
+                            "$ref": "#/components/schemas/Claim"
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "starred_at": {
+                                "type": "string",
+                                "maxLength": 10000
+                              }
+                            },
+                            "required": ["starred_at"]
+                          }
+                        ]
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"],
+                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                    }
+                  },
+                  "required": ["items", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/v1/reports/{id}/comments": {
+      "get": {
+        "operationId": "get_api_v1_reports_id_comments",
+        "summary": "List root comments or replies",
+        "tags": ["Reports"],
         "description": "Omit parent_id for roots. Deleted or hidden comments remain as tombstones; body is null.",
         "security": [
           {},
@@ -2218,17 +2865,11 @@
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -2269,11 +2910,9 @@
         }
       },
       "post": {
-        "operationId": "post_api_v1_claims_id_comments",
+        "operationId": "post_api_v1_reports_id_comments",
         "summary": "Post a comment or reply",
-        "tags": [
-          "Claims"
-        ],
+        "tags": ["Reports"],
         "description": "100 new comments per user per UTC day.",
         "security": [
           {
@@ -2327,9 +2966,7 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": [
-                    "id"
-                  ]
+                  "required": ["id"]
                 }
               }
             }
@@ -2389,10 +3026,7 @@
                     "maxLength": 100
                   }
                 },
-                "required": [
-                  "body",
-                  "revision_no"
-                ]
+                "required": ["body", "revision_no"]
               }
             }
           }
@@ -2403,9 +3037,7 @@
       "get": {
         "operationId": "get_api_v1_comments_id",
         "summary": "Get comment and ancestor IDs",
-        "tags": [
-          "Comments"
-        ],
+        "tags": ["Comments"],
         "description": "",
         "security": [
           {},
@@ -2445,9 +3077,7 @@
                           }
                         }
                       },
-                      "required": [
-                        "ancestors"
-                      ]
+                      "required": ["ancestors"]
                     }
                   ]
                 }
@@ -2492,9 +3122,7 @@
       "patch": {
         "operationId": "patch_api_v1_comments_id",
         "summary": "Edit your comment",
-        "tags": [
-          "Comments"
-        ],
+        "tags": ["Comments"],
         "description": "",
         "security": [
           {
@@ -2539,10 +3167,7 @@
                       "minimum": 1
                     }
                   },
-                  "required": [
-                    "ok",
-                    "edit_version"
-                  ]
+                  "required": ["ok", "edit_version"]
                 }
               }
             }
@@ -2598,10 +3223,7 @@
                     "minimum": 1
                   }
                 },
-                "required": [
-                  "body",
-                  "edit_version"
-                ]
+                "required": ["body", "edit_version"]
               }
             }
           }
@@ -2610,9 +3232,7 @@
       "delete": {
         "operationId": "delete_api_v1_comments_id",
         "summary": "Delete your comment",
-        "tags": [
-          "Comments"
-        ],
+        "tags": ["Comments"],
         "description": "Requires JSON body. Leaves a discussion tombstone; history is private.",
         "security": [
           {
@@ -2657,10 +3277,7 @@
                       "minimum": 1
                     }
                   },
-                  "required": [
-                    "ok",
-                    "edit_version"
-                  ]
+                  "required": ["ok", "edit_version"]
                 }
               }
             }
@@ -2711,9 +3328,7 @@
                     "minimum": 1
                   }
                 },
-                "required": [
-                  "edit_version"
-                ]
+                "required": ["edit_version"]
               }
             }
           }
@@ -2724,9 +3339,7 @@
       "put": {
         "operationId": "put_api_v1_comments_id_vote",
         "summary": "Set comment vote",
-        "tags": [
-          "Comments"
-        ],
+        "tags": ["Comments"],
         "description": "",
         "security": [
           {
@@ -2808,15 +3421,10 @@
                 "type": "object",
                 "properties": {
                   "value": {
-                    "enum": [
-                      -1,
-                      1
-                    ]
+                    "enum": [-1, 1]
                   }
                 },
-                "required": [
-                  "value"
-                ]
+                "required": ["value"]
               }
             }
           }
@@ -2825,9 +3433,7 @@
       "delete": {
         "operationId": "delete_api_v1_comments_id_vote",
         "summary": "Remove comment vote",
-        "tags": [
-          "Comments"
-        ],
+        "tags": ["Comments"],
         "description": "",
         "security": [
           {
@@ -2863,318 +3469,6 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Ok"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error400"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error409"
-          },
-          "413": {
-            "$ref": "#/components/responses/Error413"
-          },
-          "415": {
-            "$ref": "#/components/responses/Error415"
-          },
-          "428": {
-            "$ref": "#/components/responses/Error428"
-          },
-          "429": {
-            "$ref": "#/components/responses/Error429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
-          }
-        }
-      }
-    },
-    "/api/v1/claims/{id}/revisions/{n}/accept": {
-      "put": {
-        "operationId": "put_api_v1_claims_id_revisions_n_accept",
-        "summary": "Accept revision",
-        "tags": [
-          "Claims"
-        ],
-        "description": "",
-        "security": [
-          {
-            "session": [],
-            "csrf": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "n",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "Origin",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            },
-            "description": "Required for browser-session writes; must equal this service origin."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Ok"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error400"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error409"
-          },
-          "413": {
-            "$ref": "#/components/responses/Error413"
-          },
-          "415": {
-            "$ref": "#/components/responses/Error415"
-          },
-          "428": {
-            "$ref": "#/components/responses/Error428"
-          },
-          "429": {
-            "$ref": "#/components/responses/Error429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
-          }
-        }
-      },
-      "delete": {
-        "operationId": "delete_api_v1_claims_id_revisions_n_accept",
-        "summary": "Remove acceptance",
-        "tags": [
-          "Claims"
-        ],
-        "description": "",
-        "security": [
-          {
-            "session": [],
-            "csrf": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "n",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "Origin",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            },
-            "description": "Required for browser-session writes; must equal this service origin."
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Ok"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error400"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error409"
-          },
-          "413": {
-            "$ref": "#/components/responses/Error413"
-          },
-          "415": {
-            "$ref": "#/components/responses/Error415"
-          },
-          "428": {
-            "$ref": "#/components/responses/Error428"
-          },
-          "429": {
-            "$ref": "#/components/responses/Error429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
-          }
-        }
-      }
-    },
-    "/api/v1/claims/{id}/revisions/{n}/accepts": {
-      "get": {
-        "operationId": "get_api_v1_claims_id_revisions_n_accepts",
-        "summary": "List revision acceptors",
-        "tags": [
-          "Claims"
-        ],
-        "description": "",
-        "security": [
-          {},
-          {
-            "session": []
-          },
-          {
-            "bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "n",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000,
-              "description": "Opaque next_cursor from the preceding response. Page size is 30."
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "user_id": {
-                            "type": "string",
-                            "maxLength": 10000
-                          },
-                          "username": {
-                            "type": "string",
-                            "maxLength": 10000
-                          },
-                          "created_at": {
-                            "type": "string",
-                            "maxLength": 10000
-                          }
-                        },
-                        "required": [
-                          "user_id",
-                          "username",
-                          "created_at"
-                        ]
-                      }
-                    },
-                    "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
-                    }
-                  },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
                 }
               }
             }
@@ -3219,9 +3513,7 @@
       "get": {
         "operationId": "get_api_v1_users_id",
         "summary": "Get public account activity profile",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -3315,13 +3607,11 @@
         }
       }
     },
-    "/api/v1/users/{id}/claims": {
+    "/api/v1/users/{id}/reports": {
       "get": {
-        "operationId": "get_api_v1_users_id_claims",
-        "summary": "List user claims",
-        "tags": [
-          "Claims"
-        ],
+        "operationId": "get_api_v1_users_id_reports",
+        "summary": "List user reports",
+        "tags": ["Reports"],
         "description": "Deleted comments are excluded from activity.",
         "security": [
           {},
@@ -3361,21 +3651,15 @@
                     "items": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/Claim"
+                        "$ref": "#/components/schemas/Report"
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -3420,9 +3704,7 @@
       "get": {
         "operationId": "get_api_v1_users_id_comments",
         "summary": "List user comments",
-        "tags": [
-          "Comments"
-        ],
+        "tags": ["Comments"],
         "description": "Deleted comments are excluded from activity.",
         "security": [
           {},
@@ -3466,17 +3748,11 @@
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -3517,13 +3793,11 @@
         }
       }
     },
-    "/api/v1/me/claims": {
+    "/api/v1/me/reports": {
       "get": {
-        "operationId": "get_api_v1_me_claims",
-        "summary": "List user claims",
-        "tags": [
-          "Claims"
-        ],
+        "operationId": "get_api_v1_me_reports",
+        "summary": "List user reports",
+        "tags": ["Reports"],
         "description": "Deleted comments are excluded from activity.",
         "security": [
           {
@@ -3556,21 +3830,15 @@
                     "items": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/Claim"
+                        "$ref": "#/components/schemas/Report"
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -3615,9 +3883,7 @@
       "get": {
         "operationId": "get_api_v1_me_comments",
         "summary": "List user comments",
-        "tags": [
-          "Comments"
-        ],
+        "tags": ["Comments"],
         "description": "Deleted comments are excluded from activity.",
         "security": [
           {
@@ -3651,124 +3917,11 @@
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error400"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error409"
-          },
-          "413": {
-            "$ref": "#/components/responses/Error413"
-          },
-          "415": {
-            "$ref": "#/components/responses/Error415"
-          },
-          "428": {
-            "$ref": "#/components/responses/Error428"
-          },
-          "429": {
-            "$ref": "#/components/responses/Error429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
-          }
-        }
-      }
-    },
-    "/api/v1/me/accepts": {
-      "get": {
-        "operationId": "get_api_v1_me_accepts",
-        "summary": "List your accepted revisions",
-        "tags": [
-          "Registry"
-        ],
-        "description": "",
-        "security": [
-          {
-            "session": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "cursor",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000,
-              "description": "Opaque next_cursor from the preceding response. Page size is 30."
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "items": {
-                      "type": "array",
-                      "items": {
-                        "allOf": [
-                          {
-                            "$ref": "#/components/schemas/Claim"
-                          },
-                          {
-                            "type": "object",
-                            "properties": {
-                              "accepted_at": {
-                                "type": "string",
-                                "maxLength": 10000
-                              }
-                            },
-                            "required": [
-                              "accepted_at"
-                            ]
-                          }
-                        ]
-                      }
-                    },
-                    "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
-                    }
-                  },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -3813,9 +3966,7 @@
       "get": {
         "operationId": "get_api_v1_tools",
         "summary": "List registered tools and versions",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -3848,10 +3999,7 @@
                       }
                     }
                   },
-                  "required": [
-                    "items",
-                    "versions"
-                  ]
+                  "required": ["items", "versions"]
                 }
               }
             }
@@ -3896,9 +4044,7 @@
       "get": {
         "operationId": "get_api_v1_tools_slug",
         "summary": "Get registered tool",
-        "tags": [
-          "Registry"
-        ],
+        "tags": ["Registry"],
         "description": "",
         "security": [
           {},
@@ -3940,9 +4086,7 @@
                           }
                         }
                       },
-                      "required": [
-                        "versions"
-                      ]
+                      "required": ["versions"]
                     }
                   ]
                 }
@@ -3985,13 +4129,11 @@
         }
       }
     },
-    "/api/v1/tools/{slug}/claims": {
+    "/api/v1/tools/{slug}/reports": {
       "get": {
-        "operationId": "get_api_v1_tools_slug_claims",
-        "summary": "List claims using a tool",
-        "tags": [
-          "Claims"
-        ],
+        "operationId": "get_api_v1_tools_slug_reports",
+        "summary": "List reports using a tool",
+        "tags": ["Reports"],
         "description": "",
         "security": [
           {},
@@ -4034,21 +4176,15 @@
                     "items": {
                       "type": "array",
                       "items": {
-                        "$ref": "#/components/schemas/Claim"
+                        "$ref": "#/components/schemas/Report"
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
+                      "type": ["string", "null"],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": [
-                    "items",
-                    "next_cursor"
-                  ]
+                  "required": ["items", "next_cursor"]
                 }
               }
             }
@@ -4093,9 +4229,7 @@
       "post": {
         "operationId": "post_api_v1_publish_prepare",
         "summary": "Prepare exact crate version",
-        "tags": [
-          "Imports"
-        ],
+        "tags": ["Imports"],
         "description": "Returns 200 when cached, otherwise 202 with an import job ID. Poll GET /imports/{id}. 5 new imports per user per UTC day, 50 per IP. No proof execution.",
         "security": [
           {
@@ -4138,11 +4272,7 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": [
-                    "status",
-                    "crate",
-                    "version"
-                  ]
+                  "required": ["status", "crate", "version"]
                 }
               }
             }
@@ -4209,10 +4339,7 @@
                     "minLength": 1
                   }
                 },
-                "required": [
-                  "crate",
-                  "version"
-                ]
+                "required": ["crate", "version"]
               }
             }
           }
@@ -4223,9 +4350,7 @@
       "get": {
         "operationId": "get_api_v1_imports_id",
         "summary": "Check import status",
-        "tags": [
-          "Imports"
-        ],
+        "tags": ["Imports"],
         "description": "",
         "security": [
           {
@@ -4297,9 +4422,7 @@
       "post": {
         "operationId": "post_auth_device_code",
         "summary": "Start CLI browser authorization",
-        "tags": [
-          "Authentication"
-        ],
+        "tags": ["Authentication"],
         "description": "Device Flow with a fixed public client. Request expires in 600 seconds; initial poll interval 5 seconds. 30 starts per IP per UTC day. Display the user_code in the terminal before opening verification_uri_complete.",
         "security": [],
         "parameters": [],
@@ -4398,9 +4521,7 @@
                     "const": "publish"
                   }
                 },
-                "required": [
-                  "client_id"
-                ]
+                "required": ["client_id"]
               }
             },
             "application/x-www-form-urlencoded": {
@@ -4414,9 +4535,7 @@
                     "const": "publish"
                   }
                 },
-                "required": [
-                  "client_id"
-                ]
+                "required": ["client_id"]
               }
             }
           }
@@ -4427,9 +4546,7 @@
       "post": {
         "operationId": "post_auth_device_token",
         "summary": "Poll authorization and exchange once",
-        "tags": [
-          "Authentication"
-        ],
+        "tags": ["Authentication"],
         "description": "400 authorization_pending: keep polling. 400 slow_down: increase interval by 5 seconds (server caps interval at 60 seconds). expired_token, access_denied, invalid_grant: stop. 429: stop or retry later. Token expires in 90 days; no refresh token. Exchange succeeds once; if the response is lost, start login again. 10000 polls per IP per UTC day.",
         "security": [],
         "parameters": [],
@@ -4524,11 +4641,7 @@
                     "const": "urn:ietf:params:oauth:grant-type:device_code"
                   }
                 },
-                "required": [
-                  "client_id",
-                  "device_code",
-                  "grant_type"
-                ]
+                "required": ["client_id", "device_code", "grant_type"]
               }
             },
             "application/x-www-form-urlencoded": {
@@ -4546,11 +4659,7 @@
                     "const": "urn:ietf:params:oauth:grant-type:device_code"
                   }
                 },
-                "required": [
-                  "client_id",
-                  "device_code",
-                  "grant_type"
-                ]
+                "required": ["client_id", "device_code", "grant_type"]
               }
             }
           }
@@ -4561,9 +4670,7 @@
       "post": {
         "operationId": "post_auth_device_inspect",
         "summary": "Inspect device request",
-        "tags": [
-          "Authentication"
-        ],
+        "tags": ["Authentication"],
         "description": "Browser only. Requires current terms. 100 code inspections/approvals per IP per UTC day.",
         "security": [
           {
@@ -4592,22 +4699,14 @@
                   "type": "object",
                   "properties": {
                     "state": {
-                      "enum": [
-                        "pending",
-                        "approved",
-                        "denied",
-                        "consumed"
-                      ]
+                      "enum": ["pending", "approved", "denied", "consumed"]
                     },
                     "expires_at": {
                       "type": "string",
                       "maxLength": 10000
                     }
                   },
-                  "required": [
-                    "state",
-                    "expires_at"
-                  ]
+                  "required": ["state", "expires_at"]
                 }
               }
             }
@@ -4658,9 +4757,7 @@
                     "maxLength": 20
                   }
                 },
-                "required": [
-                  "user_code"
-                ]
+                "required": ["user_code"]
               }
             }
           }
@@ -4671,9 +4768,7 @@
       "post": {
         "operationId": "post_auth_device_approve",
         "summary": "Authorize device request",
-        "tags": [
-          "Authentication"
-        ],
+        "tags": ["Authentication"],
         "description": "Browser only. Requires current terms. 100 code inspections/approvals per IP per UTC day.",
         "security": [
           {
@@ -4750,9 +4845,7 @@
                     "maxLength": 20
                   }
                 },
-                "required": [
-                  "user_code"
-                ]
+                "required": ["user_code"]
               }
             }
           }
@@ -4763,9 +4856,7 @@
       "get": {
         "operationId": "get_api_v1_me_tokens",
         "summary": "List your unexpired, unrevoked tokens",
-        "tags": [
-          "Tokens"
-        ],
+        "tags": ["Tokens"],
         "description": "UUID is a public management identifier, never the secret token. Last used is updated at most once per hour. No token names are stored.",
         "security": [
           {
@@ -4788,9 +4879,7 @@
                       }
                     }
                   },
-                  "required": [
-                    "items"
-                  ]
+                  "required": ["items"]
                 }
               }
             }
@@ -4835,9 +4924,7 @@
       "delete": {
         "operationId": "delete_api_v1_me_tokens_id",
         "summary": "Revoke your token",
-        "tags": [
-          "Tokens"
-        ],
+        "tags": ["Tokens"],
         "description": "Idempotent. Only tokens belonging to the current user can be revoked.",
         "security": [
           {
@@ -4917,9 +5004,7 @@
       "post": {
         "operationId": "post_api_v1_tokens_revoke",
         "summary": "Revoke the current CLI token",
-        "tags": [
-          "Tokens"
-        ],
+        "tags": ["Tokens"],
         "description": "Use for CLI logout. Works even if terms have changed.",
         "security": [
           {
@@ -4978,9 +5063,7 @@
       "post": {
         "operationId": "post_auth_logout",
         "summary": "Sign out of browser session",
-        "tags": [
-          "Authentication"
-        ],
+        "tags": ["Authentication"],
         "description": "",
         "security": [
           {
@@ -5051,9 +5134,7 @@
       "get": {
         "operationId": "get_auth_github",
         "summary": "Start GitHub sign-in",
-        "tags": [
-          "Authentication"
-        ],
+        "tags": ["Authentication"],
         "description": "",
         "security": [],
         "parameters": [
@@ -5085,9 +5166,7 @@
       "get": {
         "operationId": "get_auth_github_callback",
         "summary": "Complete GitHub sign-in",
-        "tags": [
-          "Authentication"
-        ],
+        "tags": ["Authentication"],
         "description": "",
         "security": [],
         "parameters": [
@@ -5159,12 +5238,7 @@
             "type": "string"
           }
         },
-        "required": [
-          "id",
-          "registry",
-          "name",
-          "description"
-        ]
+        "required": ["id", "registry", "name", "description"]
       },
       "releases": {
         "type": "object",
@@ -5179,10 +5253,7 @@
             "type": "string"
           },
           "checksum": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "yanked": {
             "type": "integer"
@@ -5239,176 +5310,6 @@
           "upstream_url"
         ]
       },
-      "claims": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer"
-          },
-          "create_key": {
-            "type": "string"
-          },
-          "api_item_id": {
-            "type": "string"
-          },
-          "property": {
-            "type": "string"
-          },
-          "author_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "visibility": {
-            "type": "string"
-          },
-          "withdrawn_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "created_at": {
-            "type": "string"
-          },
-          "updated_at": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "create_key",
-          "api_item_id",
-          "property",
-          "author_id",
-          "visibility",
-          "withdrawn_at",
-          "created_at",
-          "updated_at"
-        ]
-      },
-      "claim_revisions": {
-        "type": "object",
-        "properties": {
-          "claim_id": {
-            "type": "integer"
-          },
-          "revision_no": {
-            "type": "integer"
-          },
-          "title": {
-            "type": "string"
-          },
-          "precondition": {
-            "type": "string"
-          },
-          "explanation": {
-            "type": "string"
-          },
-          "trusted_assumptions": {
-            "type": "string"
-          },
-          "tool_version_id": {
-            "type": "string"
-          },
-          "environment": {
-            "type": "string"
-          },
-          "evidence_url": {
-            "type": "string"
-          },
-          "limitations": {
-            "type": "string"
-          },
-          "created_at": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "claim_id",
-          "revision_no",
-          "title",
-          "precondition",
-          "explanation",
-          "trusted_assumptions",
-          "tool_version_id",
-          "environment",
-          "evidence_url",
-          "limitations",
-          "created_at"
-        ]
-      },
-      "comments": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "claim_id": {
-            "type": "integer"
-          },
-          "sequence_no": {
-            "type": "integer"
-          },
-          "revision_no": {
-            "type": "integer"
-          },
-          "author_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "reply_to_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "body": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "edit_version": {
-            "type": "integer"
-          },
-          "created_at": {
-            "type": "string"
-          },
-          "edited_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "deleted_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "visibility": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "id",
-          "claim_id",
-          "sequence_no",
-          "revision_no",
-          "author_id",
-          "reply_to_id",
-          "body",
-          "edit_version",
-          "created_at",
-          "edited_at",
-          "deleted_at",
-          "visibility"
-        ]
-      },
       "tools": {
         "type": "object",
         "properties": {
@@ -5428,13 +5329,7 @@
             "type": "integer"
           }
         },
-        "required": [
-          "id",
-          "name",
-          "description",
-          "official_url",
-          "active"
-        ]
+        "required": ["id", "name", "description", "official_url", "active"]
       },
       "tool_versions": {
         "type": "object",
@@ -5452,161 +5347,15 @@
             "type": "integer"
           }
         },
-        "required": [
-          "id",
-          "tool_id",
-          "version",
-          "selectable"
-        ]
+        "required": ["id", "tool_id", "version", "selectable"]
       },
-      "Claim": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "integer"
-          },
-          "api_item_id": {
-            "type": "string"
-          },
-          "property": {
-            "type": "string"
-          },
-          "author_id": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "visibility": {
-            "type": "string"
-          },
-          "withdrawn_at": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "created_at": {
-            "type": "string"
-          },
-          "updated_at": {
-            "type": "string"
-          },
-          "revision_no": {
-            "type": "integer"
-          },
-          "title": {
-            "type": "string"
-          },
-          "precondition": {
-            "type": "string"
-          },
-          "explanation": {
-            "type": "string"
-          },
-          "trusted_assumptions": {
-            "type": "string"
-          },
-          "tool_version_id": {
-            "type": "string"
-          },
-          "environment": {
-            "type": "string"
-          },
-          "evidence_url": {
-            "type": "string"
-          },
-          "limitations": {
-            "type": "string"
-          },
-          "display_path": {
-            "type": "string",
-            "maxLength": 10000
-          },
-          "signature": {
-            "type": "string",
-            "maxLength": 10000
-          },
-          "upstream_url": {
-            "type": "string",
-            "maxLength": 10000
-          },
-          "crate": {
-            "type": "string",
-            "maxLength": 10000
-          },
-          "version": {
-            "type": "string",
-            "maxLength": 10000
-          },
-          "username": {
-            "type": "string",
-            "maxLength": 10000
-          },
-          "tool": {
-            "type": "string",
-            "maxLength": 10000
-          },
-          "tool_version": {
-            "type": "string",
-            "maxLength": 10000
-          },
-          "latest_revision_no": {
-            "type": "integer"
-          },
-          "is_unsafe": {
-            "type": "integer"
-          },
-          "yanked": {
-            "type": "integer"
-          },
-          "comment_count": {
-            "type": "integer"
-          },
-          "accept_count": {
-            "type": "integer"
-          }
-        },
-        "required": [
-          "id",
-          "api_item_id",
-          "property",
-          "author_id",
-          "visibility",
-          "withdrawn_at",
-          "created_at",
-          "updated_at",
-          "revision_no",
-          "title",
-          "precondition",
-          "explanation",
-          "trusted_assumptions",
-          "tool_version_id",
-          "environment",
-          "evidence_url",
-          "limitations",
-          "display_path",
-          "signature",
-          "upstream_url",
-          "crate",
-          "version",
-          "username",
-          "tool",
-          "tool_version",
-          "latest_revision_no",
-          "is_unsafe",
-          "yanked",
-          "comment_count",
-          "accept_count"
-        ]
-      },
-      "Comment": {
+      "report_comments": {
         "type": "object",
         "properties": {
           "id": {
             "type": "string"
           },
-          "claim_id": {
+          "report_id": {
             "type": "integer"
           },
           "sequence_no": {
@@ -5616,22 +5365,13 @@
             "type": "integer"
           },
           "author_id": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "reply_to_id": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "body": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "edit_version": {
             "type": "integer"
@@ -5640,42 +5380,18 @@
             "type": "string"
           },
           "edited_at": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "deleted_at": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
-          "username": {
-            "type": [
-              "string",
-              "null"
-            ]
-          },
-          "score": {
-            "type": "integer"
-          },
-          "my_vote": {
-            "type": [
-              "integer",
-              "null"
-            ]
-          },
-          "reply_count": {
-            "type": "integer"
-          },
-          "hidden": {
-            "type": "boolean"
+          "visibility": {
+            "type": "string"
           }
         },
         "required": [
           "id",
-          "claim_id",
+          "report_id",
           "sequence_no",
           "revision_no",
           "author_id",
@@ -5685,11 +5401,7 @@
           "created_at",
           "edited_at",
           "deleted_at",
-          "username",
-          "score",
-          "my_vote",
-          "reply_count",
-          "hidden"
+          "visibility"
         ]
       },
       "Error": {
@@ -5708,9 +5420,7 @@
             "maxLength": 10000
           }
         },
-        "required": [
-          "error"
-        ]
+        "required": ["error"]
       },
       "Ok": {
         "type": "object",
@@ -5719,48 +5429,85 @@
             "const": true
           }
         },
-        "required": [
-          "ok"
-        ]
+        "required": ["ok"]
       },
       "ClaimInput": {
         "type": "object",
         "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 10000,
+            "format": "uuid",
+            "description": "Only for an existing claim in a report revision. Omit for new claims."
+          },
           "api_item_id": {
             "type": "string",
             "maxLength": 200,
             "minLength": 1
           },
           "property": {
-            "enum": [
-              "no_ub",
-              "panic_contract"
-            ]
+            "enum": ["no_ub", "panic_contract"]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Optional. Empty or omitted titles are generated from the property, API path and report tool/version."
+          },
+          "precondition": {
+            "type": "string",
+            "maxLength": 10000,
+            "description": "Required for panic_contract and unsafe APIs."
+          },
+          "explanation": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "trusted_assumptions": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "evidence_url": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "HTTP(S) URL or empty. At least the shared or individual evidence URL is required for each claim."
+          },
+          "limitations": {
+            "type": "string",
+            "maxLength": 10000
+          }
+        },
+        "required": ["api_item_id", "property"]
+      },
+      "ReportInput": {
+        "type": "object",
+        "properties": {
+          "crate": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1
           },
           "title": {
             "type": "string",
             "maxLength": 1000,
             "minLength": 1
           },
-          "precondition": {
-            "type": "string",
-            "maxLength": 10000,
-            "description": "Required for panic_contract and unsafe APIs. May be omitted for safe no_ub claims."
-          },
-          "explanation": {
-            "type": "string",
-            "maxLength": 10000,
-            "description": "May be an empty string."
-          },
-          "trusted_assumptions": {
-            "type": "string",
-            "maxLength": 10000,
-            "description": "May be an empty string."
-          },
           "tool_version_id": {
             "type": "string",
             "maxLength": 200,
             "minLength": 1
+          },
+          "explanation": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "trusted_assumptions": {
+            "type": "string",
+            "maxLength": 10000
           },
           "environment": {
             "type": "string",
@@ -5768,29 +5515,27 @@
           },
           "evidence_url": {
             "type": "string",
-            "maxLength": 1000,
-            "format": "uri",
-            "pattern": "^https?://"
+            "maxLength": 1000
           },
           "limitations": {
             "type": "string",
             "maxLength": 10000
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ClaimInput"
+            },
+            "minItems": 1,
+            "maxItems": 100
           }
         },
-        "required": [
-          "api_item_id",
-          "property",
-          "title",
-          "explanation",
-          "trusted_assumptions",
-          "tool_version_id",
-          "evidence_url"
-        ]
+        "required": ["crate", "version", "title", "tool_version_id", "claims"]
       },
       "RevisionInput": {
         "allOf": [
           {
-            "$ref": "#/components/schemas/ClaimInput"
+            "$ref": "#/components/schemas/ReportInput"
           },
           {
             "type": "object",
@@ -5800,10 +5545,609 @@
                 "minimum": 1
               }
             },
-            "required": [
-              "expected_revision"
-            ]
+            "required": ["expected_revision"]
           }
+        ]
+      },
+      "ValidationInput": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/ReportInput"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "report_id": {
+                "type": "integer",
+                "minimum": 1
+              }
+            },
+            "required": []
+          }
+        ]
+      },
+      "NormalizedClaimInput": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": ["string", "null"],
+            "format": "uuid"
+          },
+          "api_item_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1
+          },
+          "property": {
+            "enum": ["no_ub", "panic_contract"]
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "Optional. Empty or omitted titles are generated from the property, API path and report tool/version."
+          },
+          "precondition": {
+            "type": "string",
+            "maxLength": 10000,
+            "description": "Required for panic_contract and unsafe APIs."
+          },
+          "explanation": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "trusted_assumptions": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "evidence_url": {
+            "type": "string",
+            "maxLength": 1000,
+            "description": "HTTP(S) URL or empty. At least the shared or individual evidence URL is required for each claim."
+          },
+          "limitations": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "display_path": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "is_unsafe": {
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "api_item_id",
+          "property",
+          "title",
+          "precondition",
+          "explanation",
+          "trusted_assumptions",
+          "evidence_url",
+          "limitations",
+          "display_path",
+          "is_unsafe"
+        ]
+      },
+      "ValidationResult": {
+        "type": "object",
+        "properties": {
+          "crate": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 1000,
+            "minLength": 1
+          },
+          "tool_version_id": {
+            "type": "string",
+            "maxLength": 200,
+            "minLength": 1
+          },
+          "explanation": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "trusted_assumptions": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "environment": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "evidence_url": {
+            "type": "string",
+            "maxLength": 1000
+          },
+          "limitations": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "claims": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/NormalizedClaimInput"
+            }
+          },
+          "release_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "tool": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "tool_version": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "changes": {
+            "type": "object",
+            "properties": {
+              "added": {
+                "type": "integer"
+              },
+              "retained": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 10000
+                }
+              },
+              "removed": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 10000
+                }
+              }
+            },
+            "required": ["added", "retained", "removed"]
+          }
+        },
+        "required": [
+          "crate",
+          "version",
+          "title",
+          "tool_version_id",
+          "explanation",
+          "trusted_assumptions",
+          "environment",
+          "evidence_url",
+          "limitations",
+          "claims",
+          "release_id",
+          "tool",
+          "tool_version",
+          "changes"
+        ]
+      },
+      "Report": {
+        "type": "object",
+        "properties": {
+          "title": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "explanation": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "trusted_assumptions": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "environment": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "evidence_url": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "limitations": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "tool_version_id": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "created_at": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "updated_at": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "crate": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "tool": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "tool_version": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "visibility": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "id": {
+            "type": "integer"
+          },
+          "release_id": {
+            "type": "integer"
+          },
+          "revision_no": {
+            "type": "integer"
+          },
+          "latest_revision_no": {
+            "type": "integer"
+          },
+          "star_count": {
+            "type": "integer"
+          },
+          "comment_count": {
+            "type": "integer"
+          },
+          "claim_count": {
+            "type": "integer"
+          },
+          "author_karma": {
+            "type": "integer"
+          },
+          "yanked": {
+            "type": "integer"
+          },
+          "author_id": {
+            "type": ["string", "null"]
+          },
+          "username": {
+            "type": ["string", "null"]
+          },
+          "withdrawn_at": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": [
+          "title",
+          "explanation",
+          "trusted_assumptions",
+          "environment",
+          "evidence_url",
+          "limitations",
+          "tool_version_id",
+          "created_at",
+          "updated_at",
+          "crate",
+          "version",
+          "tool",
+          "tool_version",
+          "visibility",
+          "id",
+          "release_id",
+          "revision_no",
+          "latest_revision_no",
+          "star_count",
+          "comment_count",
+          "claim_count",
+          "author_karma",
+          "yanked",
+          "author_id",
+          "username",
+          "withdrawn_at"
+        ]
+      },
+      "Claim": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "api_item_id": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "property": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "created_at": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "title": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "precondition": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "explanation": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "trusted_assumptions": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "evidence_url": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "limitations": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "display_path": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "signature": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "upstream_url": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "report_title": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "shared_explanation": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "shared_trusted_assumptions": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "shared_evidence_url": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "shared_limitations": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "environment": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "tool_version_id": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "crate": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "version": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "tool": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "tool_version": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "visibility": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "report_id": {
+            "type": "integer"
+          },
+          "report_revision": {
+            "type": "integer"
+          },
+          "latest_report_revision": {
+            "type": "integer"
+          },
+          "position": {
+            "type": "integer"
+          },
+          "star_count": {
+            "type": "integer"
+          },
+          "report_star_count": {
+            "type": "integer"
+          },
+          "report_comment_count": {
+            "type": "integer"
+          },
+          "author_karma": {
+            "type": "integer"
+          },
+          "is_unsafe": {
+            "type": "integer"
+          },
+          "in_current_report": {
+            "type": "integer"
+          },
+          "author_id": {
+            "type": ["string", "null"]
+          },
+          "username": {
+            "type": ["string", "null"]
+          },
+          "withdrawn_at": {
+            "type": ["string", "null"]
+          }
+        },
+        "required": [
+          "id",
+          "api_item_id",
+          "property",
+          "created_at",
+          "title",
+          "precondition",
+          "explanation",
+          "trusted_assumptions",
+          "evidence_url",
+          "limitations",
+          "display_path",
+          "signature",
+          "upstream_url",
+          "report_title",
+          "shared_explanation",
+          "shared_trusted_assumptions",
+          "shared_evidence_url",
+          "shared_limitations",
+          "environment",
+          "tool_version_id",
+          "crate",
+          "version",
+          "tool",
+          "tool_version",
+          "visibility",
+          "report_id",
+          "report_revision",
+          "latest_report_revision",
+          "position",
+          "star_count",
+          "report_star_count",
+          "report_comment_count",
+          "author_karma",
+          "is_unsafe",
+          "in_current_report",
+          "author_id",
+          "username",
+          "withdrawn_at"
+        ]
+      },
+      "ClaimDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Claim"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "my_star": {
+                "type": "boolean"
+              }
+            },
+            "required": ["my_star"]
+          }
+        ]
+      },
+      "ReportDetail": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Report"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "my_star": {
+                "type": "boolean"
+              },
+              "claims": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ClaimDetail"
+                }
+              }
+            },
+            "required": ["my_star", "claims"]
+          }
+        ]
+      },
+      "Comment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "report_id": {
+            "type": "integer"
+          },
+          "sequence_no": {
+            "type": "integer"
+          },
+          "revision_no": {
+            "type": "integer"
+          },
+          "author_id": {
+            "type": ["string", "null"]
+          },
+          "reply_to_id": {
+            "type": ["string", "null"]
+          },
+          "body": {
+            "type": ["string", "null"]
+          },
+          "edit_version": {
+            "type": "integer"
+          },
+          "created_at": {
+            "type": "string"
+          },
+          "edited_at": {
+            "type": ["string", "null"]
+          },
+          "deleted_at": {
+            "type": ["string", "null"]
+          },
+          "username": {
+            "type": ["string", "null"]
+          },
+          "score": {
+            "type": "integer"
+          },
+          "my_vote": {
+            "type": ["integer", "null"]
+          },
+          "reply_count": {
+            "type": "integer"
+          },
+          "hidden": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "report_id",
+          "sequence_no",
+          "revision_no",
+          "author_id",
+          "reply_to_id",
+          "body",
+          "edit_version",
+          "created_at",
+          "edited_at",
+          "deleted_at",
+          "username",
+          "score",
+          "my_vote",
+          "reply_count",
+          "hidden"
         ]
       },
       "Token": {
@@ -5820,10 +6164,7 @@
             "format": "date-time"
           },
           "last_used_at": {
-            "type": [
-              "string",
-              "null"
-            ],
+            "type": ["string", "null"],
             "format": "date-time"
           },
           "expires_at": {
@@ -5832,12 +6173,7 @@
             "format": "date-time"
           }
         },
-        "required": [
-          "id",
-          "created_at",
-          "last_used_at",
-          "expires_at"
-        ]
+        "required": ["id", "created_at", "last_used_at", "expires_at"]
       },
       "User": {
         "type": "object",
@@ -5890,19 +6226,10 @@
             "maxLength": 10000
           },
           "status": {
-            "enum": [
-              "pending",
-              "running",
-              "retry",
-              "ready",
-              "failed"
-            ]
+            "enum": ["pending", "running", "retry", "ready", "failed"]
           },
           "error_code": {
-            "type": [
-              "string",
-              "null"
-            ]
+            "type": ["string", "null"]
           },
           "crate": {
             "type": "string",
@@ -5913,10 +6240,7 @@
             "maxLength": 10000
           }
         },
-        "required": [
-          "id",
-          "status"
-        ]
+        "required": ["id", "status"]
       }
     },
     "responses": {

@@ -11,8 +11,9 @@
     <header>
       <a class="brand" href="/">proofs.rs</a>
       <nav>
-        <a href="/#/crates">Crates</a><a href="/#/tools">Tools</a
-        ><a href="/#/publish">Publish</a><a href="/#/about">About</a>
+        <a href="/#/crates">Crates</a><a href="/#/reports">Reports</a
+        ><a href="/#/tools">Tools</a><a href="/#/publish">Publish</a
+        ><a href="/#/about">About</a>
       </nav>
     </header>
     <main class="docs-page">
@@ -39,7 +40,7 @@
             <p>
               Tokens expire after 90 days. Manage them in
               <a href="/#/settings">Settings</a>. CLI tokens can import API
-              lists, publish claims, and revise your claims. Other write
+              lists, publish reports, and revise your reports. Other write
               operations require a browser session.
             </p>
             <details>
@@ -84,7 +85,7 @@ curl -X POST "$ORIGIN/auth/device/token" \
           <input
             id="filter"
             type="search"
-            placeholder="claims, tokens, imports…"
+            placeholder="reports, claims, tokens, imports…"
           />
           <div id="endpoints" aria-live="polite">Loading specification…</div>
         </div>

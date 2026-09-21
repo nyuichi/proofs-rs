@@ -90,7 +90,7 @@ function navigate(path: string) {
 async function refreshMe() {
   me = await request("/me");
   document.querySelector("#account-nav")!.innerHTML = me.user
-    ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">My activity (${me.karma} karma)</a><a href="#/my-claims">My claims</a><a href="#/my-comments">My comments</a><a href="#/my-accepts">My accepts</a><a href="#/settings">Settings</a><button id="logout">Sign out</button></div></details>`
+    ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">My activity (${me.karma} karma)</a><a href="#/my-reports">My reports</a><a href="#/my-comments">My comments</a><a href="#/my-starred-reports">Starred reports</a><a href="#/my-starred-claims">Starred claims</a><a href="#/settings">Settings</a><button id="logout">Sign out</button></div></details>`
     : '<a href="#/login">Sign in with GitHub</a>';
   document.querySelector("#logout")?.addEventListener("click", async () => {
     try {
@@ -115,7 +115,10 @@ function needUser() {
   return true;
 }
 function claimItem(c: any) {
-  return `<article class="claim-item"><a href="#/claim/${c.id}?v=${c.revision_no}">#${c.id} ${esc(c.title)}</a> · v${c.revision_no}${c.latest_revision_no > c.revision_no ? " · Past revision" : ""}${c.accepted_at ? " · Accepted " + date(c.accepted_at) : ""}${c.withdrawn_at ? " · <strong>Withdrawn</strong>" : ""}<div class="meta">${esc(c.crate)} ${esc(c.version)} · <code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</div><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)} · ${c.accept_count} accepts · ${c.comment_count} comments</p></article>`;
+  return `<article class="claim-item"><a href="#/claim/${enc(c.id)}?report_revision=${c.report_revision}">${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""} · ${c.star_count} claim stars</div><p class="meta"><a href="#/report/${c.report_id}">${esc(c.report_title)}</a> · ${c.report_star_count} report stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)} · ${c.author_karma} karma${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
+}
+function reportItem(c: any) {
+  return `<article class="claim-item"><a href="#/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${esc(c.crate)} ${esc(c.version)} · ${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.star_count} stars · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
 }
 function pager(data: any, fn: (cursor: number) => any, container: HTMLElement) {
   if (data.next_cursor !== null && data.next_cursor !== undefined) {
@@ -141,13 +144,19 @@ async function claimsList(path: string, container: HTMLElement, cursor = 0) {
   );
   container.insertAdjacentHTML(
     "beforeend",
-    data.items.map(claimItem).join("") || (!cursor ? "<p>No claims.</p>" : ""),
+    data.items
+      .map(
+        path.endsWith("/claims") || path === "/me/starred-claims"
+          ? claimItem
+          : reportItem,
+      )
+      .join("") || (!cursor ? "<p>No results.</p>" : ""),
   );
   pager(data, (n) => claimsList(path, container, n), container);
 }
 async function home() {
   const d = await request("/home");
-  root.innerHTML = `<section class="home-search"><h1>proofs.rs</h1><p>Verification claims and discussions for Rust APIs.</p><form id="search" class="searchbar"><input name="q" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form></section><div class="home-columns"><section><h2>Recently updated crates</h2>${d.crates.map((c: any) => `<article class="home-entry"><a href="#/crate/${enc(c.name)}">${esc(c.name)}</a> · ${c.claim_count} claims<p class="meta">${date(c.updated_at)}</p></article>`).join("") || "<p>No published claims yet.</p>"}</section><section><h2>Latest discussion</h2>${d.discussion.map((c: any) => `<article class="home-entry"><a href="#/claim/${c.claim_id}?comment=${enc(c.id)}">Claim #${c.claim_id} · comment #${c.sequence_no}</a><p>${esc(c.body.slice(0, 200))}</p><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)}</p></article>`).join("") || "<p>No comments yet.</p>"}</section></div>`;
+  root.innerHTML = `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p><form id="search" class="searchbar"><input name="q" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form></section><h2>Recent reports</h2>${d.reports.map(reportItem).join("") || "<p>No reports yet.</p>"}<div class="home-columns"><section><h2>Recently updated crates</h2>${d.crates.map((c: any) => `<article class="home-entry"><a href="#/crate/${enc(c.name)}">${esc(c.name)}</a> · ${c.claim_count} claims<p class="meta">${date(c.updated_at)}</p></article>`).join("") || "<p>No published claims yet.</p>"}</section><section><h2>Latest discussion</h2>${d.discussion.map((c: any) => `<article class="home-entry"><a href="#/report/${c.report_id}?comment=${enc(c.id)}">Report #${c.report_id} · comment #${c.sequence_no}</a><p>${esc(c.body.slice(0, 200))}</p><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)}</p></article>`).join("") || "<p>No comments yet.</p>"}</section></div>`;
   bind(
     "#search",
     (e) =>
@@ -184,7 +193,7 @@ async function crates() {
 async function cratePage(name: string) {
   const d = await request("/crates/" + enc(name) + "/releases");
   const version = current().searchParams.get("version") || d.default_version;
-  root.innerHTML = `<h1>${esc(name)}</h1>${version ? `<p>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></p><p><a href="#/publish?crate=${enc(name)}&version=${enc(version)}">Publish a claim</a></p><p class="meta">Public free functions and inherent methods from the docs.rs build. Trait and Deref methods are excluded.</p><form id="filter"><input name="q" aria-label="Filter APIs" placeholder="Filter API paths"><button>Filter</button></form><div id="apis"></div>` : "<p>No published versions.</p>"}`;
+  root.innerHTML = `<h1>${esc(name)}</h1>${version ? `<p>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></p><p><a href="#/publish?crate=${enc(name)}&version=${enc(version)}">Publish a report</a></p><p class="meta">Public free functions and inherent methods from the docs.rs build. Trait and Deref methods are excluded.</p><form id="filter"><input name="q" aria-label="Filter APIs" placeholder="Filter API paths"><button>Filter</button></form><div id="apis"></div>` : "<p>No published versions.</p>"}`;
   if (!version) return;
   root
     .querySelector("#version")!
@@ -222,68 +231,92 @@ async function cratePage(name: string) {
 }
 async function apiPage(id: string) {
   const a = await request("/apis/" + enc(id));
-  root.innerHTML = `<p><a href="#/crate/${enc(a.crate)}?version=${enc(a.version)}">${esc(a.crate)} ${esc(a.version)}</a></p><h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}" target="_blank" rel="noopener noreferrer">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="#/publish?api=${enc(a.id)}">Publish a claim</a></p><h2>Claims</h2><div id="claims"></div>`;
+  root.innerHTML = `<p><a href="#/crate/${enc(a.crate)}?version=${enc(a.version)}">${esc(a.crate)} ${esc(a.version)}</a></p><h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}" target="_blank" rel="noopener noreferrer">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="#/publish?api=${enc(a.id)}">Publish a report</a></p><h2>Claims</h2><div id="claims"></div>`;
   await claimsList(
     "/apis/" + enc(id) + "/claims",
     root.querySelector("#claims")!,
   );
 }
-function detail(c: any) {
-  return `<article><h1>#${c.id || "Preview"}: ${esc(c.title)}</h1><p>${esc(c.crate || draftTarget?.crate)} ${esc(c.version || draftTarget?.version)} · <code>${esc(c.display_path || draftTarget?.display_path)}</code>${c.is_unsafe || draftTarget?.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><h2>${prop(c.property)}</h2>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<dl><dt>Preconditions</dt><dd class="code preserve">${esc(c.precondition || "None stated")}</dd><dt>Explanation</dt><dd class="preserve">${esc(c.explanation)}</dd><dt>Trusted assumptions</dt><dd class="preserve">${esc(c.trusted_assumptions)}</dd><dt>Tool</dt><dd>${esc(c.tool || draft.tool_name || "")} ${esc(c.tool_version || draft.tool_version || "")}</dd><dt>Environment</dt><dd class="preserve">${esc(c.environment || "Not specified")}</dd><dt>Evidence</dt><dd><a href="${esc(c.evidence_url)}" target="_blank" rel="noopener noreferrer">${esc(c.evidence_url)}</a></dd><dt>Limitations</dt><dd class="preserve">${esc(c.limitations || "None stated")}</dd></dl></article>`;
+function field(label: string, value: any, code = false) {
+  return value
+    ? `<dt>${label}</dt><dd class="${code ? "code " : ""}preserve">${esc(value)}</dd>`
+    : "";
+}
+function evidence(label: string, value: any) {
+  return value
+    ? `<dt>${label}</dt><dd><a href="${esc(value)}" target="_blank" rel="noopener noreferrer">${esc(value)}</a></dd>`
+    : "";
+}
+function starButton(kind: string, c: any) {
+  return me.user
+    ? `<button class="star" data-star="${kind}" data-id="${esc(c.id)}" data-on="${!!c.my_star}" aria-pressed="${!!c.my_star}">${c.my_star ? "★ Starred" : "☆ Star"} · ${c.star_count}</button>`
+    : `<a href="#/login">☆ ${c.star_count} ${kind} stars</a>`;
+}
+function bindStars() {
+  bind("[data-star]", async (e) => {
+    if (!needUser()) return;
+    const b = e.currentTarget;
+    await request(
+      `/${b.dataset.star}s/${enc(b.dataset.id)}/star`,
+      b.dataset.on === "true" ? "DELETE" : "PUT",
+      {},
+    );
+    await refreshMe();
+    await route();
+  });
+}
+function reportContent(c: any) {
+  return `<h1>${esc(c.title)}</h1><p>${esc(c.crate)} ${esc(c.version)} · ${esc(c.tool)} ${esc(c.tool_version)}</p><dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
+}
+function claimContent(c: any) {
+  return `<h1>${esc(c.title)}</h1><p><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Tool", `${c.tool} ${c.tool_version}`)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
+}
+async function claimPage(id: string) {
+  const n = current().searchParams.get("report_revision");
+  const c = await request(
+    "/claims/" + enc(id) + (n ? "?report_revision=" + enc(n) : ""),
+  );
+  root.innerHTML = `<aside class="report-context"><p>Part of report #${c.report_id} · revision ${c.report_revision}</p><h2><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)}</a></h2><p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.report_star_count} report stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments · Discuss this report →</a></p></aside>${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c)}${starButton("claim", c)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
+  bindStars();
 }
 let commentReply: any = null;
-async function claimPage(id: number) {
-  const base = await request("/claims/" + id),
+async function reportPage(id: number) {
+  const base = await request("/reports/" + id),
     version = Number(current().searchParams.get("v") || base.revision_no);
   const c =
     version === base.revision_no
       ? base
-      : await request(`/claims/${id}/revisions/${version}`);
+      : await request(`/reports/${id}/revisions/${version}`);
+  const history: any[] = [];
+  let cursor: any = null;
+  do {
+    const page = await request(
+      `/reports/${id}/revisions${cursor ? "?cursor=" + enc(cursor) : ""}`,
+    );
+    history.push(...page.items);
+    cursor = page.next_cursor;
+  } while (cursor);
   commentReply = null;
-  root.innerHTML = `${detail(c)}<p>${user(c.author_id, c.username)} · ${date(c.created_at)}</p><p class="versions">Revision ${base.versions.map((v: any) => `<a ${v.revision_no === version ? 'aria-current="page"' : ""} href="#/claim/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${me.user?.id === c.author_id ? `<p><a href="#/publish?update=${id}">Publish new revision</a>${!c.withdrawn_at ? ' · <button id="withdraw">Withdraw claim</button>' : ""}</p>` : ""}<section id="accepts"><h2>Accepts (${c.accept_count})</h2><p>An Accept means the reader considers the evidence reasonable. It is not a certificate of correctness.</p><div id="accept-list"></div>${me.user && me.user.id !== c.author_id ? '<button id="accept">Accept this revision</button> <button id="unaccept">Withdraw my Accept</button>' : ""}</section><section class="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form" class="comment-form"><label>Revision <select name="revision_no">${base.versions.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button> <button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="#/login">Sign in to comment.</a></p>'}</section>`;
-  const acceptBox = root.querySelector<HTMLElement>("#accept-list")!;
-  async function acceptList(n = 0) {
-    const a = await request(
-      `/claims/${id}/revisions/${version}/accepts?cursor=${n}`,
-    );
-    acceptBox.insertAdjacentHTML(
-      "beforeend",
-      a.items
-        .map(
-          (x: any) =>
-            `<p>${user(x.user_id, x.username)} · ${date(x.created_at)}</p>`,
-        )
-        .join("") || (!n ? "<p>No accepts for this revision.</p>" : ""),
-    );
-    pager(a, acceptList, acceptBox);
-  }
-  await acceptList();
-  bind("#accept", async () => {
-    await request(`/claims/${id}/revisions/${version}/accept`, "PUT", {});
-    await refreshMe();
-    await route();
-  });
-  bind("#unaccept", async () => {
-    await request(`/claims/${id}/revisions/${version}/accept`, "DELETE");
-    await refreshMe();
-    await route();
-  });
+  root.innerHTML = `<p><a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.crate)} ${esc(c.version)}</a> / Report #${id}</p>${reportContent(c)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${starButton("report", c)} <a href="#/report/${id}?discussion=1">${base.comment_count} comments</a>${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <a href="#/publish?update=${id}">Publish new revision</a> · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map((x: any) => claimItem(x) + starButton("claim", x)).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="#/login">Sign in to comment.</a></p>'}</section>`;
+  bindStars();
   bind("#withdraw", async () => {
     if (
-      confirm(
-        "Withdraw this claim? Its revisions and discussion remain public.",
-      )
+      confirm("Withdraw this report? Its history and discussion remain public.")
     ) {
-      await request(`/claims/${id}/withdrawal`, "PUT", {});
+      await request(`/reports/${id}/withdrawal`, "PUT", {});
       await refreshMe();
       await route();
     }
   });
+  if (current().searchParams.has("discussion"))
+    root.querySelector("#discussion")?.scrollIntoView();
   const box = root.querySelector<HTMLElement>("#comments")!;
   const focus = current().searchParams.get("comment");
   if (focus) {
     const x = await request("/comments/" + enc(focus));
-    box.innerHTML = `<p>Linked thread · <a href="#/claim/${id}?v=${version}">Show all comments</a></p>`;
+    if (x.report_id !== id)
+      throw Error("This comment belongs to another report.");
+    box.innerHTML = `<p>Linked thread · <a href="#/report/${id}?v=${version}">Show all comments</a></p>`;
     let parent = box;
     for (const cid of x.ancestors) {
       const row = cid === focus ? x : await request("/comments/" + enc(cid));
@@ -301,7 +334,7 @@ async function claimPage(id: number) {
       async () => {
         const f = new FormData(form);
         await request(
-          `/claims/${id}/comments`,
+          `/reports/${id}/comments`,
           "POST",
           {
             body: f.get("body"),
@@ -329,7 +362,7 @@ async function loadComments(
   cursor = 0,
 ) {
   const d = await request(
-    `/claims/${claimID}/comments?cursor=${cursor}${parentID ? "&parent_id=" + enc(parentID) : ""}`,
+    `/reports/${claimID}/comments?cursor=${cursor}${parentID ? "&parent_id=" + enc(parentID) : ""}`,
   );
   for (const cm of d.items) {
     const child = renderComment(cm, container, claimID);
@@ -343,7 +376,7 @@ function renderComment(cm: any, container: HTMLElement, claimID: number) {
   const article = document.createElement("article");
   article.className = "comment";
   article.id = "comment-" + cm.id;
-  article.innerHTML = `<div class="comment-top">${user(cm.author_id, cm.username)} <time>${date(cm.created_at)}</time><a href="#/claim/${claimID}?v=${cm.revision_no}&comment=${enc(cm.id)}">v${cm.revision_no} · #${cm.sequence_no}</a>${!cm.deleted_at && !cm.hidden ? `<span class="vote"><button data-vote="1" aria-label="Upvote" aria-pressed="${cm.my_vote === 1}">▲</button> ${cm.score} <button data-vote="-1" aria-label="Downvote" aria-pressed="${cm.my_vote === -1}">▼</button></span>` : ""}</div><div class="comment-content"><p class="preserve">${cm.deleted_at ? "<em>deleted comment</em>" : cm.hidden ? "<em>hidden comment</em>" : esc(cm.body)}</p>${cm.edited_at && !cm.deleted_at ? `<p class="meta">Edited ${date(cm.edited_at)}</p>` : ""}</div><div class="comment-actions">${me.user ? "<button data-reply>Reply</button>" : ""}${me.user?.id === cm.author_id && !cm.deleted_at && !cm.hidden ? "<button data-edit>Edit</button><button data-delete>Delete</button>" : ""}</div><div class="editor"></div>`;
+  article.innerHTML = `<div class="comment-top">${user(cm.author_id, cm.username)} <time>${date(cm.created_at)}</time><a href="#/report/${claimID}?v=${cm.revision_no}&comment=${enc(cm.id)}">v${cm.revision_no} · #${cm.sequence_no}</a>${!cm.deleted_at && !cm.hidden ? `<span class="vote"><button data-vote="1" aria-label="Upvote" aria-pressed="${cm.my_vote === 1}">▲</button> ${cm.score} <button data-vote="-1" aria-label="Downvote" aria-pressed="${cm.my_vote === -1}">▼</button></span>` : ""}</div><div class="comment-content"><p class="preserve">${cm.deleted_at ? "<em>deleted comment</em>" : cm.hidden ? "<em>hidden comment</em>" : esc(cm.body)}</p>${cm.edited_at && !cm.deleted_at ? `<p class="meta">Edited ${date(cm.edited_at)}</p>` : ""}</div><div class="comment-actions">${me.user ? "<button data-reply>Reply</button>" : ""}${me.user?.id === cm.author_id && !cm.deleted_at && !cm.hidden ? "<button data-edit>Edit</button><button data-delete>Delete</button>" : ""}</div><div class="editor"></div>`;
   container.append(article);
   const children = document.createElement("div");
   children.className = "comment-children";
@@ -427,9 +460,9 @@ async function termsUpdate(returnTo = "/account") {
 }
 async function activity(id: string) {
   const u = await request("/users/" + enc(id));
-  root.innerHTML = `<h1>${esc(u.username)}</h1><p><a href="https://github.com/${enc(u.username)}" rel="noopener noreferrer">GitHub profile</a></p><p>${u.karma} karma · joined ${date(u.created_at)}</p><h2>Claims</h2><div id="claims"></div><h2>Comments</h2><div id="activity-comments"></div>`;
+  root.innerHTML = `<h1>${esc(u.username)}</h1><p><a href="https://github.com/${enc(u.username)}" rel="noopener noreferrer">GitHub profile</a></p><p>${u.karma} karma · joined ${date(u.created_at)}</p><h2>Reports</h2><div id="claims"></div><h2>Comments</h2><div id="activity-comments"></div>`;
   await claimsList(
-    "/users/" + enc(u.id) + "/claims",
+    "/users/" + enc(u.id) + "/reports",
     root.querySelector("#claims")!,
   );
   await commentsList(
@@ -451,7 +484,7 @@ async function commentsList(path: string, box: HTMLElement, cursor = 0) {
     d.items
       .map(
         (x: any) =>
-          `<article><p><a href="#/claim/${x.claim_id}?comment=${enc(x.id)}">Claim #${x.claim_id} · v${x.revision_no} · comment #${x.sequence_no}</a> · ${date(x.created_at)}</p><p class="preserve">${x.deleted_at ? "<em>deleted comment</em>" : esc(x.body)}</p></article>`,
+          `<article><p><a href="#/report/${x.report_id}?comment=${enc(x.id)}">Report #${x.report_id} · v${x.revision_no} · comment #${x.sequence_no}</a> · ${date(x.created_at)}</p><p class="preserve">${x.deleted_at ? "<em>deleted comment</em>" : esc(x.body)}</p></article>`,
       )
       .join("") || "<p>No comments.</p>",
   );
@@ -461,7 +494,7 @@ async function settings() {
   if (!me.user) return login();
   const p = await request("/me/notification-preferences");
   const tokens = await request("/me/tokens");
-  root.innerHTML = `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Your GitHub username is refreshed when you sign in again.</p><h2>Email notifications</h2><p>Email: ${esc(me.email?.address || "Unavailable")}</p><p>This is the verified primary GitHub email. Your email is refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="claim_comments" ${p.claim_comments ? "checked" : ""}> Comments on my claims</label></p><button>Save preferences</button></form><h2>Tokens</h2>${tokens.items.length ? `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr></thead><tbody>${tokens.items.map((t: any) => `<tr><td><code>${esc(t.id)}</code></td><td>${date(t.created_at)}</td><td>${t.last_used_at ? date(t.last_used_at) : "Never"}</td><td>${date(t.expires_at)}</td><td><button data-revoke="${esc(t.id)}">Revoke</button></td></tr>`).join("")}</tbody></table></div>` : "<p>No tokens.</p>"}<div id="revoke-confirm"></div><h2>Delete my account</h2><p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>`;
+  root.innerHTML = `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Your GitHub username is refreshed when you sign in again.</p><h2>Email notifications</h2><p>Email: ${esc(me.email?.address || "Unavailable")}</p><p>This is the verified primary GitHub email. Your email is refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="report_comments" ${p.report_comments ? "checked" : ""}> Comments on my reports</label></p><button>Save preferences</button></form><h2>Tokens</h2>${tokens.items.length ? `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr></thead><tbody>${tokens.items.map((t: any) => `<tr><td><code>${esc(t.id)}</code></td><td>${date(t.created_at)}</td><td>${t.last_used_at ? date(t.last_used_at) : "Never"}</td><td>${date(t.expires_at)}</td><td><button data-revoke="${esc(t.id)}">Revoke</button></td></tr>`).join("")}</tbody></table></div>` : "<p>No tokens.</p>"}<div id="revoke-confirm"></div><h2>Delete my account</h2><p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>`;
 
   bind("[data-revoke]", (e) => {
     const id = e.currentTarget.dataset.revoke;
@@ -481,7 +514,7 @@ async function settings() {
       const f = new FormData(e.target);
       await request("/me/notification-preferences", "PATCH", {
         replies: f.has("replies"),
-        claim_comments: f.has("claim_comments"),
+        report_comments: f.has("report_comments"),
       });
       await route();
     },
@@ -558,9 +591,9 @@ async function devicePage() {
 async function toolsPage(id?: string) {
   if (id) {
     const t = await request("/tools/" + enc(id));
-    root.innerHTML = `<h1>${esc(t.name)}</h1><p>${esc(t.description)}</p><p><a href="${esc(t.official_url)}" rel="noopener noreferrer">Tool website</a></p><h2>Supported versions</h2><ul>${t.versions.map((v: any) => `<li>${esc(v.version)}${v.selectable ? "" : " (retired)"}</li>`).join("")}</ul><h2>Claims</h2><div id="items"></div>`;
+    root.innerHTML = `<h1>${esc(t.name)}</h1><p>${esc(t.description)}</p><p><a href="${esc(t.official_url)}" rel="noopener noreferrer">Tool website</a></p><h2>Supported versions</h2><ul>${t.versions.map((v: any) => `<li>${esc(v.version)}${v.selectable ? "" : " (retired)"}</li>`).join("")}</ul><h2>Reports</h2><div id="items"></div>`;
     return claimsList(
-      "/tools/" + enc(id) + "/claims",
+      "/tools/" + enc(id) + "/reports",
       root.querySelector("#items")!,
     );
   }
@@ -569,16 +602,16 @@ async function toolsPage(id?: string) {
 }
 async function publish() {
   if (!needUser()) return;
-  const params = current().searchParams,
-    update = Number(params.get("update") || 0);
+  const p = current().searchParams,
+    update = Number(p.get("update") || 0);
   if (update && editing !== update) {
-    const c = await request("/claims/" + update);
-    if (c.author_id !== me.user.id)
-      throw new Error("Only the author can revise this claim.");
-    draft = { ...c };
-    draftTarget = await request("/apis/" + enc(c.api_item_id));
+    const r = await request("/reports/" + update);
+    if (r.author_id !== me.user.id)
+      throw Error("Only the author can revise this report.");
+    draft = { ...r, claims: r.claims.map((x: any) => ({ ...x })) };
+    draftTarget = { crate: r.crate, version: r.version };
     editing = update;
-    expected = c.revision_no;
+    expected = r.revision_no;
     formKey = crypto.randomUUID();
   } else if (!update && editing) {
     draft = {};
@@ -586,10 +619,22 @@ async function publish() {
     editing = null;
     formKey = crypto.randomUUID();
   }
-  if (params.get("api") && !draftTarget)
-    draftTarget = await request("/apis/" + enc(params.get("api")!));
-  if (draftTarget) return claimForm();
-  root.innerHTML = `<h1>Publish a claim</h1><p>Prepare the public API catalogue for one exact crate version. The first request imports it; later requests reuse the cached catalogue.</p><form id="prepare"><label>Crate <input name="crate" required pattern="[A-Za-z0-9_-]+" value="${esc(params.get("crate") || "")}"></label><label>Exact version <input name="version" required placeholder="1.2.3" value="${esc(params.get("version") || "")}"></label><button>Prepare API catalogue</button></form><p id="import-status" role="status"></p><div id="api-select"></div>`;
+  if (p.get("api") && !draftTarget) {
+    const a = await request("/apis/" + enc(p.get("api")!));
+    draftTarget = { crate: a.crate, version: a.version };
+    draft = {
+      claims: [
+        {
+          api_item_id: a.id,
+          display_path: a.display_path,
+          is_unsafe: a.is_unsafe,
+          property: "panic_contract",
+        },
+      ],
+    };
+  }
+  if (draftTarget) return reportForm();
+  root.innerHTML = `<h1>Publish a report</h1><form id="prepare"><label>Crate<input name="crate" required pattern="[A-Za-z0-9_-]+" value="${esc(p.get("crate"))}"></label><label>Exact version<input name="version" required value="${esc(p.get("version"))}"></label><button>Prepare API catalogue</button></form><p id="import-status" role="status"></p>`;
   bind(
     "#prepare",
     async (e) => {
@@ -600,55 +645,34 @@ async function publish() {
         "/publish/prepare",
         "POST",
         { crate, version },
-        formKey,
+        crypto.randomUUID(),
       );
-      const status = root.querySelector("#import-status")!;
-      const page = routeID;
+      const generation = routeID;
       while (job.status !== "ready") {
         if (job.status === "failed")
-          throw new Error(job.error || job.error_code || "Import failed.");
-        status.textContent =
-          "Preparing API catalogue… You can leave this page; the import will continue.";
+          throw Error(job.error_code || "Import failed");
+        root.querySelector("#import-status")!.textContent =
+          "Preparing API catalogue…";
         await new Promise((r) => setTimeout(r, 2500));
-        if (page !== routeID) return;
+        if (generation !== routeID) return;
         job = await request("/imports/" + enc(job.id));
       }
-      status.textContent = "Catalogue ready. Select a public API.";
-      const box = root.querySelector<HTMLElement>("#api-select")!;
-      box.innerHTML =
-        '<form id="api-search"><input name="q" aria-label="Filter API" placeholder="Filter API path"><button>Search</button></form><div id="api-results"></div>';
-      async function results(q = "", n = 0) {
-        const out = box.querySelector<HTMLElement>("#api-results")!;
-        if (!n) out.innerHTML = "";
-        const d = await request(
-          `/crates/${enc(crate)}/${enc(version)}/apis?q=${enc(q)}&cursor=${n}`,
-        );
-        for (const a of d.items) {
-          const b = document.createElement("button");
-          b.type = "button";
-          b.className = "api-option";
-          b.textContent = a.display_path + (a.is_unsafe ? " (unsafe)" : "");
-          b.onclick = async () => {
-            draftTarget = await request("/apis/" + enc(a.id));
-            claimForm().catch(error);
-          };
-          out.append(b);
-        }
-        pager(d, (m) => results(q, m), out);
-      }
-      bind(
-        "#api-search",
-        (e) => results(String(new FormData(e.target).get("q"))),
-        "submit",
-      );
-      await results();
+      draftTarget = { crate, version };
+      draft = { claims: [] };
+      formKey = crypto.randomUUID();
+      await reportForm();
     },
     "submit",
   );
 }
-async function claimForm() {
+async function reportForm() {
   const all = await request("/tools");
-  root.innerHTML = `<h1>${editing ? "Publish a new revision" : "Publish a claim"}</h1><p>${esc(draftTarget.crate)} ${esc(draftTarget.version)} · <code>${esc(draftTarget.display_path)}</code>${draftTarget.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(draftTarget.signature)}</pre>${!editing ? '<button id="change-target">Change API</button>' : ""}<form id="claim-form" class="publish-form"><label>Property <select name="property" ${editing ? "disabled" : ""}><option value="panic_contract" ${draft.property === "panic_contract" ? "selected" : ""}>Panic contract</option><option value="no_ub" ${draft.property === "no_ub" ? "selected" : ""}>No undefined behavior</option></select></label><label>Title <input name="title" required maxlength="1000" value="${esc(draft.title)}"></label><label>Preconditions <span id="pre-label"></span><textarea name="precondition" maxlength="10000">${esc(draft.precondition)}</textarea></label><label>Explanation <textarea name="explanation" maxlength="10000">${esc(draft.explanation)}</textarea></label><label>Trusted assumptions <textarea name="trusted_assumptions" maxlength="10000">${esc(draft.trusted_assumptions)}</textarea></label><label>Tool / version <select name="tool_version_id" required><option value="">Select a version</option>${all.versions
+  draft.claims ||= [];
+  const input = (name: string, label: string, value: any, required = false) =>
+    `<label>${label}<input name="${name}" ${required ? "required" : ""} maxlength="1000" value="${esc(value)}"></label>`;
+  const area = (name: string, label: string, value: any) =>
+    `<label>${label}<textarea name="${name}" maxlength="10000">${esc(value)}</textarea></label>`;
+  root.innerHTML = `<h1>${editing ? "Publish a new revision" : "Publish a report"}</h1><p>${esc(draftTarget.crate)} ${esc(draftTarget.version)}</p><form id="report-form" class="publish-form">${input("title", "Report title", draft.title, true)}${area("explanation", "Explanation", draft.explanation)}<h2>Shared verification details</h2><label>Tool / version<select name="tool_version_id" required><option value="">Select a version</option>${all.versions
     .filter(
       (v: any) =>
         v.selectable &&
@@ -660,52 +684,97 @@ async function claimForm() {
     )
     .join(
       "",
-    )}</select></label><p><a href="https://github.com/nyuichi/proofs-rs/issues/new">Request another tool/version</a></p><label>Environment (optional)<textarea name="environment" maxlength="10000">${esc(draft.environment)}</textarea></label><label>Evidence URL <input name="evidence_url" type="url" required value="${esc(draft.evidence_url)}"></label><label>Limitations (optional)<textarea name="limitations" maxlength="10000">${esc(draft.limitations)}</textarea></label>${notice}<button>Preview</button></form>`;
-  const form = root.querySelector<HTMLFormElement>("#claim-form")!,
-    property = form.querySelector<HTMLSelectElement>('[name="property"]')!;
-  function pre() {
-    root.querySelector("#pre-label")!.textContent =
-      property.value === "no_ub"
-        ? "(optional; mandatory for unsafe APIs)"
-        : "(required)";
-    form.querySelector<HTMLTextAreaElement>('[name="precondition"]')!.required =
-      property.value !== "no_ub" || !!draftTarget.is_unsafe;
+    )}</select></label>${area("environment", "Environment", draft.environment)}${area("trusted_assumptions", "Shared trusted assumptions", draft.trusted_assumptions)}${input("evidence_url", "Shared evidence URL", draft.evidence_url)}${area("limitations", "Shared limitations", draft.limitations)}<h2>Claims</h2><div id="claim-editors">${draft.claims.map((x: any, i: number) => `<fieldset data-index="${i}"><legend>Claim ${i + 1}${x.id ? " · " + esc(x.id) : " · New"}</legend><p><code>${esc(x.display_path)}</code>${x.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><label>Property<select data-field="property" ${x.id ? "disabled" : ""}><option value="panic_contract" ${x.property === "panic_contract" ? "selected" : ""}>Panic contract</option><option value="no_ub" ${x.property === "no_ub" ? "selected" : ""}>No undefined behavior</option></select></label><label>Title (optional; generated when empty)<input data-field="title" maxlength="1000" value="${esc(x.title)}"></label><label>Preconditions <span data-pre-label></span><textarea data-field="precondition" maxlength="10000">${esc(x.precondition)}</textarea></label><details><summary>Claim-specific explanation, assumptions and evidence</summary>${["explanation", "trusted_assumptions", "evidence_url", "limitations"].map((k) => `<label>${esc(k.replaceAll("_", " "))}<textarea data-field="${k}" maxlength="${k === "evidence_url" ? 1000 : 10000}">${esc(x[k])}</textarea></label>`).join("")}</details><button type="button" data-remove="${i}">Remove claim</button></fieldset>`).join("")}</div>${notice}<button id="preview-report" ${draft.claims.length ? "" : "disabled"}>Preview report</button></form><h2>Add an API</h2><form id="api-search"><input name="q" aria-label="Filter API path" placeholder="Filter API path"><button>Search</button></form><div id="api-results"></div>`;
+  const form = root.querySelector<HTMLFormElement>("#report-form")!;
+  function collect() {
+    Object.assign(draft, Object.fromEntries(new FormData(form)));
+    form.querySelectorAll<HTMLElement>("[data-index]").forEach((el) => {
+      const x = draft.claims[Number(el.dataset.index)];
+      el.querySelectorAll<
+        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
+      >("[data-field]").forEach((f) => (x[f.dataset.field!] = f.value));
+      const required = x.property === "panic_contract" || !!x.is_unsafe;
+      el.querySelector("[data-pre-label]")!.textContent =
+        x.property === "no_ub"
+          ? "(optional; mandatory for unsafe APIs)"
+          : "(required)";
+      el.querySelector<HTMLTextAreaElement>(
+        '[data-field="precondition"]',
+      )!.required = required;
+    });
   }
   form.addEventListener("input", () => {
-    draft = {
-      ...draft,
-      ...Object.fromEntries(new FormData(form)),
-      property: editing ? draft.property : property.value,
-    };
+    collect();
+    formKey = crypto.randomUUID();
   });
-  property.onchange = pre;
-  pre();
-  bind("#change-target", () => {
-    draftTarget = null;
-    navigate("/publish");
+  form.addEventListener("change", () => {
+    collect();
+    formKey = crypto.randomUUID();
   });
-  bind(
-    "#claim-form",
-    async () => {
-      draft = {
-        ...Object.fromEntries(new FormData(form)),
-        property: editing ? draft.property : property.value,
-        api_item_id: draftTarget.id,
+  collect();
+  bind("[data-remove]", async (e) => {
+    collect();
+    draft.claims.splice(Number(e.currentTarget.dataset.remove), 1);
+    formKey = crypto.randomUUID();
+    await reportForm();
+  });
+  async function results(q = "", cursor: any = 0) {
+    const box = root.querySelector<HTMLElement>("#api-results")!;
+    if (!cursor) box.innerHTML = "";
+    const d = await request(
+      `/crates/${enc(draftTarget.crate)}/${enc(draftTarget.version)}/apis?q=${enc(q)}&cursor=${cursor}`,
+    );
+    for (const a of d.items) {
+      const b = document.createElement("button");
+      b.className = "api-option";
+      b.textContent = a.display_path + (a.is_unsafe ? " (unsafe)" : "");
+      b.onclick = async () => {
+        try {
+          collect();
+          draft.claims.push({
+            api_item_id: a.id,
+            display_path: a.display_path,
+            is_unsafe: a.is_unsafe,
+            property: "panic_contract",
+            title: "",
+          });
+          formKey = crypto.randomUUID();
+          await reportForm();
+        } catch (e) {
+          error(e);
+        }
       };
-      await request("/claims/validate", "POST", draft);
-      const tv = all.versions.find((v: any) => v.id === draft.tool_version_id);
-      draft.tool_name = all.items.find((t: any) => t.id === tv?.tool_id)?.name;
-      draft.tool_version = tv?.version;
-      root.innerHTML =
-        detail(draft) +
-        notice +
-        '<button id="back">Back to edit</button> <button id="publish">Publish</button>';
-      bind("#back", claimForm);
+      box.append(b);
+    }
+    pager(d, (n) => results(q, n), box);
+  }
+  bind(
+    "#api-search",
+    (e) => results(String(new FormData(e.target).get("q"))),
+    "submit",
+  );
+  await results();
+  bind(
+    "#report-form",
+    async () => {
+      collect();
+      const body = {
+        ...draft,
+        ...draftTarget,
+        claims: draft.claims.map((x: any) => ({ ...x })),
+        ...(editing ? { expected_revision: expected } : {}),
+      };
+      const preview = await request("/reports/validate", "POST", {
+        ...body,
+        ...(editing ? { report_id: editing } : {}),
+      });
+      root.innerHTML = `<h1>Review before publishing</h1>${reportContent(preview)}<p>${preview.claims.length} claims · ${preview.changes.added} added · ${preview.changes.retained.length} retained · ${preview.changes.removed.length} removed</p>${preview.changes.removed.length ? `<p>Removed claim IDs: ${preview.changes.removed.map(esc).join(", ")}</p>` : ""}${preview.claims.map((x: any) => `<section>${claimContent({ ...x, tool: preview.tool, tool_version: preview.tool_version })}</section>`).join("")}${notice}<button id="back">Back to edit</button> <button id="publish">Publish ${editing ? "revision" : "report"}</button>`;
+      bind("#back", reportForm);
       bind("#publish", async () => {
-        const result = await request(
-          editing ? `/claims/${editing}/revisions` : "/claims",
+        const r = await request(
+          editing ? `/reports/${editing}/revisions` : "/reports",
           "POST",
-          { ...draft, ...(editing ? { expected_revision: expected } : {}) },
+          body,
           formKey,
         );
         draft = {};
@@ -714,9 +783,7 @@ async function claimForm() {
         formKey = crypto.randomUUID();
         await refreshMe();
         navigate(
-          "/claim/" +
-            result.id +
-            (result.revision_no ? "?v=" + result.revision_no : ""),
+          "/report/" + r.id + (r.revision_no ? "?v=" + r.revision_no : ""),
         );
       });
     },
@@ -778,8 +845,12 @@ async function route() {
       );
       navigate("/api/" + a.id);
     } else if (p === "api") await apiPage(id);
-    else if (p === "claim") await claimPage(Number(id));
-    else if (p === "publish") await publish();
+    else if (p === "claim") await claimPage(id);
+    else if (p === "report") await reportPage(Number(id));
+    else if (p === "reports") {
+      root.innerHTML = "<h1>Reports</h1><div id=reports></div>";
+      await claimsList("/reports", root.querySelector("#reports")!);
+    } else if (p === "publish") await publish();
     else if (p === "login") login();
     else if (p === "terms-update") await termsUpdate();
     else if (p === "user") await activity(id);

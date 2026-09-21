@@ -102,11 +102,7 @@ export async function batch(db: D1Database, ss: D1PreparedStatement[]) {
   } catch (e) {
     const msg = String(e);
     if (msg.includes("used<=lim")) throw new Fault(429, "daily_limit");
-    if (
-      /constraint|immutable|self_accept|vote_forbidden|invalid_parent/i.test(
-        msg,
-      )
-    )
+    if (/constraint|immutable|vote_forbidden|invalid_parent/i.test(msg))
       throw new Fault(
         409,
         "conflict",
@@ -252,17 +248,22 @@ export async function verifyToken(env: Env, value: string, sig: string) {
     diff |= expected.charCodeAt(i) ^ (sig.charCodeAt(i) || 0);
   return diff === 0;
 }
-export const publicClaim = `SELECT c.id,c.api_item_id,c.property,c.author_id,c.visibility,c.withdrawn_at,c.created_at,c.updated_at,r.title,r.revision_no,(SELECT MAX(v.revision_no) FROM claim_revisions v WHERE v.claim_id=c.id) latest_revision_no,r.precondition,r.explanation,r.trusted_assumptions,r.environment,r.evidence_url,r.limitations,r.tool_version_id,a.display_path,a.is_unsafe,a.signature,a.upstream_url,cr.name crate,rel.version,rel.yanked,u.username,t.name tool,tv.version tool_version,(SELECT COUNT(*) FROM comments cm WHERE cm.claim_id=c.id AND cm.deleted_at IS NULL AND cm.visibility='public') comment_count,(SELECT COUNT(*) FROM accepts ac WHERE ac.claim_id=c.id AND ac.revision_no=r.revision_no) accept_count FROM claims c JOIN claim_revisions r ON r.claim_id=c.id JOIN api_items a ON a.id=c.api_item_id JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN users u ON u.id=c.author_id JOIN tool_versions tv ON tv.id=r.tool_version_id JOIN tools t ON t.id=tv.tool_id`;
-export const latest = `r.revision_no=(SELECT MAX(rr.revision_no) FROM claim_revisions rr WHERE rr.claim_id=c.id)`;
+// One policy supplies both profile computation and list/detail SQL projections.
 export const karmaPolicy = {
-  id: "distinct-claim-acceptor/v1",
+  id: "report-stars-excluding-self/v1",
+  sql(author: string) {
+    return `COALESCE((SELECT score FROM karma_v1 WHERE author_id=${author}),0)`;
+  },
   async compute(db: D1Database, user: string) {
-    return (
-      (await one(db, "SELECT score FROM karma_v1 WHERE author_id=?", user))
-        ?.score || 0
-    );
+    return (await one(db, `SELECT ${this.sql("?")} score`, user)).score;
   },
 };
+export const reportLatest = `rr.revision_no=(SELECT MAX(v.revision_no) FROM report_revisions v WHERE v.report_id=p.id)`;
+export const reportColumns = `p.id,p.release_id,p.author_id,p.visibility,p.withdrawn_at,p.created_at,p.updated_at,rr.revision_no,rr.title,rr.explanation,rr.trusted_assumptions,rr.environment,rr.evidence_url,rr.limitations,rr.tool_version_id,cr.name crate,rel.version,rel.yanked,u.username,t.name tool,tv.version tool_version,(SELECT MAX(v.revision_no) FROM report_revisions v WHERE v.report_id=p.id) latest_revision_no,(SELECT COUNT(*) FROM report_comments cm WHERE cm.report_id=p.id AND cm.deleted_at IS NULL AND cm.visibility='public') comment_count,(SELECT COUNT(*) FROM report_stars s WHERE s.report_id=p.id) star_count,${karmaPolicy.sql("p.author_id")} author_karma,(SELECT COUNT(*) FROM claim_revisions x WHERE x.report_id=p.id AND x.report_revision=rr.revision_no) claim_count`;
+export const reportJoins = `FROM reports p JOIN report_revisions rr ON rr.report_id=p.id JOIN releases rel ON rel.id=p.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN users u ON u.id=p.author_id JOIN tool_versions tv ON tv.id=rr.tool_version_id JOIN tools t ON t.id=tv.tool_id`;
+export const publicReport = `SELECT ${reportColumns} ${reportJoins}`;
+export const publicClaim = `SELECT c.id,c.report_id,c.api_item_id,c.property,c.created_at,r.report_revision,r.position,r.title,r.precondition,r.explanation,r.trusted_assumptions,r.evidence_url,r.limitations,a.display_path,a.is_unsafe,a.signature,a.upstream_url,p.author_id,p.withdrawn_at,p.visibility,rr.title report_title,rr.explanation shared_explanation,rr.trusted_assumptions shared_trusted_assumptions,rr.evidence_url shared_evidence_url,rr.limitations shared_limitations,rr.environment,rr.tool_version_id,cr.name crate,rel.version,u.username,t.name tool,tv.version tool_version,(SELECT MAX(v.revision_no) FROM report_revisions v WHERE v.report_id=p.id) latest_report_revision,(SELECT COUNT(*) FROM claim_stars s WHERE s.claim_id=c.id) star_count,(SELECT COUNT(*) FROM report_stars s WHERE s.report_id=p.id) report_star_count,(SELECT COUNT(*) FROM report_comments cm WHERE cm.report_id=p.id AND cm.deleted_at IS NULL AND cm.visibility='public') report_comment_count,${karmaPolicy.sql("p.author_id")} author_karma,EXISTS(SELECT 1 FROM claim_revisions x WHERE x.claim_id=c.id AND x.report_revision=(SELECT MAX(v.revision_no) FROM report_revisions v WHERE v.report_id=p.id)) in_current_report FROM claims c JOIN claim_revisions r ON r.claim_id=c.id JOIN api_items a ON a.id=c.api_item_id JOIN reports p ON p.id=c.report_id JOIN report_revisions rr ON rr.report_id=p.id AND rr.revision_no=r.report_revision JOIN releases rel ON rel.id=p.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN users u ON u.id=p.author_id JOIN tool_versions tv ON tv.id=rr.tool_version_id JOIN tools t ON t.id=tv.tool_id`;
+export const latest = `r.report_revision=(SELECT MAX(v.revision_no) FROM report_revisions v WHERE v.report_id=p.id)`;
 // Keyset cursors keep pagination stable when new rows are inserted between requests.
 export async function listing(
   c: Ctx,
