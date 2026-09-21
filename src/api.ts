@@ -190,9 +190,15 @@ api.get("/crates/:name/releases", async (c) => {
     `SELECT rel.* FROM releases rel JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})`,
     c.req.param("name"),
   );
+  const crate = await one(
+    c.env.DB,
+    "SELECT description FROM crates WHERE name=?",
+    c.req.param("name"),
+  );
   items.sort((a, b) => semver.rcompare(a.version, b.version));
   return c.json({
     items,
+    description: crate?.description || "",
     default_version:
       items.find((x) => !semver.prerelease(x.version))?.version ||
       items[0]?.version,

@@ -1005,9 +1005,13 @@
                     "default_version": {
                       "type": "string",
                       "maxLength": 10000
+                    },
+                    "description": {
+                      "type": "string",
+                      "maxLength": 10000
                     }
                   },
-                  "required": ["items"]
+                  "required": ["items", "description"]
                 }
               }
             }

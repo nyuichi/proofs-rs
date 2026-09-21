@@ -63,7 +63,7 @@ add(P+'/me/notification-preferences','patch','Update email notification preferen
 add(P+'/notifications/unsubscribe','post','Unsubscribe with signed link',obj({'user':S(),'signature':S()}),security=[],description='Requires the signed unsubscribe value and a same-origin Origin header.')
 add(P+'/home','get','Recent reports, crates and discussion',out=obj({'reports':arr(ref('Report')),'crates':arr(obj({'id':I,'name':S(),'description':S(),'updated_at':S(),'claim_count':I})),'discussion':arr(obj({'id':S(),'report_id':I,'sequence_no':I,'revision_no':I,'body':S(),'created_at':S(),'username':{'type':['string','null']},'author_id':{'type':['string','null']}}))}))
 add(P+'/crates','get','Search crates with claims',out=listing({'allOf':[ref('crates'),obj({'claim_count':{'type':'integer'}})]}),queries=cursor+[('q',S(),False)])
-add(P+'/crates/{name}/releases','get','List releases with claims',out=obj({'items':arr(ref('releases')),'default_version':S()},['items']))
+add(P+'/crates/{name}/releases','get','List releases with claims',out=obj({'items':arr(ref('releases')),'default_version':S(),'description':S()},['items','description']))
 add(P+'/crates/{name}/{version}/apis','get','List imported public functions and inherent methods',out=listing({'allOf':[ref('api_items'),obj({'no_ub_count':{'type':'integer'},'panic_count':{'type':'integer'}})]}),queries=cursor+[('q',S(),False)])
 add(P+'/apis/{id}','get','Get imported API',out={'allOf':[ref('api_items'),obj({'crate':S(),'version':S(),'yanked':{'type':'integer'},'target':S(),'features_json':S(),'rustdoc_format':I})]})
 add(P+'/resolve-api','get','Resolve a crate API path to its ID',out=obj({'id':S()}),queries=[(x,S(),True) for x in ['crate','version','path']])

@@ -193,7 +193,7 @@ async function crates() {
 async function cratePage(name: string) {
   const d = await request("/crates/" + enc(name) + "/releases");
   const version = current().searchParams.get("version") || d.default_version;
-  root.innerHTML = `<h1>${esc(name)}</h1>${version ? `<p>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></p><p><a href="#/publish?crate=${enc(name)}&version=${enc(version)}">Publish a report</a></p><p class="meta">Public free functions and inherent methods from the docs.rs build. Trait and Deref methods are excluded.</p><form id="filter"><input name="q" aria-label="Filter APIs" placeholder="Filter API paths"><button>Filter</button></form><div id="apis"></div>` : "<p>No published versions.</p>"}`;
+  root.innerHTML = `<p><a href="#/crates">crates</a> / ${esc(name)}${version ? " / " + esc(version) : ""}</p><h1>${esc(name)}</h1>${d.description ? `<p>${esc(d.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(name)}${version ? "/" + enc(version) : ""}" target="_blank" rel="noopener noreferrer">crates.io</a></p>${version ? `<label>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label><h2>APIs</h2><div id="apis"><div class="table-wrap"><table><thead><tr><th>API</th><th>Claims</th></tr></thead><tbody id="api-rows"></tbody></table></div></div>` : "<p>No published versions.</p>"}`;
   if (!version) return;
   root
     .querySelector("#version")!
@@ -206,27 +206,32 @@ async function cratePage(name: string) {
       ),
     );
   const box = root.querySelector<HTMLElement>("#apis")!;
-  async function load(n = 0, q = "") {
-    if (!n) box.innerHTML = "";
-    const d = await request(
-      `/crates/${enc(name)}/${enc(version)}/apis?q=${enc(q)}&cursor=${n}`,
+  const body = root.querySelector<HTMLElement>("#api-rows")!;
+  async function load(cursor: any = 0) {
+    const data = await request(
+      `/crates/${enc(name)}/${enc(version)}/apis?cursor=${enc(String(cursor))}`,
     );
-    box.insertAdjacentHTML(
+    body.insertAdjacentHTML(
       "beforeend",
-      d.items
-        .map(
-          (a: any) =>
-            `<article class="claim-item"><a class="code" href="#/api/${a.id}">${esc(a.display_path)}</a>${a.is_unsafe ? " · <strong>unsafe</strong>" : ""}<p class="meta">Panic contract: ${a.panic_count} · No UB: ${a.no_ub_count}</p></article>`,
-        )
-        .join("") || "<p>No matching APIs.</p>",
+      data.items
+        .map((a: any) => {
+          const counts =
+            [
+              a.panic_count ? `Panic contract (${a.panic_count})` : "",
+              a.no_ub_count ? `No undefined behavior (${a.no_ub_count})` : "",
+            ]
+              .filter(Boolean)
+              .join(" / ") || "—";
+          const prefix = name.replaceAll("-", "_") + "::";
+          const path = a.display_path.startsWith(prefix)
+            ? a.display_path.slice(prefix.length)
+            : a.display_path;
+          return `<tr><td><a class="api-name" href="#/api/${enc(a.id)}">${esc(path)}</a>${a.is_unsafe ? ' · <strong class="unsafe">unsafe</strong>' : ""}</td><td>${counts}</td></tr>`;
+        })
+        .join("") || (!cursor ? '<tr><td colspan="2">No APIs.</td></tr>' : ""),
     );
-    pager(d, (m) => load(m, q), box);
+    pager(data, load, box);
   }
-  bind(
-    "#filter",
-    (e) => load(0, String(new FormData(e.target).get("q"))),
-    "submit",
-  );
   await load();
 }
 async function apiPage(id: string) {
