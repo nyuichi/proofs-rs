@@ -6,7 +6,7 @@ Q=[]
 def val(x):
     if x is None:return 'NULL'
     if isinstance(x,int):return str(x)
-    return "'"+str(x).replace("'","''")+"'"
+    return "'"+str(x).replace("'","''").replace("\n", "'||char(10)||'")+"'"
 def insert(table, **values):
     Q.append('INSERT OR IGNORE INTO '+table+'('+','.join(values)+') VALUES('+','.join(v[1] if isinstance(v,tuple) else val(v) for v in values.values())+');')
 def expr(s):return ('sql',s)
