@@ -55,7 +55,13 @@ The fixed public client ID is `proofs-cli`. Start at `POST /auth/device/code`,
 show the returned user code, open the verification URL, and poll
 `POST /auth/device/token`. Tokens have publishing scope, expire after 90 days,
 and can be revoked in Settings or through `POST /api/v1/tokens/revoke`.
-No CLI binary is included in this repository yet.
+The Rust CLI lives in [`cli/`](cli/README.md) so API and client changes can be reviewed together.
+Install it from this repository with `cargo install --path cli --locked` (Rust 1.91+).
+CLI versions and future releases remain independent of service deployments.
+
+The `CLI and service checks` workflow runs Rust formatting, tests, Clippy and a local
+HTTP/Git end-to-end test on Linux/macOS, alongside service type checks, tests and build.
+It does not deploy, publish a crate, or send reports to a running proofs.rs instance.
 
 Regenerate the checked-in API specification with `python3 scripts/openapi.py`.
 The test suite checks coverage against every non-administrative API/auth route.

@@ -1,0 +1,47 @@
+name: CLI and service checks
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+jobs:
+  cli:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        rust: [stable]
+        include:
+          - os: ubuntu-latest
+            rust: 1.91.1
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: cli
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+          toolchain: ${{ matrix.rust }}
+      - run: cargo fmt --check
+      - run: cargo test --locked
+      - run: cargo build --locked
+      - run: python3 tests/e2e.py target/debug/cargo-proofs
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: cargo run -- proofs --help
+  service:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
