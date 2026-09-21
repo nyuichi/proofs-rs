@@ -49,3 +49,38 @@ The parser allowlists rustdoc format 61 and rejects unsupported syntax or unreso
 D1/R2/Queues provisioning and D1 migrations have succeeded. The account is on Workers Free. Per the operator decision, staging now omits the Paid-only CPU limit and explicitly disables email via EMAIL_DISABLED=true. New comment notification events are completed without creating deliveries; pending/retry deliveries are cancelled. The email binding and event consumer are omitted, so setting an EMAIL_FROM variable alone cannot enable sending. OAuth credentials are read from the GitHub staging variable and secret on each deployment. docs.rs import CPU usage on the Free plan remains unverified; live import and email tests are intentionally excluded.
 
 The tool catalogue starts empty. Use the audited `tool` and `tool_version` admin actions to register tools and selectable versions before publishing claims. There is no dedicated admin UI yet.
+
+## Production deployment and proofs.rs
+
+The Production workflow uses `wrangler.production.base.json`, generates an ignored
+`wrangler.production.json`, and creates `proofs-rs-production-v1` D1/R2 plus
+`proofs-rs-production-jobs`/`proofs-rs-production-dead` Queues. Staging data is not
+copied. Email remains disabled. Production deploys are manual through Actions
+(`Production` → `Run workflow`), except changes to the production workflow/base
+configuration which trigger an initial deployment.
+
+Before custom-domain activation:
+
+1. Add `proofs.rs` to the same Cloudflare account, Free website plan. Preserve and
+   verify the existing DNS records, especially MX/TXT and `mail.proofs.rs`; public
+   DNS checks do not enumerate all existing subdomains. Export the Istanco DNS
+   zone or review its full record list before switching nameservers. Check DNSSEC
+   and remove an old DS record if required by Cloudflare's onboarding instructions.
+2. At Istanco, set the two nameservers assigned by Cloudflare; wait for Active.
+   Do not invent a CNAME at the domain apex or overwrite existing email records.
+3. Create a separate GitHub OAuth App: homepage `https://proofs.rs`, callback
+   `https://proofs.rs/auth/github/callback`. Save client ID as repository variable
+   `PRODUCTION_GITHUB_CLIENT_ID` and client secret as repository secret
+   `PRODUCTION_GITHUB_CLIENT_SECRET`. Keep the staging registration unchanged.
+4. Set repository variable `PRODUCTION_CUSTOM_DOMAIN=true`, then run Production.
+   Wrangler attaches `proofs.rs` as a Worker Custom Domain and provisions HTTPS.
+   The deployment token needs zone access for custom domain creation in addition
+   to its existing Workers/D1/R2/Queues permissions. Do not broaden to all zones.
+5. Verify HTTPS, GitHub login, Tokens, the API docs link, and `contact@proofs.rs`
+   delivery before announcing launch. Tool catalogue starts empty.
+
+Until activation, the production Worker is accessible via its workers.dev URL;
+OAuth can remain unconfigured during this preparation phase. All callbacks and
+CSRF checks use the configured APP_ORIGIN. Production tokens/users are separate
+from staging. `scripts/domain-status.mjs` only reads onboarding status and cannot
+change nameservers. The Cloudflare account credentials remain in GitHub Secrets.

@@ -6,3 +6,4 @@ dist/
 !.env.example
 wrangler.staging.json
 coverage/
+wrangler.production.json

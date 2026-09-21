@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
-const config = JSON.parse(await readFile("wrangler.staging.json", "utf8"));
+const target = process.argv[2] || "staging";
+if (!["staging", "production"].includes(target))
+  throw Error("Unknown deployment target");
+const config = JSON.parse(await readFile(`wrangler.${target}.json`, "utf8"));
 const endpoint = `https://api.cloudflare.com/client/v4/accounts/${process.env.CLOUDFLARE_ACCOUNT_ID}/workers/scripts/${config.name}/secrets`;
 const headers = {
   Authorization: `Bearer ${process.env.CLOUDFLARE_API_TOKEN}`,
@@ -8,7 +11,7 @@ const headers = {
 };
 const r = await fetch(endpoint, { headers });
 const data = await r.json();
-if (!r.ok || !data.success) throw Error("Cannot list staging secret names");
+if (!r.ok || !data.success) throw Error("Cannot list Worker secret names");
 const existing = new Set(data.result.map((s) => s.name));
 const values = {};
 if (!existing.has("TOKEN_SECRET"))

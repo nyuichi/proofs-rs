@@ -29,7 +29,24 @@ async function pages(path) {
   }
   throw Error("Resource pagination limit exceeded");
 }
-const config = JSON.parse(await readFile("wrangler.json", "utf8"));
+const target = process.argv[2] || "staging";
+if (!["staging", "production"].includes(target))
+  throw Error("Unknown deployment target");
+const config = JSON.parse(
+  await readFile(
+    target === "production" ? "wrangler.production.base.json" : "wrangler.json",
+    "utf8",
+  ),
+);
+const customDomain =
+  target === "production" && process.env.PRODUCTION_CUSTOM_DOMAIN === "true";
+if (
+  customDomain &&
+  (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET)
+)
+  throw Error(
+    "Production OAuth credentials must be configured before domain activation",
+  );
 const checks = await Promise.allSettled([
   pages("/d1/database"),
   api("/r2/buckets"),
@@ -61,7 +78,10 @@ for (const name of new Set([
 
 if (!domain.subdomain)
   throw Error("Enable a workers.dev subdomain in Cloudflare.");
-config.vars.APP_ORIGIN = `https://${config.name}.${domain.subdomain}.workers.dev`;
+const workerURL = `https://${config.name}.${domain.subdomain}.workers.dev`;
+config.vars.APP_ORIGIN = customDomain ? "https://proofs.rs" : workerURL;
+if (customDomain)
+  config.routes = [{ pattern: "proofs.rs", custom_domain: true }];
 config.vars.CLOUDFLARE_ACCOUNT_ID = account;
 config.vars.DB_ID = database.uuid;
 for (const name of [
@@ -83,8 +103,8 @@ if (config.vars.EMAIL_DISABLED !== "true" && config.vars.EMAIL_FROM)
         .filter(Boolean),
     },
   ];
-await writeFile("wrangler.staging.json", JSON.stringify(config, null, 2));
-console.log("Staging URL: " + config.vars.APP_ORIGIN);
+await writeFile(`wrangler.${target}.json`, JSON.stringify(config, null, 2));
+console.log(target + " URL: " + config.vars.APP_ORIGIN);
 if (process.env.GITHUB_OUTPUT)
   await appendFile(
     process.env.GITHUB_OUTPUT,

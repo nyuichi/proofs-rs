@@ -1,5 +1,6 @@
 const origin = process.argv[2];
-if (!origin?.startsWith("https://")) throw Error("Expected staging URL");
+const environment = process.argv[3] || "staging";
+if (!origin?.startsWith("https://")) throw Error("Expected HTTPS URL");
 for (const path of [
   "/",
   "/docs/api",
@@ -18,12 +19,23 @@ for (const path of [
     if (attempt < 5) await new Promise((resolve) => setTimeout(resolve, 3000));
   }
   if (!r.ok) throw Error(path + " returned " + r.status);
-  if (!r.headers.get("x-robots-tag")?.includes("noindex"))
+  if (
+    environment === "staging" &&
+    !r.headers.get("x-robots-tag")?.includes("noindex")
+  )
     throw Error("Missing staging noindex header");
   if (path === "/openapi.json" && (await r.json()).openapi !== "3.1.1")
     throw Error("Invalid OpenAPI document");
   if (path === "/api/v1/config") {
     const config = await r.json();
+    if (config.environment !== environment)
+      throw Error("Wrong deployment environment");
+    if (
+      environment === "production" &&
+      origin === "https://proofs.rs" &&
+      !config.oauth_configured
+    )
+      throw Error("Production OAuth is unavailable");
     console.log(
       "Integration configuration: OAuth=" +
         config.oauth_configured +
