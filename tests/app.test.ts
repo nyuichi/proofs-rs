@@ -1200,3 +1200,109 @@ test("import stores normalized crate description using the existing metadata req
   );
   assert.equal(urls.length, 2);
 });
+
+test("static page content renders before requests, remains usable, and survives stale responses and failures", async () => {
+  const { JSDOM } = await import("jsdom");
+  const { transpileModule, ModuleKind, ScriptTarget } =
+    await import("typescript");
+  const dom = new JSDOM(
+    readFileSync(new URL("../index.html", import.meta.url), "utf8"),
+    { url: "https://example.test/#/", runScripts: "outside-only" },
+  );
+  const w = dom.window,
+    d = w.document;
+  const pending = new Map<string, (response: Response) => void>();
+  w.fetch = (path: any) =>
+    new Promise((resolve) => pending.set(String(path), resolve)) as any;
+  const finish = (path: string, body: any, status = 200) => {
+    const resolve = pending.get("/api/v1" + path);
+    assert.ok(resolve, "Request started: " + path);
+    pending.delete("/api/v1" + path);
+    resolve(new Response(JSON.stringify(body), { status }));
+  };
+  const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+  const legal = readFileSync(
+    new URL("../web/legal.ts", import.meta.url),
+    "utf8",
+  ).replace("export const legal", "const legal");
+  const main = readFileSync(
+    new URL("../web/main.ts", import.meta.url),
+    "utf8",
+  ).replace(/import \{ legal \} from "\.\/legal";/, "");
+  try {
+    w.eval(
+      transpileModule(legal + "\n" + main, {
+        compilerOptions: {
+          module: ModuleKind.None,
+          target: ScriptTarget.ES2022,
+        },
+      }).outputText,
+    );
+    assert.equal(d.querySelector("h1")!.textContent, "proofs.rs");
+    assert.deepEqual(
+      Array.from(d.querySelectorAll(".home-columns h2"), (x) => x.textContent),
+      ["Recent reports", "Latest discussion"],
+    );
+    assert.equal((d.querySelector("#app") as any).inert, false);
+    const input = d.querySelector("#search input") as any;
+    input.value = "typed while loading";
+    finish("/home", { reports: [], discussion: [] });
+    await tick();
+    assert.equal(
+      (d.querySelector("#search input") as any).value,
+      "typed while loading",
+    );
+    assert.equal(
+      d.querySelector("#home-reports")!.textContent,
+      "No reports yet.",
+    );
+    assert.ok(pending.has("/api/v1/config"));
+    assert.ok(pending.has("/api/v1/me"));
+    w.location.hash = "/tools";
+    await tick();
+    assert.equal(d.querySelector("h1")!.textContent, "Verification tools");
+    assert.match(
+      d.querySelector("#app")!.textContent!,
+      /Request a tool or version/,
+    );
+    finish("/tools", { error: "tools_unavailable" }, 503);
+    await tick();
+    assert.equal(d.querySelector("h1")!.textContent, "Verification tools");
+    assert.match(
+      d.querySelector('[role="alert"]')!.textContent!,
+      /tools_unavailable/,
+    );
+    assert.equal(d.querySelector("[data-loading]"), null);
+    w.location.hash = "/";
+    await tick();
+    const search = d.querySelector("#search")!;
+    (search.querySelector("input") as any).value = "sample";
+    search.dispatchEvent(
+      new w.Event("submit", { bubbles: true, cancelable: true }),
+    );
+    await tick();
+    assert.equal(d.querySelector("h1")!.textContent, "Crates");
+    assert.equal((d.querySelector("#search input") as any).value, "sample");
+    finish("/home", { reports: [], discussion: [] });
+    await tick();
+    assert.equal(d.querySelector("h1")!.textContent, "Crates");
+    w.location.hash = "/about";
+    await tick();
+    assert.equal(d.querySelector("h1")!.textContent, "About proofs.rs");
+    finish("/config", { oauth_configured: true, terms_version: "test" });
+    finish("/me", { user: null });
+    await tick();
+    assert.ok(d.querySelector('#account-nav a[href="/auth/github"]'));
+    assert.equal(d.querySelector("h1")!.textContent, "About proofs.rs");
+    finish("/crates?q=sample&cursor=0", {
+      items: [],
+      total_count: 0,
+      matching_count: 0,
+      next_cursor: null,
+    });
+    await tick();
+    assert.equal(d.querySelector("h1")!.textContent, "About proofs.rs");
+  } finally {
+    w.close();
+  }
+});

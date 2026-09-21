@@ -28,7 +28,13 @@ const prop = (p: string) =>
 const notice =
   '<p class="meta">By publishing, you agree to the <a href="#/terms">Terms</a> and license your original contribution under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. See our <a href="#/privacy">Privacy Policy</a>.</p>';
 class NavigationChanged extends Error {}
-async function request(path: string, method = "GET", body?: any, key?: string) {
+async function request(
+  path: string,
+  method = "GET",
+  body?: any,
+  key?: string,
+  navigationScoped = true,
+) {
   const generation = routeID;
   const r = await fetch(path.startsWith("/auth/") ? path : "/api/v1" + path, {
     method,
@@ -41,7 +47,7 @@ async function request(path: string, method = "GET", body?: any, key?: string) {
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const v = await r.json();
-  if (generation !== routeID) throw new NavigationChanged();
+  if (navigationScoped && generation !== routeID) throw new NavigationChanged();
   if (!r.ok) {
     if (r.status === 428) location.hash = "/terms-update";
     throw new Error(v.message || v.error || `Request failed (${r.status})`);
@@ -88,7 +94,7 @@ function navigate(path: string) {
   else location.hash = path;
 }
 async function refreshMe() {
-  me = await request("/me");
+  me = await request("/me", "GET", undefined, undefined, false);
   document.querySelector("#account-nav")!.innerHTML = me.user
     ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">My activity (${me.karma} karma)</a><a href="#/my-reports">My reports</a><a href="#/my-comments">My comments</a><a href="#/my-starred-reports">Starred reports</a><a href="#/my-starred-claims">Starred claims</a><a href="#/settings">Settings</a><button id="logout">Sign out</button></div></details>`
     : '<div class="signin"><a href="/auth/github">Sign in with GitHub</a><p class="signin-notice">By signing up, you agree to the <a href="#/terms">Terms</a> and acknowledge the <a href="#/privacy">Privacy Policy</a>.</p></div>';
@@ -142,6 +148,7 @@ async function claimsList(path: string, container: HTMLElement, cursor = 0) {
   const data = await request(
     path + (path.includes("?") ? "&" : "?") + "cursor=" + cursor,
   );
+  container.querySelector("[data-loading]")?.remove();
   container.insertAdjacentHTML(
     "beforeend",
     data.items
@@ -154,19 +161,29 @@ async function claimsList(path: string, container: HTMLElement, cursor = 0) {
   );
   pager(data, (n) => claimsList(path, container, n), container);
 }
+const loading = '<p data-loading role="status">Loading…</p>';
 async function home() {
-  const d = await request("/home");
-  root.innerHTML = `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p><form id="search" class="searchbar"><input name="q" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form></section><div class="home-columns"><section><h2>Recent reports</h2>${d.reports.map(reportItem).join("") || "<p>No reports yet.</p>"}</section><section><h2>Latest discussion</h2>${d.discussion.map((c: any) => `<article class="home-entry"><a href="#/report/${c.report_id}?comment=${enc(c.id)}">Report #${c.report_id} · comment #${c.sequence_no}</a><p>${esc(c.body.slice(0, 200))}</p><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)}</p></article>`).join("") || "<p>No comments yet.</p>"}</section></div>`;
+  root.innerHTML = `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p><form id="search" class="searchbar"><input name="q" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form></section><div class="home-columns"><section><h2>Recent reports</h2><div id="home-reports">${loading}</div></section><section><h2>Latest discussion</h2><div id="home-discussion">${loading}</div></section></div>`;
   bind(
     "#search",
     (e) =>
       navigate("/crates?q=" + enc(new FormData(e.target).get("q") as string)),
     "submit",
   );
+  const d = await request("/home");
+  root.querySelector("#home-reports")!.innerHTML =
+    d.reports.map(reportItem).join("") || "<p>No reports yet.</p>";
+  root.querySelector("#home-discussion")!.innerHTML =
+    d.discussion
+      .map(
+        (c: any) =>
+          `<article class="home-entry"><a href="#/report/${c.report_id}?comment=${enc(c.id)}">Report #${c.report_id} · comment #${c.sequence_no}</a><p>${esc(c.body.slice(0, 200))}</p><p class="meta">${user(c.author_id, c.username)} · ${date(c.created_at)}</p></article>`,
+      )
+      .join("") || "<p>No comments yet.</p>";
 }
 async function crates() {
   const q = current().searchParams.get("q") || "";
-  root.innerHTML = `<h1>Crates</h1><form id="search" class="searchbar"><input name="q" aria-label="Crate name" value="${esc(q)}"><button>Search</button></form><p id="crate-count" class="meta"></p><div id="results"><div class="table-wrap"><table class="crate-list"><thead><tr><th>Crate</th><th class="numeric" title="Distinct API paths across versions with public reports">APIs</th><th class="numeric">Reports</th><th class="numeric">Claims</th><th>Updated</th></tr></thead><tbody id="crate-rows"></tbody></table></div></div>`;
+  root.innerHTML = `<h1>Crates</h1><form id="search" class="searchbar"><input name="q" aria-label="Crate name" value="${esc(q)}"><button>Search</button></form><p id="crate-count" class="meta"><span data-loading>Loading…</span></p><div id="results"><div class="table-wrap"><table class="crate-list"><thead><tr><th>Crate</th><th class="numeric" title="Distinct API paths across versions with public reports">APIs</th><th class="numeric">Reports</th><th class="numeric">Claims</th><th>Updated</th></tr></thead><tbody id="crate-rows"></tbody></table></div></div>`;
   bind(
     "#search",
     (e) =>
@@ -609,8 +626,15 @@ async function toolsPage(id?: string) {
       root.querySelector("#items")!,
     );
   }
+  root.innerHTML = `<h1>Verification tools</h1><div id="tool-list">${loading}</div><p><a href="https://github.com/nyuichi/proofs-rs/issues/new">Request a tool or version</a></p>`;
   const d = await request("/tools");
-  root.innerHTML = `<h1>Verification tools</h1>${d.items.map((t: any) => `<article><h2><a href="#/tool/${enc(t.id)}">${esc(t.name)}</a></h2><p>${esc(t.description)}</p></article>`).join("") || "<p>No tools have been registered yet.</p>"}<p><a href="https://github.com/nyuichi/proofs-rs/issues/new">Request a tool or version</a></p>`;
+  root.querySelector("#tool-list")!.innerHTML =
+    d.items
+      .map(
+        (t: any) =>
+          `<article><h2><a href="#/tool/${enc(t.id)}">${esc(t.name)}</a></h2><p>${esc(t.description)}</p></article>`,
+      )
+      .join("") || "<p>No tools have been registered yet.</p>";
 }
 async function publish() {
   if (!me?.user) {
@@ -820,17 +844,81 @@ async function unsubscribe() {
       "<h1>Unsubscribed</h1><p>You can re-enable notifications in your account settings.</p>";
   });
 }
+function pageShell(page: string | undefined, id: string | undefined) {
+  const title =
+    page === "crate"
+      ? id || "Crate"
+      : page === "report"
+        ? `Report #${id || ""}`
+        : page === "tool"
+          ? id || "Tool"
+          : (
+              {
+                api: "API",
+                claim: "Claim",
+                settings: "Settings",
+                publish: "Publish a report",
+                account: "My activity",
+                user: "Profile",
+                device: "Authorize proofs CLI",
+                login: "Sign in",
+                "terms-update": "Updated terms",
+              } as Record<string, string>
+            )[page || ""] ||
+            (page?.startsWith("my-")
+              ? "My " + page.slice(3).replaceAll("-", " ")
+              : "Loading");
+  root.innerHTML = `<h1>${esc(title)}</h1>${loading}`;
+}
+let startupError: unknown = null;
+const startupReady = Promise.allSettled([
+  request("/config", "GET", undefined, undefined, false).then((value) => {
+    config = value;
+  }),
+  refreshMe(),
+]).then((results) => {
+  const failed = results.find(
+    (r): r is PromiseRejectedResult => r.status === "rejected",
+  );
+  if (failed) {
+    startupError = failed.reason;
+    document.querySelector("#account-nav")!.innerHTML =
+      '<span>Account information unavailable. <a href="">Reload</a></span>';
+  }
+});
 async function route() {
   const generation = ++routeID;
-  root.inert = true;
+  root.inert = false;
   root.setAttribute("aria-busy", "true");
-  root.innerHTML = "<p>Loading…</p>";
+
   try {
     const parts = current()
         .pathname.split("/")
         .filter(Boolean)
         .map(decodeURIComponent),
       [p, id] = parts;
+    pageShell(p, id);
+    const publicPage =
+      !p ||
+      [
+        "crates",
+        "crate",
+        "api",
+        "reports",
+        "tools",
+        "tool",
+        "user",
+        "unsubscribe",
+      ].includes(p) ||
+      p in legal;
+    if (!publicPage) {
+      await startupReady;
+      if (generation !== routeID) throw new NavigationChanged();
+      if (startupError)
+        throw Error(
+          "Unable to load account information. Please reload the page.",
+        );
+    }
     if (!p) await home();
     else if (p === "crates" && id) {
       if (parts[3]) {
@@ -865,7 +953,7 @@ async function route() {
     else if (p === "claim") await claimPage(id);
     else if (p === "report") await reportPage(Number(id));
     else if (p === "reports") {
-      root.innerHTML = "<h1>Reports</h1><div id=reports></div>";
+      root.innerHTML = `<h1>Reports</h1><div id="reports">${loading}</div>`;
       await claimsList("/reports", root.querySelector("#reports")!);
     } else if (p === "publish") await publish();
     else if (p === "login") login();
@@ -883,8 +971,8 @@ async function route() {
       root.innerHTML = "<h1>" + esc(legal[p].title) + "</h1>" + legal[p].body;
     else root.innerHTML = "<h1>Page not found</h1>";
   } catch (e) {
-    if (e instanceof NavigationChanged) return;
-    root.innerHTML = "<h1>Unable to load this page</h1>";
+    if (e instanceof NavigationChanged || generation !== routeID) return;
+    root.querySelectorAll("[data-loading]").forEach((el) => el.remove());
     error(e);
   } finally {
     if (generation === routeID) {
@@ -894,12 +982,4 @@ async function route() {
   }
 }
 window.addEventListener("hashchange", () => void route());
-(async () => {
-  try {
-    config = await request("/config");
-    await refreshMe();
-    await route();
-  } catch (e) {
-    error(e);
-  }
-})();
+void route();

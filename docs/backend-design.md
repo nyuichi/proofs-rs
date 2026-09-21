@@ -135,6 +135,14 @@ Replies to replies indent again, with no depth cap. Token settings remain a simp
 ID/date/revoke list. Device authorization displays the signed-in account, switch
 account link, code and Authorize button.
 
+Public page rendering does not wait for `/config` or `/me`: these bootstrap
+requests run in parallel with public data loading. Home/search and Tools headings
+and fixed links render before list responses; legal pages render without an API
+request. Account-dependent pages display a heading/loading state while waiting
+for authentication. A route generation guard discards stale responses, while
+global account/config requests survive navigation. Errors preserve static page
+content and search controls rather than replacing them with a blank page.
+
 ## Stack, authentication and security
 
 Cloudflare Workers with Hono/TypeScript, D1 SQLite, private R2, Queues, Cron and
