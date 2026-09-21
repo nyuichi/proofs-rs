@@ -1,18 +1,55 @@
 name: Production
+# While private, Run workflow is the explicit production approval.
+# Only nyuichi may approve; the exact selected SHA must have passed Staging.
 on:
-  push:
-    branches: [main]
-    paths:
-      - .github/workflows/production.yml
-      - wrangler.production.base.json
   workflow_dispatch:
 permissions:
   contents: read
+  actions: read
 concurrency:
   group: proofs-rs-production
   cancel-in-progress: false
 jobs:
+  authorize:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require owner approval and a successful staging deployment
+        uses: actions/github-script@v7
+        with:
+          script: |
+            if (context.eventName !== 'workflow_dispatch' ||
+                context.ref !== 'refs/heads/main' ||
+                process.env.GITHUB_ACTOR_ID !== '540144' ||
+                process.env.GITHUB_TRIGGERING_ACTOR !== 'nyuichi') {
+              throw new Error('Only nyuichi may approve production from main.');
+            }
+            const { data } = await github.rest.actions.listWorkflowRuns({
+              ...context.repo,
+              workflow_id: 'deploy.yml',
+              head_sha: context.sha,
+              branch: 'main',
+              status: 'success',
+              per_page: 100,
+            });
+            const run = data.workflow_runs.find(run =>
+              run.head_sha === context.sha &&
+              run.head_branch === 'main' &&
+              run.head_repository?.full_name === context.payload.repository.full_name &&
+              ['push', 'workflow_dispatch'].includes(run.event) &&
+              run.status === 'completed' && run.conclusion === 'success'
+            );
+            if (!run) {
+              throw new Error('This exact commit has not passed Staging. Wait for Staging, then run Production again.');
+            }
+            await core.summary
+              .addHeading('Production approved by nyuichi')
+              .addRaw(`Commit: ${context.sha}\n\n`)
+              .addLink('Successful staging deployment', run.html_url)
+              .write();
   deploy:
+    needs: authorize
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && github.actor_id == '540144' && github.triggering_actor == 'nyuichi'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     environment:
@@ -25,6 +62,8 @@ jobs:
       PRODUCTION_CUSTOM_DOMAIN: ${{ vars.PRODUCTION_CUSTOM_DOMAIN }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version: "24"

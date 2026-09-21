@@ -55,9 +55,27 @@ The tool catalogue starts empty. Use the audited `tool` and `tool_version` admin
 The Production workflow uses `wrangler.production.base.json`, generates an ignored
 `wrangler.production.json`, and creates `proofs-rs-production-v1` D1/R2 plus
 `proofs-rs-production-jobs`/`proofs-rs-production-dead` Queues. Staging data is not
-copied. Email remains disabled. Production deploys are manual through Actions
-(`Production` → `Run workflow`), except changes to the production workflow/base
-configuration which trigger an initial deployment.
+copied. Email remains disabled. Production deploys require explicit approval through
+Actions (`Production` → `Run workflow`, branch `main`). Pushes never deploy production.
+Only GitHub user ID `540144` (nyuichi), with triggering actor `nyuichi`, may execute
+or rerun Production. Before production credentials are accessed, a separate job
+checks that the exact selected commit has a successful Staging run from this repository
+on main. A newer push does not change the commit of an already approved run.
+If staging has not passed for the selected commit, Production fails without deploying;
+wait for Staging and start Production again. This promotes source commits, rebuilding
+with npm ci and the committed lockfile; it does not reuse a staging build artifact.
+
+Daily flow: push main → inspect Staging → follow the production link in its summary →
+nyuichi clicks Run workflow on main. If main advanced, first inspect that newer staging
+version. The authorization summary records the selected SHA and successful staging run.
+
+This workflow-level approval works while the repository is private. GitHub Free/Pro/Team
+only support environment required reviewers on public repositories. After making this
+repository public, native environment approval can replace manual dispatch: required
+reviewer nyuichi only, administrator bypass disabled, self-review allowed (otherwise the
+sole reviewer cannot approve their own push). Repository administrators and users able to
+change workflows/secrets can change this policy; the actor check does not replace GitHub
+repository access controls. Do not grant workflow write access to untrusted accounts.
 
 Before custom-domain activation:
 
