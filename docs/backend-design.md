@@ -93,6 +93,7 @@ excluded from the public contract.
 | Revision | POST `/reports/:id/revisions` (full replacement snapshot) |
 | Reports | GET `/reports`, `/reports/:id`, `/reports/:id/revisions`, `/reports/:id/revisions/:n` |
 | Withdrawal | PUT `/reports/:id/withdrawal` |
+| Crate version reports | GET `/crates/:name/:version/reports` |
 | Per-API discovery | GET `/apis/:id/claims` |
 | Permanent claim | GET `/claims/:id`, optional `report_revision` |
 | Independent stars | PUT/DELETE `/reports/:id/star`, `/claims/:id/star` |
@@ -123,7 +124,10 @@ Crate descriptions are saved from crates.io version metadata during import, with
 whitespace normalized, and displayed only on the individual crate page.
 GitHub sign-in links go directly to OAuth; the short signup notice sits next to
 the header link. The signed-out Publish page only asks the visitor to sign in.
-All displayed reaction counts are labeled stars. Reports have shared details, claim
+All displayed reaction counts are labeled stars. The individual crate page lists
+reports for the selected version below the API table, with 30-item cursor paging.
+Report breadcrumbs link through crates, crate name and version. Claim star buttons
+appear on claim detail pages, not inside a report’s claim list. Reports have shared details, claim
 links, independent stars, revision navigation and discussion. Claim pages show
 shared and individual evidence/assumptions and a prominent originating-report
 panel with author karma, report stars and comment count; they have no comment

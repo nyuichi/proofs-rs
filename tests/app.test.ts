@@ -926,6 +926,11 @@ test("frontend publish preview, revision links and nested comment deletion", asy
       w.document.querySelector("#app")!.textContent!,
       /(?:report|claim) stars/,
     );
+    assert.equal(w.document.querySelector('[data-star="claim"]'), null);
+    assert.equal(
+      w.document.querySelector(".breadcrumbs")!.textContent,
+      "crates / sample / 1.0.0 / Report #1",
+    );
     input("body", "Root comment");
     submit("#comment-form");
     await until("[data-reply]");
@@ -1021,6 +1026,12 @@ test("frontend publish preview, revision links and nested comment deletion", asy
     assert.doesNotMatch(
       w.document.querySelector("#app")!.textContent!,
       /Recently updated crates/,
+    );
+    w.location.hash = "/crate/sample?version=1.0.0";
+    await until("#crate-reports .claim-item");
+    assert.match(
+      w.document.querySelector("#crate-reports")!.textContent!,
+      /Revised in the browser/,
     );
     w.location.hash = "/crates";
     await until("#crate-rows tr");
@@ -1139,6 +1150,19 @@ test("staging fixture is repeatable and exposes report catalogue without importe
   );
   const detail = await request("/reports/" + first.id);
   assert.equal(detail.body.claims.length, 5);
+  const reports = await request("/crates/arrayvec/0.7.6-demo.1/reports");
+  assert.equal(reports.status, 200, JSON.stringify(reports.body));
+  assert.equal(reports.body.items.length, 2);
+  assert.ok(
+    reports.body.items.every(
+      (r: any) => r.crate === "arrayvec" && r.version === "0.7.6-demo.1",
+    ),
+  );
+  assert.equal(
+    (await request("/crates/arrayvec/0.7.5/reports")).body.items.length,
+    0,
+  );
+
   const comments = await request("/reports/" + first.id + "/comments");
   assert.equal(comments.status, 200);
   assert.deepEqual(db.prepare("PRAGMA foreign_key_check").all(), []);

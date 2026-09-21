@@ -231,6 +231,17 @@ api.get("/crates/:name/:version/apis", async (c) => {
     ),
   );
 });
+api.get("/crates/:name/:version/reports", async (c) =>
+  c.json(
+    await listing(
+      c,
+      publicReport +
+        ` WHERE cr.name=? AND rel.version=? AND ${activeReport} AND ${reportLatest}`,
+      [c.req.param("name"), c.req.param("version")],
+      [{ sql: "p.id", key: "id", desc: true }],
+    ),
+  ),
+);
 api.get("/apis/:id", async (c) => {
   const item = await one(
     c.env.DB,

@@ -217,7 +217,7 @@ async function crates() {
 async function cratePage(name: string) {
   const d = await request("/crates/" + enc(name) + "/releases");
   const version = current().searchParams.get("version") || d.default_version;
-  root.innerHTML = `<p><a href="#/crates">crates</a> / ${esc(name)}${version ? " / " + esc(version) : ""}</p><h1>${esc(name)}</h1>${d.description ? `<p>${esc(d.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(name)}${version ? "/" + enc(version) : ""}" target="_blank" rel="noopener noreferrer">crates.io</a></p>${version ? `<label>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label><h2>APIs</h2><div id="apis"><div class="table-wrap"><table><thead><tr><th>API</th><th>Claims</th></tr></thead><tbody id="api-rows"></tbody></table></div></div>` : "<p>No published versions.</p>"}`;
+  root.innerHTML = `<p><a href="#/crates">crates</a> / ${esc(name)}${version ? " / " + esc(version) : ""}</p><h1>${esc(name)}</h1>${d.description ? `<p>${esc(d.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(name)}${version ? "/" + enc(version) : ""}" target="_blank" rel="noopener noreferrer">crates.io</a></p>${version ? `<label>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label><h2>APIs</h2><div id="apis"><div class="table-wrap"><table><thead><tr><th>API</th><th>Claims</th></tr></thead><tbody id="api-rows"></tbody></table></div></div><h2>Reports</h2><div id="crate-reports">${loading}</div>` : "<p>No published versions.</p>"}`;
   if (!version) return;
   root
     .querySelector("#version")!
@@ -256,7 +256,15 @@ async function cratePage(name: string) {
     );
     pager(data, load, box);
   }
-  await load();
+  const results = await Promise.allSettled([
+    load(),
+    claimsList(
+      `/crates/${enc(name)}/${enc(version)}/reports`,
+      root.querySelector<HTMLElement>("#crate-reports")!,
+    ),
+  ]);
+  for (const result of results)
+    if (result.status === "rejected") throw result.reason;
 }
 async function apiPage(id: string) {
   const a = await request("/apis/" + enc(id));
@@ -326,7 +334,7 @@ async function reportPage(id: number) {
     cursor = page.next_cursor;
   } while (cursor);
   commentReply = null;
-  root.innerHTML = `<p><a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.crate)} ${esc(c.version)}</a> / Report #${id}</p>${reportContent(c)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${starButton("report", c)}${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <a href="#/publish?update=${id}">Publish new revision</a> · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map((x: any) => claimItem(x) + starButton("claim", x)).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `<p class="breadcrumbs"><a href="#/crates">crates</a> / <a href="#/crate/${enc(c.crate)}">${esc(c.crate)}</a> / <a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.version)}</a> / Report #${id}</p>${reportContent(c)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${starButton("report", c)}${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <a href="#/publish?update=${id}">Publish new revision</a> · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
   bindStars();
   bind("#withdraw", async () => {
     if (
