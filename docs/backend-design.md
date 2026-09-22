@@ -126,8 +126,8 @@ API counts deduplicate public API paths across versions with visible, nonwithdra
 reports; report/claim counts use those same versions and current revisions.
 Crate descriptions are saved from crates.io version metadata during import, with
 whitespace normalized, and displayed only on the individual crate page.
-GitHub sign-in links go directly to OAuth; the short signup notice sits next to
-the header link. The signed-out Publish page only asks the visitor to sign in.
+GitHub sign-in links go directly to OAuth; only new users then see the Sign up
+confirmation page. The signed-out Publish page only asks the visitor to sign in.
 All displayed reaction counts are labeled stars. The individual crate page lists
 reports for the selected version below the API table, with 30-item cursor paging.
 Report breadcrumbs link through crates, crate name and version. Claim star buttons
@@ -160,7 +160,7 @@ same-origin CSRF. GitHub credentials are never exposed to the frontend. Numeric
 GitHub identity is stable; username and verified primary email refresh on login.
 OAuth access tokens are discarded. Latest Terms version/time live on the account,
 not on each contribution. Updated terms gate publishing, stars and votes until
-agreement; sign-up uses the notice beside the GitHub button.
+agreement; sign-up uses the notice above the final Sign up button.
 
 CLI device authorization is a one-time browser-approved exchange for a hashed,
 90-day publishing token with UUID identity and no name. Bearer scope permits
@@ -218,3 +218,16 @@ not a billing guarantee or spending cap. Account billing previously included 10%
 VAT. Email enabling, DNS/contact forwarding and billing alerts remain separate
 operator configuration; this redesign does not activate them. Keep the USD 10/month
 usage-review threshold and inspect D1 reads, R2, queues and import CPU as usage grows.
+
+## Initial registration confirmation
+
+GitHub OAuth for a new user creates only a ten-minute pending signup (minimal
+GitHub identity, verified primary email, CSRF and same-site return route). It does
+not create a user, preferences or session. The Sign up page identifies the GitHub
+account, offers Use another account, and displays “By signing up, you agree to the
+Terms and acknowledge the Privacy Policy.” above the Sign up button, with links.
+The confirmation POST checks Origin, pending-cookie CSRF, expiry and current terms;
+it atomically consumes the pending request and creates the user/session. Switching
+accounts invalidates the pending signup. Expired pending records are cleaned up
+by the existing scheduled job. Existing users continue directly through login.
+The header no longer displays a signup notice.

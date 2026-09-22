@@ -105,8 +105,10 @@ for op in ['inspect','approve']:
 add(P+'/me/tokens','get','List your unexpired, unrevoked tokens',out=obj({'items':arr(ref('Token'))}),security=sessionRead,description='UUID is a public management identifier, never the secret token. Last used is updated at most once per hour. No token names are stored.')
 add(P+'/me/tokens/{id}','delete','Revoke your token',security=session,description='Idempotent. Only tokens belonging to the current user can be revoked.')
 add(P+'/tokens/revoke','post','Revoke the current CLI token',security=[{'bearer':[]}],description='Use for CLI logout. Works even if terms have changed.')
+add('/auth/signup','get','Read pending first-time registration',out=obj({'username':S(),'csrf':S(),'terms_version':S(),'return_to':S()}),security=[],description='Requires the HttpOnly pending signup cookie set after GitHub OAuth. Expires after 10 minutes. Does not create an account.')
+add('/auth/signup','post','Confirm first-time registration',obj({'terms_version':S()}),obj({'return_to':S()}),security=[],description='Requires same-origin Origin, pending signup cookie, and X-CSRF-Token returned by GET /auth/signup. Atomically consumes the pending request and creates the account and session. Terms version must still be current. Cannot be used with a CLI bearer token.')
 add('/auth/logout','post','Sign out of browser session',security=session)
-for path,params in [('/auth/github',[('return_to',S(description='Only /#/device optionally followed by ?code=XXXXXXXX is allowed.'),False)]),('/auth/github/callback',[(x,S(),True) for x in ['state','code']])]:
+for path,params in [('/auth/github',[('return_to',S(description='Same-site hash route beginning /#/; invalid values fall back to /#/account.'),False),('switch_account',S(description='Set to 1 to show the GitHub account selector.'),False)]),('/auth/github/callback',[(x,S(),True) for x in ['state','code']])]:
  add(path,'get','Start GitHub sign-in' if path.endswith('github') else 'Complete GitHub sign-in',security=[],queries=params)
  paths[path]['get']['responses']={'302':{'description':'Redirect; session/state cookies may be set'},'400':{'description':'Invalid OAuth state'},'503':{'description':'OAuth not configured'}}
 # Match actual accepted Bearer routes rather than advertising unsupported token permissions.

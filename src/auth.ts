@@ -62,6 +62,115 @@ export async function authenticate(c: Ctx) {
     c.set("sessionHash", h);
   }
 }
+const signupCookie = (c: Ctx) =>
+  secure(c) ? "__Host-proofsr_signup" : "proofsr_signup";
+const safeReturn = (v: string | undefined) =>
+  v && v.startsWith("/#/") && v.length <= 2000 && !/[\r\n]/.test(v)
+    ? v
+    : "/#/account";
+async function finishLogin(
+  c: Ctx,
+  user: any,
+  email: any,
+  emailsOK: boolean,
+  existing: any,
+  consume?: D1PreparedStatement,
+) {
+  const db = c.env.DB;
+  const id = existing?.id || uid();
+  const role = c.env.ADMIN_GITHUB_IDS.split(",").includes(String(user.id))
+    ? "admin"
+    : "user";
+  const ss = consume ? [consume] : [];
+  ss.push(
+    stmt(
+      db,
+      "UPDATE users SET username=? WHERE username=? AND github_id<>?",
+      `former-${uid()}`,
+      user.login,
+      user.id,
+    ),
+  );
+  if (existing)
+    ss.push(
+      stmt(
+        db,
+        "UPDATE users SET username=?,role=? WHERE id=?",
+        user.login,
+        role,
+        id,
+      ),
+    );
+  else
+    ss.push(
+      stmt(
+        db,
+        "INSERT INTO users(id,github_id,username,role,accepted_terms_version,terms_accepted_at,created_at) VALUES(?,?,?,?,?,?,?)",
+        id,
+        user.id,
+        user.login,
+        role,
+        c.env.TERMS_VERSION,
+        now(),
+        now(),
+      ),
+    );
+  ss.push(
+    stmt(
+      db,
+      "INSERT INTO notification_preferences(user_id) VALUES(?) ON CONFLICT DO NOTHING",
+      id,
+    ),
+  );
+  if (emailsOK)
+    ss.push(
+      stmt(
+        db,
+        `INSERT INTO email_contacts VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at=excluded.verified_at,delivery_status=excluded.delivery_status`,
+        id,
+        email?.email || null,
+        email ? now() : null,
+        email ? "active" : "unavailable",
+      ),
+    );
+  if (!emailsOK && !existing)
+    ss.push(
+      stmt(
+        db,
+        "INSERT INTO email_contacts(user_id,delivery_status) VALUES(?,?)",
+        id,
+        "unavailable",
+      ),
+    );
+  const session = random(),
+    csrf = random();
+  ss.push(
+    stmt(
+      db,
+      "INSERT INTO sessions VALUES(?,?,?,?)",
+      await hash(session),
+      id,
+      csrf,
+      expiry(30 * 86400000),
+    ),
+  );
+  if (consume)
+    ss.push(
+      stmt(
+        db,
+        "DELETE FROM pending_signups WHERE token_hash=?",
+        await hash(getCookie(c, signupCookie(c))!),
+      ),
+    );
+  await batch(db, ss);
+  setCookie(c, cookieName(c), session, {
+    secure: secure(c),
+    httpOnly: true,
+    sameSite: "Lax",
+    path: "/",
+    maxAge: 30 * 86400,
+  });
+}
 export function authRoutes() {
   const app = new Hono<App>();
   app.get("/github", async (c) => {
@@ -71,8 +180,16 @@ export function authRoutes() {
         "oauth_not_configured",
         "GitHub sign-in is not configured for this environment yet.",
       );
-    const returnTo = c.req.query("return_to") || "";
-    if (/^\/#\/device(?:\?code=[A-Z2-9-]{8,9})?$/.test(returnTo))
+    const old = getCookie(c, signupCookie(c));
+    if (old)
+      await stmt(
+        c.env.DB,
+        "DELETE FROM pending_signups WHERE token_hash=?",
+        await hash(old),
+      ).run();
+    deleteCookie(c, signupCookie(c), { path: "/", secure: secure(c) });
+    const returnTo = safeReturn(c.req.query("return_to"));
+    if (returnTo)
       setCookie(c, "oauth_return", returnTo, {
         secure: secure(c),
         httpOnly: true,
@@ -123,6 +240,8 @@ export function authRoutes() {
       code_challenge: challenge,
       code_challenge_method: "S256",
     }).toString();
+    if (c.req.query("switch_account") === "1")
+      u.searchParams.set("prompt", "select_account");
     return c.redirect(u.href);
   });
   app.get("/github/callback", async (c) => {
@@ -183,96 +302,94 @@ export function authRoutes() {
     );
     if (existing?.status === "suspended")
       throw new Fault(403, "account_suspended");
-    const id = existing?.id || uid();
-    const role = c.env.ADMIN_GITHUB_IDS.split(",").includes(String(user.id))
-      ? "admin"
-      : "user";
-    const ss = [];
-    ss.push(
-      stmt(
-        db,
-        "UPDATE users SET username=? WHERE username=? AND github_id<>?",
-        `former-${uid()}`,
-        user.login,
-        user.id,
-      ),
-    );
-    if (existing)
-      ss.push(
-        stmt(
-          db,
-          "UPDATE users SET username=?,role=? WHERE id=?",
-          user.login,
-          role,
-          id,
-        ),
-      );
-    else
-      ss.push(
-        stmt(
-          db,
-          "INSERT INTO users(id,github_id,username,role,accepted_terms_version,terms_accepted_at,created_at) VALUES(?,?,?,?,?,?,?)",
-          id,
-          user.id,
-          user.login,
-          role,
-          flow.terms_version,
-          now(),
-          now(),
-        ),
-      );
-    ss.push(
-      stmt(
-        db,
-        "INSERT INTO notification_preferences(user_id) VALUES(?) ON CONFLICT DO NOTHING",
-        id,
-      ),
-    );
-    if (Array.isArray(emails))
-      ss.push(
-        stmt(
-          db,
-          `INSERT INTO email_contacts VALUES(?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET address=excluded.address,verified_at=excluded.verified_at,delivery_status=excluded.delivery_status`,
-          id,
-          email?.email || null,
-          email ? now() : null,
-          email ? "active" : "unavailable",
-        ),
-      );
-    if (!Array.isArray(emails) && !existing)
-      ss.push(
-        stmt(
-          db,
-          "INSERT INTO email_contacts(user_id,delivery_status) VALUES(?,?)",
-          id,
-          "unavailable",
-        ),
-      );
-    const session = random(),
-      csrf = random();
-    ss.push(
-      stmt(
-        db,
-        "INSERT INTO sessions VALUES(?,?,?,?)",
-        await hash(session),
-        id,
-        csrf,
-        expiry(30 * 86400000),
-      ),
-    );
-    await batch(db, ss);
-    setCookie(c, cookieName(c), session, {
-      secure: secure(c),
-      httpOnly: true,
-      sameSite: "Lax",
-      path: "/",
-      maxAge: 30 * 86400,
-    });
-    const back = getCookie(c, "oauth_return");
+    const back = safeReturn(getCookie(c, "oauth_return"));
     deleteCookie(c, "oauth_return", { path: "/" });
-    if (back && /^\/#\/device(?:\?code=[A-Z2-9-]{8,9})?$/.test(back))
-      return c.redirect(back);
-    return c.redirect(er.ok ? "/#/account" : "/#/settings?email=retry");
+    if (!existing) {
+      const pending = random();
+      await stmt(
+        db,
+        "INSERT INTO pending_signups VALUES(?,?,?,?,?,?)",
+        await hash(pending),
+        JSON.stringify({
+          user: { id: user.id, login: user.login },
+          email,
+          emailsOK: Array.isArray(emails),
+        }),
+        random(),
+        back,
+        now(),
+        expiry(600000),
+      ).run();
+      setCookie(c, signupCookie(c), pending, {
+        secure: secure(c),
+        httpOnly: true,
+        sameSite: "Lax",
+        path: "/",
+        maxAge: 600,
+      });
+      return c.redirect("/#/signup");
+    }
+    await finishLogin(c, user, email, Array.isArray(emails), existing);
+    return c.redirect(
+      back === "/#/account" && !er.ok ? "/#/settings?email=retry" : back,
+    );
+  });
+  async function pendingSignup(c: Ctx) {
+    const token = getCookie(c, signupCookie(c));
+    const p =
+      token &&
+      (await one(
+        c.env.DB,
+        "SELECT * FROM pending_signups WHERE token_hash=? AND expires_at>?",
+        await hash(token),
+        now(),
+      ));
+    if (!p)
+      throw new Fault(
+        401,
+        "signup_expired",
+        "Sign-up expired. Please sign in again.",
+      );
+    return p;
+  }
+  app.get("/signup", async (c) => {
+    const p = await pendingSignup(c);
+    return c.json({
+      username: JSON.parse(p.profile_json).user.login,
+      csrf: p.csrf,
+      terms_version: c.env.TERMS_VERSION,
+      return_to: p.return_to,
+    });
+  });
+  app.post("/signup", async (c) => {
+    const p = await pendingSignup(c);
+    if (c.req.header("X-CSRF-Token") !== p.csrf)
+      throw new Fault(403, "invalid_csrf");
+    const b = await jsonBody(c);
+    if (b.terms_version !== c.env.TERMS_VERSION)
+      throw new Fault(
+        409,
+        "terms_changed",
+        "Terms changed. Reload before signing up.",
+      );
+    const { user, email, emailsOK } = JSON.parse(p.profile_json);
+    const existing = await one(
+      c.env.DB,
+      "SELECT * FROM users WHERE github_id=?",
+      user.id,
+    );
+    if (existing?.status === "suspended")
+      throw new Fault(403, "account_suspended");
+    // A failed consume aborts the entire batch, including account/session creation.
+    const consume = stmt(
+      c.env.DB,
+      "INSERT INTO transaction_checks(ok) SELECT CASE WHEN EXISTS(SELECT 1 FROM pending_signups WHERE token_hash=? AND expires_at>?) THEN 1 ELSE 0 END",
+      p.token_hash,
+      now(),
+    );
+    await finishLogin(c, user, email, emailsOK, existing, consume);
+    deleteCookie(c, signupCookie(c), { path: "/", secure: secure(c) });
+    return c.json({ return_to: p.return_to });
   });
   app.post("/logout", async (c) => {
     if (c.get("sessionHash"))

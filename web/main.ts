@@ -34,6 +34,7 @@ async function request(
   body?: any,
   key?: string,
   navigationScoped = true,
+  csrfToken = me?.csrf || "",
 ) {
   const generation = routeID;
   const r = await fetch(path.startsWith("/auth/") ? path : "/api/v1" + path, {
@@ -41,7 +42,7 @@ async function request(
     credentials: "same-origin",
     headers: {
       ...(body !== undefined ? { "Content-Type": "application/json" } : {}),
-      ...(method !== "GET" ? { "X-CSRF-Token": me?.csrf || "" } : {}),
+      ...(method !== "GET" ? { "X-CSRF-Token": csrfToken } : {}),
       ...(key ? { "Idempotency-Key": key } : {}),
     },
     body: body === undefined ? undefined : JSON.stringify(body),
@@ -97,7 +98,7 @@ async function refreshMe() {
   me = await request("/me", "GET", undefined, undefined, false);
   document.querySelector("#account-nav")!.innerHTML = me.user
     ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">My activity (${me.karma} karma)</a><a href="#/my-reports">My reports</a><a href="#/my-comments">My comments</a><a href="#/my-starred-reports">Starred reports</a><a href="#/my-starred-claims">Starred claims</a><a href="#/settings">Settings</a><button id="logout">Sign out</button></div></details>`
-    : '<div class="signin"><a href="/auth/github">Sign in with GitHub</a><p class="signin-notice">By signing up, you agree to the <a href="#/terms">Terms</a> and acknowledge the <a href="#/privacy">Privacy Policy</a>.</p></div>';
+    : '<div class="signin"><a href="/auth/github">Sign in with GitHub</a></div>';
   document.querySelector("#logout")?.addEventListener("click", async () => {
     try {
       await request("/auth/logout", "POST", {});
@@ -107,6 +108,31 @@ async function refreshMe() {
     } catch (e) {
       error(e);
     }
+  });
+}
+async function signup() {
+  root.innerHTML = `<h1>Sign up</h1>${loading}`;
+  let pending;
+  try {
+    pending = await request("/auth/signup");
+  } catch (e) {
+    if (e instanceof NavigationChanged) throw e;
+    root.innerHTML =
+      '<h1>Sign up</h1><p>Please <a href="/auth/github">sign in with GitHub</a> again to continue.</p>';
+    throw e;
+  }
+  root.innerHTML = `<h1>Sign up</h1><p>Signed in with GitHub as <strong>${esc(pending.username)}</strong>. <a href="/auth/github?switch_account=1&amp;return_to=${enc(pending.return_to)}">Use another account</a></p><p>By signing up, you agree to the <a href="#/terms" target="_blank" rel="noopener">Terms</a> and acknowledge the <a href="#/privacy" target="_blank" rel="noopener">Privacy Policy</a>.</p><button id="signup">Sign up</button>`;
+  bind("#signup", async () => {
+    const result = await request(
+      "/auth/signup",
+      "POST",
+      { terms_version: pending.terms_version },
+      undefined,
+      true,
+      pending.csrf,
+    );
+    await refreshMe();
+    location.hash = result.return_to.slice(1);
   });
 }
 function needUser() {
@@ -975,6 +1001,7 @@ async function route() {
       await claimsList("/reports", root.querySelector("#reports")!);
     } else if (p === "publish") await publish();
     else if (p === "login") login();
+    else if (p === "signup") await signup();
     else if (p === "terms-update") await termsUpdate();
     else if (p === "user") await activity(id);
     else if (p === "account") {
@@ -999,5 +1026,12 @@ async function route() {
     }
   }
 }
+document.addEventListener("click", (event) => {
+  const link = (event.target as Element).closest?.(
+    'a[href="/auth/github"]',
+  ) as HTMLAnchorElement | null;
+  if (link)
+    link.href = "/auth/github?return_to=" + enc("/" + (location.hash || "#/"));
+});
 window.addEventListener("hashchange", () => void route());
 void route();

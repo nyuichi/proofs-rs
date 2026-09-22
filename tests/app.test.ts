@@ -1067,10 +1067,7 @@ test("frontend publish preview, revision links and nested comment deletion", asy
         .getAttribute("href"),
       "/auth/github",
     );
-    assert.match(
-      w.document.querySelector(".signin-notice")!.textContent!,
-      /By signing up/,
-    );
+    assert.equal(w.document.querySelector(".signin-notice"), null);
     w.location.hash = "/publish";
     await until('#app a[href="/auth/github"]');
     assert.equal(
@@ -1347,6 +1344,27 @@ test("static page content renders before requests, remains usable, and survives 
       assert.equal(d.querySelector("#app h1"), null, path);
       assert.ok(d.querySelector("[data-loading]"), path);
     }
+    w.location.hash = "/signup";
+    await tick();
+    const resolveSignup = pending.get("/auth/signup")!;
+    assert.ok(resolveSignup);
+    resolveSignup(
+      Response.json({
+        username: "new-user",
+        csrf: "pending-csrf",
+        terms_version: "test",
+        return_to: "/#/publish",
+      }),
+    );
+    await tick();
+    assert.equal(d.querySelector("h1")!.textContent, "Sign up");
+    assert.equal(d.querySelector("#signup")!.textContent, "Sign up");
+    assert.match(
+      d.querySelector("#app")!.textContent!,
+      /By signing up, you agree to the Terms and acknowledge the Privacy Policy/,
+    );
+    assert.equal(d.querySelector('input[type="checkbox"]'), null);
+    assert.ok(d.querySelector('a[href^="/auth/github?switch_account=1"]'));
   } finally {
     w.close();
   }
@@ -1403,5 +1421,151 @@ test("public stargazers paginate without duplicates and respect target visibilit
   assert.equal(
     (await request(`/claims/${claim}/stars`, "GET", undefined, "")).status,
     404,
+  );
+});
+
+test("first GitHub login requires explicit signup; existing login bypasses it", async (t) => {
+  const { env, db } = await fixture();
+  env.GITHUB_CLIENT_ID = "test";
+  env.GITHUB_CLIENT_SECRET = "test";
+  env.ADMIN_GITHUB_IDS = "540144";
+  let githubID = 999;
+  t.mock.method(globalThis, "fetch", async (input: any) => {
+    const path = String(input);
+    if (path.includes("access_token"))
+      return Response.json({ access_token: "test" });
+    if (path.endsWith("/user/emails"))
+      return Response.json([
+        { email: "test@example.test", primary: true, verified: true },
+      ]);
+    return Response.json({
+      id: githubID,
+      login: githubID === 999 ? "new-user" : "alice",
+    });
+  });
+  const call = (
+    path: string,
+    cookie: string,
+    method = "GET",
+    body?: any,
+    csrf = "",
+    origin = env.APP_ORIGIN,
+  ) =>
+    app.request(
+      env.APP_ORIGIN + path,
+      {
+        method,
+        headers: {
+          Cookie: cookie,
+          Origin: origin,
+          "Content-Type": "application/json",
+          "X-CSRF-Token": csrf,
+        },
+        ...(body ? { body: JSON.stringify(body) } : {}),
+      },
+      env,
+    );
+  const cookies = (r: Response) =>
+    r.headers
+      .getSetCookie()
+      .map((x) => x.split(";")[0])
+      .join("; ");
+  async function oauth() {
+    const start = await call(
+      "/auth/github?return_to=" +
+        encodeURIComponent("/#/device?code=ABCD-EFGH"),
+      "",
+    );
+    const state = new URL(start.headers.get("location")!).searchParams.get(
+      "state",
+    );
+    return call(
+      "/auth/github/callback?code=test&state=" + state,
+      cookies(start),
+    );
+  }
+  const callback = await oauth();
+  assert.equal(callback.headers.get("location"), "/#/signup");
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM users WHERE github_id=999").get()!.n,
+    0,
+  );
+  const cookie = cookies(callback);
+  const pending = (await (await call("/auth/signup", cookie)).json()) as any;
+  assert.equal(pending.username, "new-user");
+  const b = { terms_version: "test" };
+  assert.equal(
+    (await call("/auth/signup", cookie, "POST", b, "wrong")).status,
+    403,
+  );
+  assert.equal(
+    (
+      await call(
+        "/auth/signup",
+        cookie,
+        "POST",
+        b,
+        pending.csrf,
+        "https://evil.test",
+      )
+    ).status,
+    403,
+  );
+  assert.equal(
+    (
+      await call(
+        "/auth/signup",
+        cookie,
+        "POST",
+        { terms_version: "old" },
+        pending.csrf,
+      )
+    ).status,
+    409,
+  );
+  const signed = await call("/auth/signup", cookie, "POST", b, pending.csrf);
+  assert.equal(signed.status, 200, await signed.clone().text());
+  assert.equal(
+    ((await signed.json()) as any).return_to,
+    "/#/device?code=ABCD-EFGH",
+  );
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM users WHERE github_id=999").get()!.n,
+    1,
+  );
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM pending_signups").get()!.n,
+    0,
+  );
+  assert.match(cookies(signed), /__Host-proofsr_session=/);
+  assert.equal(
+    (await call("/auth/signup", cookie, "POST", b, pending.csrf)).status,
+    401,
+  );
+  githubID = 1;
+  const existing = await oauth();
+  assert.equal(existing.headers.get("location"), "/#/device?code=ABCD-EFGH");
+  assert.match(cookies(existing), /__Host-proofsr_session=/);
+  // Abandoned registrations expire and cannot be confirmed.
+  githubID = 1000;
+  const abandoned = await oauth();
+  const abandonedCookie = cookies(abandoned);
+  db.exec("UPDATE pending_signups SET expires_at='2000-01-01'");
+  assert.equal((await call("/auth/signup", abandonedCookie)).status, 401);
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM users WHERE github_id=1000").get()!.n,
+    0,
+  );
+  const switchAccount = await call(
+    "/auth/github?switch_account=1&return_to=https://evil.test",
+    abandonedCookie,
+  );
+  assert.equal(
+    new URL(switchAccount.headers.get("location")!).searchParams.get("prompt"),
+    "select_account",
+  );
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM pending_signups").get()!.n,
+    0,
   );
 });

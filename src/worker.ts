@@ -65,7 +65,10 @@ app.use("*", async (c, next) => {
   if (write && !publicDevicePaths.has(path)) {
     if (!bearer && c.req.header("origin") !== c.env.APP_ORIGIN)
       throw new Fault(403, "invalid_origin");
-    if (path !== "/api/v1/notifications/unsubscribe") {
+    if (
+      path !== "/api/v1/notifications/unsubscribe" &&
+      path !== "/auth/signup"
+    ) {
       requireUser(c);
       if (!bearer && c.req.header("X-CSRF-Token") !== c.get("csrf"))
         throw new Fault(403, "invalid_csrf");

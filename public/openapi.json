@@ -5392,6 +5392,157 @@
         }
       }
     },
+    "/auth/signup": {
+      "get": {
+        "operationId": "get_auth_signup",
+        "summary": "Read pending first-time registration",
+        "tags": ["Authentication"],
+        "description": "Requires the HttpOnly pending signup cookie set after GitHub OAuth. Expires after 10 minutes. Does not create an account.",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "username": {
+                      "type": "string",
+                      "maxLength": 10000
+                    },
+                    "csrf": {
+                      "type": "string",
+                      "maxLength": 10000
+                    },
+                    "terms_version": {
+                      "type": "string",
+                      "maxLength": 10000
+                    },
+                    "return_to": {
+                      "type": "string",
+                      "maxLength": 10000
+                    }
+                  },
+                  "required": ["username", "csrf", "terms_version", "return_to"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_auth_signup",
+        "summary": "Confirm first-time registration",
+        "tags": ["Authentication"],
+        "description": "Requires same-origin Origin, pending signup cookie, and X-CSRF-Token returned by GET /auth/signup. Atomically consumes the pending request and creates the account and session. Terms version must still be current. Cannot be used with a CLI bearer token.",
+        "security": [],
+        "parameters": [],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "return_to": {
+                      "type": "string",
+                      "maxLength": 10000
+                    }
+                  },
+                  "required": ["return_to"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "terms_version": {
+                    "type": "string",
+                    "maxLength": 10000
+                  }
+                },
+                "required": ["terms_version"]
+              }
+            }
+          }
+        }
+      }
+    },
     "/auth/logout": {
       "post": {
         "operationId": "post_auth_logout",
@@ -5478,7 +5629,17 @@
             "schema": {
               "type": "string",
               "maxLength": 10000,
-              "description": "Only /#/device optionally followed by ?code=XXXXXXXX is allowed."
+              "description": "Same-site hash route beginning /#/; invalid values fall back to /#/account."
+            }
+          },
+          {
+            "name": "switch_account",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000,
+              "description": "Set to 1 to show the GitHub account selector."
             }
           }
         ],

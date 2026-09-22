@@ -38,6 +38,7 @@ export async function dispatch(env: Env) {
   await db.batch([
     stmt(db, "DELETE FROM sessions WHERE expires_at<?", now()),
     stmt(db, "DELETE FROM oauth_flows WHERE expires_at<?", now()),
+    stmt(db, "DELETE FROM pending_signups WHERE expires_at<?", now()),
     stmt(
       db,
       "DELETE FROM rate_limits WHERE bucket<?",
