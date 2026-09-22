@@ -625,3 +625,60 @@ textarea {
   gap: 0.65rem;
   white-space: nowrap;
 }
+
+/* Shared document rhythm, retaining native controls and classic web links. */
+header,
+main,
+footer {
+  max-width: 1000px;
+}
+main {
+  margin-inline: 0;
+}
+main:has(> .home-search) {
+  margin-inline: 0;
+}
+.home-search {
+  text-align: left;
+  padding: 0 0 12px;
+}
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+}
+h1 {
+  font-weight: normal;
+}
+a {
+  overflow-wrap: anywhere;
+}
+.report-context {
+  border: 0;
+  border-left: 2px solid #999;
+  padding: 2px 16px;
+}
+.signature {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.tool-documentation {
+  max-width: 800px;
+}
+.tool-documentation h2 {
+  margin-top: 24px;
+}
+.documentation-history {
+  margin: 24px 0 16px;
+}
+@media (max-width: 600px) {
+  .title-row h1 {
+    flex-basis: 100%;
+  }
+  .title-row {
+    gap: 0;
+  }
+  .star-controls {
+    margin-bottom: 12px;
+  }
+}

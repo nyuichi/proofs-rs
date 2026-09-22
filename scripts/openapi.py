@@ -94,6 +94,8 @@ for prefix in ['/users/{id}','/me']:
  for suffix,schema in [('reports','Report'),('comments','Comment')]:add(P+prefix+'/'+suffix,'get','List user '+suffix,out=listing(ref(schema)),queries=cursor,security=([{'session':[]},{'bearer':[]}] if suffix=='reports' else sessionRead) if prefix=='/me' else None,description='Deleted comments are excluded from activity.')
 add(P+'/tools','get','List registered tools and versions',out=obj({'items':arr(ref('tools')),'versions':arr(ref('tool_versions'))}))
 add(P+'/tools/{slug}','get','Get registered tool',out={'allOf':[ref('tools'),obj({'versions':arr(ref('tool_versions'))})]})
+docrev=obj({'revision':{'type':'integer'},'date':{'type':'string'},'summary':{'type':'string'},'markdown':{'type':'string'}})
+add(P+'/tool-versions/{id}/documentation','get','Get reviewed tool documentation and its revision history',out=obj({'id':{'type':'string'},'tool_id':{'type':'string'},'tool':{'type':'string'},'version':{'type':'string'},'documentation':obj({'id':{'type':'string'},'latest':docrev,'revisions':arr(docrev)})}))
 add(P+'/tools/{slug}/reports','get','List reports using a tool',out=listing(ref('Report')),queries=cursor)
 add(P+'/publish/prepare','post','Prepare exact crate version',obj({'crate':S(64,minLength=1),'version':S(100,minLength=1)}),obj({'status':{'const':'ready'},'crate':S(),'version':S()}),description='Returns 200 when cached, otherwise 202 with an import job ID. Poll GET /imports/{id}. 5 new imports per user per UTC day, 50 per IP. No proof execution.')
 paths[P+'/publish/prepare']['post']['responses']['202']={'description':'Import pending or running','content':{'application/json':{'schema':ref('Import')}}}
@@ -112,7 +114,7 @@ for path,params in [('/auth/github',[('return_to',S(description='Only /#/device 
 # Match actual accepted Bearer routes rather than advertising unsupported token permissions.
 for path,methods in paths.items():
  for method,op in methods.items():
-  allowed=method=='get' and (path in [P+'/me',P+'/me/reports'] or re.match(r'^/api/v1/(crates|apis|claims|reports|tools|resolve-api|imports|health|config|terms)(/|$)',path)) or method=='post' and (path in [P+'/reports',P+'/reports/validate',P+'/publish/prepare',P+'/tokens/revoke'] or re.match(r'^/api/v1/reports/[^/]+/revisions$',path))
+  allowed=method=='get' and (path in [P+'/me',P+'/me/reports'] or re.match(r'^/api/v1/(crates|apis|claims|reports|tools|tool-versions|resolve-api|imports|health|config|terms)(/|$)',path)) or method=='post' and (path in [P+'/reports',P+'/reports/validate',P+'/publish/prepare',P+'/tokens/revoke'] or re.match(r'^/api/v1/reports/[^/]+/revisions$',path))
   if not allowed:op['security']=[x for x in op['security'] if 'bearer' not in x]
   if method=='get':op['parameters']=[x for x in op['parameters'] if x['name']!='Origin']
 spec=dict(openapi='3.1.1',info=dict(title='proofs.rs API',version='1.1.0',description='Public registry API and browser-assisted CLI authentication. CLI tokens have publish scope and a 90-day lifetime. Browser writes require same-origin Origin and X-CSRF-Token from GET /api/v1/me. Lists use opaque keyset cursors and 30 items per page unless noted. Non-2xx responses contain an error code. Request bodies are limited to 128 KiB. Current terms must be accepted in the browser before publishing. Local CLI token storage is the responsibility of the client.'),servers=[{'url':'/'}],paths=paths,components=dict(securitySchemes={'session':{'type':'apiKey','in':'cookie','name':'__Host-proofsr_session'},'csrf':{'type':'apiKey','in':'header','name':'X-CSRF-Token'},'bearer':{'type':'http','scheme':'bearer','bearerFormat':'Opaque 256-bit token'}},schemas=sc))
@@ -128,3 +130,4 @@ for methods in paths.values():
 spec['components']['responses']=common
 Path('public/openapi.json').write_text(json.dumps(spec,indent=2)+'\n')
 print(str(sum(map(len,paths.values())))+' operations documented')
+

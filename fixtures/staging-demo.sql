@@ -175,3 +175,6 @@ INSERT OR IGNORE INTO report_stars(report_id,user_id,created_at) VALUES((SELECT 
 INSERT OR IGNORE INTO report_stars(report_id,user_id,created_at) VALUES((SELECT id FROM reports WHERE create_key='staging-demo-reports-v1-parser-demo-Kani'),'edc17c32-9983-5086-8108-7b7d01cc3747','2026-09-20T10:00:00.000Z');
 INSERT OR IGNORE INTO report_stars(report_id,user_id,created_at) VALUES((SELECT id FROM reports WHERE create_key='staging-demo-reports-v1-parser-demo-Kani'),'dea89ede-13d5-5904-843b-6d94032705f3','2026-09-20T10:00:00.000Z');
 INSERT OR IGNORE INTO audit_events(id,action,target_id,reason,created_at) VALUES('280b0a20-754f-554c-8d8d-b1d886a499b7','staging_demo_seed','staging-demo-reports-v1','User-requested synthetic staging data based on the original Sites mock.','2026-09-20T10:00:00.000Z');
+
+
+INSERT OR IGNORE INTO tool_documentation_bindings SELECT id,CASE WHEN id='demo-kani' THEN 'kani' ELSE 'demo' END FROM tools WHERE id LIKE 'demo-%';

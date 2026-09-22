@@ -45,3 +45,10 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+
+      - run: npm run preview:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: branch-ui-preview
+          path: dist/branch-preview.html
+          retention-days: 14

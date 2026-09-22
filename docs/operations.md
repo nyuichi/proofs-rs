@@ -130,3 +130,42 @@ as synthetic. Demo API signatures are illustrative and have no doc_snapshots;
 they are for browsing, comments and voting, not publishing new reports or testing
 docs.rs import. Use a real release for publication tests. No proof was run.
 The generator and original sample data are retained in scripts/fixtures.
+
+
+## Reviewed tool documentation
+
+Tool registration requires `documentation_id`. Documents live in
+`content/tool-docs/manifest.json` and numbered Markdown files. Add a reviewed
+non-empty document before calling the admin `tool` action. The initial real
+document is `kani`; `demo` is exclusively for synthetic staging examples.
+There is no generated editorial content and no end-user editing UI.
+
+Append a numbered file and manifest entry for each revision; do not rewrite
+published revisions. Run `node scripts/build-tool-docs.mjs`, commit its generated
+`src/tool-doc-content.ts`, and review the Markdown in the same PR. Tests detect
+stale generated content. Markdown HTML and images are not executed/rendered;
+external links are restricted to HTTP(S).
+
+Versions inherit their tool's document. The admin `tool_version` action can
+supply `documentation_id` to bind a different reviewed document. Shared documents
+update all referencing versions on deployment. Report revisions are not changed.
+The public documentation page defaults to the newest document revision and
+provides links to the retained older text.
+
+Migration 0003 maps existing Kani entries and synthetic `demo-*` entries. Before
+deploying to an existing environment, inventory other tools; register reviewed
+documents and bindings for them in the deployment change. Do not silently assign
+Kani documentation to unrelated tools. A missing binding blocks new publication.
+
+## Branch UI preview without deploying
+
+Run `npm run build` then `npm run preview:build`. Open
+`dist/branch-preview.html` in a browser. This uses the actual built frontend and
+responses from the actual API against an in-memory SQLite database seeded with
+synthetic staging fixtures. It does not contact production/staging or allow
+sign-in or writes. The preview contains all listing pages; pagination is flattened.
+It is suitable for layout, navigation and content review, not live authentication
+or editing tests. Existing integration tests exercise authenticated editing.
+
+PR CI attaches this HTML as the `branch-ui-preview` artifact. No merge, staging
+migration, production deployment or Cloudflare secret is needed to review it.

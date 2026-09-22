@@ -48,7 +48,7 @@ app.use("*", async (c, next) => {
       c.req.method === "GET" &&
       (path === "/api/v1/me" ||
         path === "/api/v1/me/reports" ||
-        /^\/api\/v1\/(crates|apis|claims|reports|tools|resolve-api|imports|health|config|terms)(\/|$)/.test(
+        /^\/api\/v1\/(crates|apis|claims|reports|tools|tool-versions|resolve-api|imports|health|config|terms)(\/|$)/.test(
           path,
         ));
     const writable =
@@ -142,3 +142,4 @@ export default {
   },
 };
 export { app };
+

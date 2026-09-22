@@ -1,3 +1,4 @@
+import { requireDocument, documentationFor } from "./tool-docs";
 import { Hono } from "hono";
 import {
   App,
@@ -195,6 +196,12 @@ admin.post("/action", async (c) => {
       );
       break;
     case "tool_version":
+      if (b.documentation_id !== undefined) {
+        requireDocument(b.documentation_id);
+      } else {
+        await documentationFor(db, text(b.tool_id, "Tool", 100, true), target);
+      }
+
       ss.push(
         stmt(
           db,
@@ -207,6 +214,8 @@ admin.post("/action", async (c) => {
       );
       break;
     case "tool":
+      requireDocument(b.documentation_id);
+
       ss.push(
         stmt(
           db,
@@ -222,6 +231,24 @@ admin.post("/action", async (c) => {
     default:
       throw new Fault(400, "unknown_admin_action");
   }
+  if (b.action === "tool")
+    ss.push(
+      stmt(
+        db,
+        "INSERT INTO tool_documentation_bindings VALUES(?,?) ON CONFLICT(tool_id) DO UPDATE SET documentation_id=excluded.documentation_id",
+        target,
+        b.documentation_id,
+      ),
+    );
+  if (b.action === "tool_version" && b.documentation_id !== undefined)
+    ss.push(
+      stmt(
+        db,
+        "INSERT INTO tool_version_documentation_bindings VALUES(?,?) ON CONFLICT(tool_version_id) DO UPDATE SET documentation_id=excluded.documentation_id",
+        target,
+        b.documentation_id,
+      ),
+    );
   await batch(db, ss);
   return c.json({ ok: true });
 });

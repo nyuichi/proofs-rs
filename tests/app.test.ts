@@ -55,7 +55,7 @@ async function fixture(seedTools = true) {
   const { db, binding } = database();
   if (seedTools)
     db.exec(
-      "INSERT INTO tools VALUES('kani','Kani','Test verifier','https://example.test',1); INSERT INTO tool_versions VALUES('kani-0.68.0','kani','0.68.0',1);",
+      "INSERT INTO tools VALUES('kani','Kani','Test verifier','https://example.test',1); INSERT INTO tool_versions VALUES('kani-0.68.0','kani','0.68.0',1); INSERT INTO tool_documentation_bindings VALUES('kani','kani');",
     );
   const time = new Date().toISOString();
   for (const [id, n] of [
@@ -473,6 +473,7 @@ test("empty catalogue can be managed through the authenticated admin API", async
     description: "A configurable tool",
     url: "https://example.test/verifier",
     reason: "Register tool",
+    documentation_id: "kani",
   };
   assert.equal((await request("/admin/action", "POST", tool)).status, 403);
   assert.equal(
@@ -840,14 +841,16 @@ test("frontend publish preview, revision links and nested comment deletion", asy
   };
   w.confirm = () => true;
   w.HTMLElement.prototype.scrollIntoView = () => {};
+  Object.assign(w, {
+    renderMarkdown: (await import("../web/markdown")).renderMarkdown,
+  });
   const legal = readFileSync(
     new URL("../web/legal.ts", import.meta.url),
     "utf8",
   ).replace("export const legal", "const legal");
-  const main = readFileSync(
-    new URL("../web/main.ts", import.meta.url),
-    "utf8",
-  ).replace(/import \{ legal \} from "\.\/legal";/, "");
+  const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
+    .replace(/import \{ legal \} from "\.\/legal";/, "")
+    .replace(/import \{ renderMarkdown \} from "\.\/markdown";/, "");
   w.eval(
     transpileModule(legal + "\n" + main, {
       compilerOptions: { module: ModuleKind.None, target: ScriptTarget.ES2022 },
@@ -1254,14 +1257,16 @@ test("static page content renders before requests, remains usable, and survives 
     resolve(new Response(JSON.stringify(body), { status }));
   };
   const tick = () => new Promise((resolve) => setTimeout(resolve, 10));
+  Object.assign(w, {
+    renderMarkdown: (await import("../web/markdown")).renderMarkdown,
+  });
   const legal = readFileSync(
     new URL("../web/legal.ts", import.meta.url),
     "utf8",
   ).replace("export const legal", "const legal");
-  const main = readFileSync(
-    new URL("../web/main.ts", import.meta.url),
-    "utf8",
-  ).replace(/import \{ legal \} from "\.\/legal";/, "");
+  const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
+    .replace(/import \{ legal \} from "\.\/legal";/, "")
+    .replace(/import \{ renderMarkdown \} from "\.\/markdown";/, "");
   try {
     w.eval(
       transpileModule(legal + "\n" + main, {
@@ -1404,4 +1409,88 @@ test("public stargazers paginate without duplicates and respect target visibilit
     (await request(`/claims/${claim}/stars`, "GET", undefined, "")).status,
     404,
   );
+});
+
+test("tool documentation is public, version-specific, shared and mandatory at registration", async () => {
+  const { request, db } = await fixture();
+  const a = await request("/tool-versions/kani-0.68.0/documentation");
+  assert.equal(a.status, 200);
+  assert.equal(a.body.documentation.id, "kani");
+  assert.match(a.body.documentation.latest.markdown, /Verification scope/);
+  assert.equal(a.body.documentation.revisions.length, 1);
+  const missing = await request(
+    "/admin/action",
+    "POST",
+    {
+      action: "tool",
+      target: "undocumented",
+      name: "Missing",
+      description: "Missing",
+      url: "https://example.test",
+      reason: "Test",
+    },
+    "admin",
+  );
+  assert.equal(missing.status, 400);
+  assert.equal(
+    db.prepare("SELECT id FROM tools WHERE id='undocumented'").get(),
+    undefined,
+  );
+  assert.equal(
+    (await request("/tool-versions/not-found/documentation")).status,
+    404,
+  );
+  const add = await request(
+    "/admin/action",
+    "POST",
+    {
+      action: "tool_version",
+      target: "another-kani",
+      tool_id: "kani",
+      version: "test",
+      reason: "Test shared docs",
+    },
+    "admin",
+  );
+  assert.equal(add.status, 200);
+  assert.equal(
+    (await request("/tool-versions/another-kani/documentation")).body
+      .documentation.id,
+    "kani",
+  );
+  const override = await request(
+    "/admin/action",
+    "POST",
+    {
+      action: "tool_version",
+      target: "another-kani",
+      tool_id: "kani",
+      version: "test",
+      documentation_id: "demo",
+      reason: "Test explicit override",
+    },
+    "admin",
+  );
+  assert.equal(override.status, 200);
+  assert.equal(
+    (await request("/tool-versions/another-kani/documentation")).body
+      .documentation.id,
+    "demo",
+  );
+  assert.equal(
+    (await request("/tool-versions/kani-0.68.0/documentation")).body
+      .documentation.id,
+    "kani",
+  );
+});
+test("tool Markdown renders formatting without executable HTML or unsafe links", async () => {
+  const { renderMarkdown } = await import("../web/markdown");
+  const html = renderMarkdown(
+    "## Heading\n\n<script>alert(1)</script>\n\n[bad](javascript:alert)\n\n[good](https://example.test)\n\n![image](https://example.test/image)",
+  );
+  assert.match(html, /<h2>Heading<\/h2>/);
+  assert.ok(!html.includes("<script>"));
+  assert.ok(!html.includes('href="javascript:'));
+  assert.ok(!html.includes("<img"));
+  assert.match(html, /rel="noopener noreferrer"/);
 });

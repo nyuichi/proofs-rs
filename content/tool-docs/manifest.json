@@ -1,0 +1,4 @@
+{
+  "kani": [{"revision":1,"date":"2026-09-22","summary":"Initial scope and limitations documentation","file":"kani/1.md"}],
+  "demo": [{"revision":1,"date":"2026-09-22","summary":"Identify synthetic staging tools and reports","file":"demo/1.md"}]
+}

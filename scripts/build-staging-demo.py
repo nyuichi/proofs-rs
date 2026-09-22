@@ -61,5 +61,7 @@ for index,(key,items) in enumerate(groups.items()):
         insert('report_comment_history',comment_id=uid('edited'),history_no=1,action='edit',body='Is the upper endpoint covered?',actor_id=uid('nora'),created_at=date(10))
         for name in ['emil','soren']:insert('report_comment_votes',comment_id=uid('edited'),user_id=uid(name),value=1,updated_at=date(10))
 insert('audit_events',id=uid('reports-seed-audit'),action='staging_demo_seed',target_id='staging-demo-reports-v1',reason='User-requested synthetic staging data based on the original Sites mock.',created_at=date(10))
+Q.append("INSERT OR IGNORE INTO tool_documentation_bindings SELECT id,CASE WHEN id='demo-kani' THEN 'kani' ELSE 'demo' END FROM tools WHERE id LIKE 'demo-%';")
 Path('fixtures/staging-demo.sql').write_text('\n'.join(Q)+'\n')
 print(f'{len(groups)} reports; {len(claims)} claims; {len(Q)} additive statements')
+

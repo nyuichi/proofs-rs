@@ -1,3 +1,4 @@
+import { documentationFor } from "./tool-docs";
 import { Hono } from "hono";
 import semver from "semver";
 import {
@@ -350,6 +351,7 @@ async function validate(c: Ctx, b: any, existing?: any) {
     text(b.tool_version_id, "Tool version", 200, true),
   );
   if (!tv) throw new Fault(400, "tool_version_unavailable");
+  await documentationFor(c.env.DB, tv.tool_id, tv.id);
   if (!Array.isArray(b.claims) || b.claims.length < 1 || b.claims.length > 100)
     throw new Fault(
       400,
@@ -936,6 +938,18 @@ api.get("/tools/:slug", async (c) => {
       "SELECT * FROM tool_versions WHERE tool_id=?",
       t.id,
     ),
+  });
+});
+api.get("/tool-versions/:id/documentation", async (c) => {
+  const v = await one(
+    c.env.DB,
+    "SELECT tv.*,t.name tool FROM tool_versions tv JOIN tools t ON t.id=tv.tool_id WHERE tv.id=?",
+    c.req.param("id"),
+  );
+  if (!v) throw new Fault(404, "tool_version_not_found");
+  return c.json({
+    ...v,
+    documentation: await documentationFor(c.env.DB, v.tool_id, v.id),
   });
 });
 api.get("/tools/:slug/reports", async (c) =>
