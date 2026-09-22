@@ -24,13 +24,13 @@ sc['RevisionInput']={'allOf':[ref('ReportInput'),obj({'expected_revision':I})]}
 sc['ValidationInput']={'allOf':[ref('ReportInput'),obj({'report_id':I},[])]}
 sc['NormalizedClaimInput']=obj({**sc['ClaimInput']['properties'],'id':{'type':['string','null'],'format':'uuid'},'display_path':S(),'is_unsafe':{'type':'integer'}})
 sc['ValidationResult']=obj({**sc['ReportInput']['properties'],'claims':arr(ref('NormalizedClaimInput')),'release_id':I,'tool':S(),'tool_version':S(),'changes':obj({'added':{'type':'integer'},'retained':arr(S()),'removed':arr(S())})})
-reportFields={k:S() for k in ['title','explanation','trusted_assumptions','environment','evidence_url','limitations','tool_version_id','created_at','updated_at','crate','version','tool','tool_version','visibility']}
+reportFields={k:S() for k in ['title','explanation','trusted_assumptions','environment','evidence_url','limitations','tool_version_id','created_at','updated_at','crate','version','tool','tool_version','tool_limitations','visibility']}
 reportFields.update({k:{'type':'integer'} for k in ['id','release_id','revision_no','latest_revision_no','star_count','comment_count','claim_count','author_karma','yanked']})
-reportFields.update({k:{'type':['string','null']} for k in ['author_id','username','withdrawn_at']})
+reportFields.update({k:{'type':['string','null']} for k in ['author_id','username','withdrawn_at','tool_limitations_updated_at']})
 sc['Report']=obj(reportFields)
-claimFields={k:S() for k in ['id','api_item_id','property','created_at','title','precondition','explanation','trusted_assumptions','evidence_url','limitations','display_path','signature','upstream_url','report_title','shared_explanation','shared_trusted_assumptions','shared_evidence_url','shared_limitations','environment','tool_version_id','crate','version','tool','tool_version','visibility']}
+claimFields={k:S() for k in ['id','api_item_id','property','created_at','title','precondition','explanation','trusted_assumptions','evidence_url','limitations','display_path','signature','upstream_url','report_title','shared_explanation','shared_trusted_assumptions','shared_evidence_url','shared_limitations','environment','tool_version_id','crate','version','tool','tool_version','tool_limitations','visibility']}
 claimFields.update({k:{'type':'integer'} for k in ['report_id','report_revision','latest_report_revision','position','star_count','report_star_count','report_comment_count','author_karma','is_unsafe','in_current_report']})
-claimFields.update({k:{'type':['string','null']} for k in ['author_id','username','withdrawn_at']})
+claimFields.update({k:{'type':['string','null']} for k in ['author_id','username','withdrawn_at','tool_limitations_updated_at']})
 sc['Claim']=obj(claimFields)
 sc['ClaimDetail']={'allOf':[ref('Claim'),obj({'my_star':B})]}
 sc['ReportDetail']={'allOf':[ref('Report'),obj({'my_star':B,'claims':arr(ref('ClaimDetail'))})]}
@@ -94,6 +94,8 @@ for prefix in ['/users/{id}','/me']:
  for suffix,schema in [('reports','Report'),('comments','Comment')]:add(P+prefix+'/'+suffix,'get','List user '+suffix,out=listing(ref(schema)),queries=cursor,security=([{'session':[]},{'bearer':[]}] if suffix=='reports' else sessionRead) if prefix=='/me' else None,description='Deleted comments are excluded from activity.')
 add(P+'/tools','get','List registered tools and versions',out=obj({'items':arr(ref('tools')),'versions':arr(ref('tool_versions'))}))
 add(P+'/tools/{slug}','get','Get registered tool',out={'allOf':[ref('tools'),obj({'versions':arr(ref('tool_versions'))})]})
+add(P+'/tool-versions/{id}','get','Get tool version and current known limitations',out={'allOf':[ref('tool_versions'),obj({'tool':S()})]},description='Operator-maintained plain text. Empty limitations means no information has been recorded, not that the tool has no limitations. Updates also appear on existing report and claim revisions.')
+add(P+'/tool-versions/{id}/reports','get','List current reports using this exact tool version',out=listing(ref('Report')),queries=cursor)
 add(P+'/tools/{slug}/reports','get','List reports using a tool',out=listing(ref('Report')),queries=cursor)
 add(P+'/publish/prepare','post','Prepare exact crate version',obj({'crate':S(64,minLength=1),'version':S(100,minLength=1)}),obj({'status':{'const':'ready'},'crate':S(),'version':S()}),description='Returns 200 when cached, otherwise 202 with an import job ID. Poll GET /imports/{id}. 5 new imports per user per UTC day, 50 per IP. No proof execution.')
 paths[P+'/publish/prepare']['post']['responses']['202']={'description':'Import pending or running','content':{'application/json':{'schema':ref('Import')}}}

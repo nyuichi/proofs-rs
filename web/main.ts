@@ -354,11 +354,29 @@ function bindStars() {
     await route();
   });
 }
+function toolLink(c: any) {
+  const label = `${esc(c.tool)} ${esc(c.tool_version)}`;
+  return c.tool_version_id
+    ? `<a href="#/tool-version/${enc(c.tool_version_id)}">${label}</a>`
+    : label;
+}
+function toolLimitations(c: any) {
+  if (!c.tool_limitations) return "";
+  return `<details class="tool-limitations"><summary>Tool limitations</summary><div class="tool-limitations-body"><p class="plain-text">${esc(c.tool_limitations)}</p>${c.tool_limitations_updated_at ? `<p class="meta">Updated ${date(c.tool_limitations_updated_at)}</p>` : ""}<p><a href="#/tool-version/${enc(c.tool_version_id)}">${esc(c.tool)} ${esc(c.tool_version)} — version details</a></p></div></details>`;
+}
+async function toolVersionPage(id: string) {
+  const v = await request("/tool-versions/" + enc(id));
+  root.innerHTML = `<p class="breadcrumbs"><a href="#/tools">Tools</a> / <a href="#/tool/${enc(v.tool_id)}">${esc(v.tool)}</a> / ${esc(v.version)}</p><h1>${esc(v.tool)} ${esc(v.version)}</h1>${v.selectable ? "" : "<p>This version is retired from new submissions.</p>"}${v.limitations ? `<h2>Known limitations</h2><p class="plain-text">${esc(v.limitations)}</p>${v.limitations_updated_at ? `<p class="meta">Updated ${date(v.limitations_updated_at)}</p>` : ""}` : ""}<h2>Reports</h2><div id="items">${loading}</div>`;
+  await claimsList(
+    "/tool-versions/" + enc(id) + "/reports",
+    root.querySelector("#items")!,
+  );
+}
 function reportContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p>${esc(c.crate)} ${esc(c.version)} · ${esc(c.tool)} ${esc(c.tool_version)}</p><dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p>${esc(c.crate)} ${esc(c.version)} · ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
 }
 function claimContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("claim", c) : `<h1>${esc(c.title)}</h1>`}<p><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Tool", `${c.tool} ${c.tool_version}`)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("claim", c) : `<h1>${esc(c.title)}</h1>`}<p><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
 }
 async function claimPage(id: string) {
   const n = current().searchParams.get("report_revision");
@@ -680,7 +698,7 @@ async function devicePage() {
 async function toolsPage(id?: string) {
   if (id) {
     const t = await request("/tools/" + enc(id));
-    root.innerHTML = `<h1>${esc(t.name)}</h1><p>${esc(t.description)}</p><p><a href="${esc(t.official_url)}" rel="noopener noreferrer">Tool website</a></p><h2>Supported versions</h2><ul>${t.versions.map((v: any) => `<li>${esc(v.version)}${v.selectable ? "" : " (retired)"}</li>`).join("")}</ul><h2>Reports</h2><div id="items"></div>`;
+    root.innerHTML = `<h1>${esc(t.name)}</h1><p>${esc(t.description)}</p><p><a href="${esc(t.official_url)}" rel="noopener noreferrer">Tool website</a></p><h2>Supported versions</h2><ul>${t.versions.map((v: any) => `<li><a href="#/tool-version/${enc(v.id)}">${esc(v.version)}</a>${v.selectable ? "" : " (retired)"}</li>`).join("")}</ul><h2>Reports</h2><div id="items"></div>`;
     return claimsList(
       "/tools/" + enc(id) + "/reports",
       root.querySelector("#items")!,
@@ -1010,6 +1028,7 @@ async function route() {
     } else if (p.startsWith("my-")) await mine(p.slice(3));
     else if (p === "settings") await settings();
     else if (p === "device") await devicePage();
+    else if (p === "tool-version") await toolVersionPage(id);
     else if (p === "tools" || p === "tool") await toolsPage(id);
     else if (p === "unsubscribe") await unsubscribe();
     else if (p in legal)

@@ -55,7 +55,7 @@ async function fixture(seedTools = true) {
   const { db, binding } = database();
   if (seedTools)
     db.exec(
-      "INSERT INTO tools VALUES('kani','Kani','Test verifier','https://example.test',1); INSERT INTO tool_versions VALUES('kani-0.68.0','kani','0.68.0',1);",
+      "INSERT INTO tools VALUES('kani','Kani','Test verifier','https://example.test',1); INSERT INTO tool_versions(id,tool_id,version,selectable) VALUES('kani-0.68.0','kani','0.68.0',1);",
     );
   const time = new Date().toISOString();
   for (const [id, n] of [
@@ -1059,6 +1059,40 @@ test("frontend publish preview, revision links and nested comment deletion", asy
       w.document.querySelector("#crate-rows tr td:nth-child(2)")!.textContent,
       "2",
     );
+    await request(
+      "/admin/action",
+      "POST",
+      {
+        action: "tool_version_limitations",
+        target: "kani-0.68.0",
+        limitations: "First line\n<script>not executable</script>",
+        reason: "UI check",
+      },
+      "admin",
+    );
+    w.location.hash = "/tool/kani";
+    const versionLink = await until('a[href="#/tool-version/kani-0.68.0"]');
+    (versionLink as any).click();
+    await until(".plain-text");
+    assert.equal(w.document.querySelector("h1")!.textContent, "Kani 0.68.0");
+    assert.equal(
+      w.document.querySelector(".plain-text")!.textContent,
+      "First line\n<script>not executable</script>",
+    );
+    assert.equal(w.document.querySelector("#app script"), null);
+    const reportLink = await until('#items a[href^="#/report/"]');
+    (reportLink as any).click();
+    const disclosure = await until("details.tool-limitations");
+    assert.equal(disclosure.hasAttribute("open"), false);
+    assert.match(disclosure.textContent!, /Updated/);
+    const limitationClaimLink = await until(
+      '#app a[href^="#/claim/"]:not([href$="/stars"])',
+    );
+    w.location.hash = limitationClaimLink.getAttribute("href")!;
+    await until(".signature");
+    await until("details.tool-limitations");
+    assert.equal(w.document.querySelector("#app script"), null);
+    assert.equal(w.eval('toolLimitations({tool_limitations:""})'), "");
     signedInUser = "";
     await w.eval("refreshMe()");
     assert.equal(
@@ -1069,6 +1103,7 @@ test("frontend publish preview, revision links and nested comment deletion", asy
     );
     assert.equal(w.document.querySelector(".signin-notice"), null);
     w.location.hash = "/publish";
+    await new Promise((resolve) => setTimeout(resolve, 10));
     await until('#app a[href="/auth/github"]');
     assert.equal(
       w.document.querySelector("#app")!.textContent,
@@ -1568,4 +1603,96 @@ test("first GitHub login requires explicit signup; existing login bypasses it", 
     db.prepare("SELECT COUNT(*) n FROM pending_signups").get()!.n,
     0,
   );
+});
+
+test("tool version limitations are operator-maintained, live on old reports, and version-scoped", async () => {
+  const { request, db } = await fixture();
+  const version = "/tool-versions/kani-0.68.0";
+  const made = await request("/reports", "POST", reportInput);
+  const id = made.body.id;
+  const before = (await request(`/reports/${id}`)).body;
+  assert.equal(before.tool_limitations, "");
+  assert.equal(before.tool_limitations_updated_at, null);
+  const action = {
+    action: "tool_version_limitations",
+    target: "kani-0.68.0",
+    limitations: "Bounded harnesses only.\n<script>example</script>",
+    reason: "Document known limitations",
+  };
+  assert.equal((await request("/admin/action", "POST", action)).status, 403);
+  assert.equal(
+    (await request("/admin/action", "POST", action, "admin")).status,
+    200,
+  );
+  const v = (await request(version, "GET", undefined, "")).body;
+  assert.equal(v.limitations, action.limitations);
+  assert.ok(v.limitations_updated_at);
+  const report = (await request(`/reports/${id}?v=1`)).body;
+  const claim = (
+    await request(`/claims/${before.claims[0].id}?report_revision=1`)
+  ).body;
+  for (const item of [report, claim]) {
+    assert.equal(item.tool_limitations, action.limitations);
+    assert.equal(item.tool_limitations_updated_at, v.limitations_updated_at);
+  }
+  assert.equal(report.revision_no, 1);
+  assert.equal(
+    db.prepare("SELECT COUNT(*) n FROM report_revisions").get()!.n,
+    1,
+  );
+  assert.equal((await request(version + "/reports")).body.items[0].id, id);
+  db.exec(
+    "INSERT INTO tool_versions(id,tool_id,version) VALUES('other-version','kani','other')",
+  );
+  assert.equal(
+    (await request("/tool-versions/other-version/reports")).body.items.length,
+    0,
+  );
+  db.exec(`UPDATE reports SET visibility='hidden' WHERE id=${id}`);
+  assert.equal((await request(version + "/reports")).body.items.length, 0);
+  assert.equal((await request("/tool-versions/missing")).status, 404);
+  assert.equal((await request("/tool-versions/missing/reports")).status, 404);
+  assert.equal(
+    (
+      await request(
+        "/admin/action",
+        "POST",
+        { ...action, target: "missing" },
+        "admin",
+      )
+    ).status,
+    404,
+  );
+  assert.equal(
+    (
+      await request(
+        "/admin/action",
+        "POST",
+        { ...action, limitations: "x".repeat(10001) },
+        "admin",
+      )
+    ).status,
+    400,
+  );
+  await request(
+    "/admin/action",
+    "POST",
+    {
+      action: "tool_version",
+      target: action.target,
+      tool_id: "kani",
+      version: "0.68.0",
+      selectable: false,
+      reason: "Retire",
+    },
+    "admin",
+  );
+  assert.equal((await request(version)).body.limitations, action.limitations);
+  await request(
+    "/admin/action",
+    "POST",
+    { ...action, limitations: "" },
+    "admin",
+  );
+  assert.equal((await request(version)).body.limitations, "");
 });

@@ -625,3 +625,18 @@ textarea {
   gap: 0.65rem;
   white-space: nowrap;
 }
+
+.tool-limitations {
+  margin: 12px 0;
+}
+.tool-limitations summary {
+  cursor: pointer;
+  text-decoration: underline;
+}
+.tool-limitations-body {
+  margin: 12px 0 16px 18px;
+}
+.plain-text {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

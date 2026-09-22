@@ -194,11 +194,29 @@ admin.post("/action", async (c) => {
         ),
       );
       break;
+    case "tool_version_limitations": {
+      const version = await one(
+        db,
+        "SELECT id FROM tool_versions WHERE id=?",
+        target,
+      );
+      if (!version) throw new Fault(404, "tool_version_not_found");
+      ss.push(
+        stmt(
+          db,
+          "UPDATE tool_versions SET limitations=?,limitations_updated_at=? WHERE id=?",
+          text(b.limitations, "Limitations", 10000),
+          now(),
+          target,
+        ),
+      );
+      break;
+    }
     case "tool_version":
       ss.push(
         stmt(
           db,
-          "INSERT INTO tool_versions VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET selectable=excluded.selectable",
+          "INSERT INTO tool_versions(id,tool_id,version,selectable) VALUES(?,?,?,?) ON CONFLICT(id) DO UPDATE SET selectable=excluded.selectable",
           target,
           text(b.tool_id, "Tool", 100, true),
           text(b.version, "Version", 100, true),

@@ -922,6 +922,28 @@ api.get("/tools", async (c) =>
     ),
   }),
 );
+api.get("/tool-versions/:id", async (c) => {
+  const version = await one(
+    c.env.DB,
+    "SELECT tv.*,t.name tool FROM tool_versions tv JOIN tools t ON t.id=tv.tool_id WHERE tv.id=?",
+    c.req.param("id"),
+  );
+  if (!version) throw new Fault(404, "tool_version_not_found");
+  return c.json(version);
+});
+api.get("/tool-versions/:id/reports", async (c) => {
+  const id = c.req.param("id");
+  if (!(await one(c.env.DB, "SELECT id FROM tool_versions WHERE id=?", id)))
+    throw new Fault(404, "tool_version_not_found");
+  return c.json(
+    await listing(
+      c,
+      publicReport + ` WHERE tv.id=? AND ${activeReport} AND ${reportLatest}`,
+      [id],
+      [{ sql: "p.id", key: "id", desc: true }],
+    ),
+  );
+});
 api.get("/tools/:slug", async (c) => {
   const t = await one(
     c.env.DB,

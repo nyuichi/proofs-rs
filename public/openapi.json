@@ -4462,6 +4462,183 @@
         }
       }
     },
+    "/api/v1/tool-versions/{id}": {
+      "get": {
+        "operationId": "get_api_v1_tool_versions_id",
+        "summary": "Get tool version and current known limitations",
+        "tags": ["Registry"],
+        "description": "Operator-maintained plain text. Empty limitations means no information has been recorded, not that the tool has no limitations. Updates also appear on existing report and claim revisions.",
+        "security": [
+          {},
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "allOf": [
+                    {
+                      "$ref": "#/components/schemas/tool_versions"
+                    },
+                    {
+                      "type": "object",
+                      "properties": {
+                        "tool": {
+                          "type": "string",
+                          "maxLength": 10000
+                        }
+                      },
+                      "required": ["tool"]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/v1/tool-versions/{id}/reports": {
+      "get": {
+        "operationId": "get_api_v1_tool_versions_id_reports",
+        "summary": "List current reports using this exact tool version",
+        "tags": ["Reports"],
+        "description": "",
+        "security": [
+          {},
+          {
+            "session": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000,
+              "description": "Opaque next_cursor from the preceding response. Page size is 30."
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "items": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Report"
+                      }
+                    },
+                    "next_cursor": {
+                      "type": ["string", "null"],
+                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                    }
+                  },
+                  "required": ["items", "next_cursor"]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
     "/api/v1/tools/{slug}/reports": {
       "get": {
         "operationId": "get_api_v1_tools_slug_reports",
@@ -5839,9 +6016,22 @@
           },
           "selectable": {
             "type": "integer"
+          },
+          "limitations": {
+            "type": "string"
+          },
+          "limitations_updated_at": {
+            "type": ["string", "null"]
           }
         },
-        "required": ["id", "tool_id", "version", "selectable"]
+        "required": [
+          "id",
+          "tool_id",
+          "version",
+          "selectable",
+          "limitations",
+          "limitations_updated_at"
+        ]
       },
       "report_comments": {
         "type": "object",
@@ -6281,6 +6471,10 @@
             "type": "string",
             "maxLength": 10000
           },
+          "tool_limitations": {
+            "type": "string",
+            "maxLength": 10000
+          },
           "visibility": {
             "type": "string",
             "maxLength": 10000
@@ -6320,6 +6514,9 @@
           },
           "withdrawn_at": {
             "type": ["string", "null"]
+          },
+          "tool_limitations_updated_at": {
+            "type": ["string", "null"]
           }
         },
         "required": [
@@ -6336,6 +6533,7 @@
           "version",
           "tool",
           "tool_version",
+          "tool_limitations",
           "visibility",
           "id",
           "release_id",
@@ -6348,7 +6546,8 @@
           "yanked",
           "author_id",
           "username",
-          "withdrawn_at"
+          "withdrawn_at",
+          "tool_limitations_updated_at"
         ]
       },
       "Claim": {
@@ -6450,6 +6649,10 @@
             "type": "string",
             "maxLength": 10000
           },
+          "tool_limitations": {
+            "type": "string",
+            "maxLength": 10000
+          },
           "visibility": {
             "type": "string",
             "maxLength": 10000
@@ -6492,6 +6695,9 @@
           },
           "withdrawn_at": {
             "type": ["string", "null"]
+          },
+          "tool_limitations_updated_at": {
+            "type": ["string", "null"]
           }
         },
         "required": [
@@ -6519,6 +6725,7 @@
           "version",
           "tool",
           "tool_version",
+          "tool_limitations",
           "visibility",
           "report_id",
           "report_revision",
@@ -6532,7 +6739,8 @@
           "in_current_report",
           "author_id",
           "username",
-          "withdrawn_at"
+          "withdrawn_at",
+          "tool_limitations_updated_at"
         ]
       },
       "ClaimDetail": {

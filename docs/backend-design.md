@@ -231,3 +231,32 @@ it atomically consumes the pending request and creates the user/session. Switchi
 accounts invalidates the pending signup. Expired pending records are cleaned up
 by the existing scheduled job. Existing users continue directly through login.
 The header no longer displays a signup notice.
+
+### Tool-version known limitations
+
+Each `tool_versions` row has `limitations` (plain text, maximum 10,000 characters,
+empty by default) and `limitations_updated_at` (nullable UTC timestamp). There is
+no reference URL. These describe the tool version itself, separately from report
+shared limitations and claim-specific limitations. Empty text hides the section;
+it does not assert that the tool has no limitations.
+
+The public tool page links each version to `#/tool-version/{id}`. The version
+page shows Known limitations, its update date, and a keyset-paginated list of
+public, non-withdrawn reports whose latest revision uses that exact version.
+Report and claim details link the tool/version and show a collapsed Tool
+limitations section. All text is HTML-escaped and preserves line breaks.
+
+`GET /api/v1/tool-versions/{id}` exposes the version metadata and tool name;
+`GET /api/v1/tool-versions/{id}/reports` lists its reports. Report and claim
+responses include `tool_limitations` and `tool_limitations_updated_at`. These
+always reflect the current registry, including when viewing old revisions;
+editing them does not create report revisions or change stars. Retired versions
+remain readable. Publishing requires no additional fields.
+
+Only operators can edit via the existing authenticated, CSRF-protected
+`POST /api/v1/admin/action`, with action `tool_version_limitations`, target set
+to the version ID, `limitations` containing the text (empty clears it), and the
+required `reason`. Each successful edit records an audit event and update time.
+Tool registration/retirement does not overwrite limitations. Correction requests
+use the repository's existing GitHub Issues channel. Administrative operations
+remain excluded from the public OpenAPI contract.
