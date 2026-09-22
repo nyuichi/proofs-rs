@@ -60,6 +60,8 @@ jobs:
       CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
       WRANGLER_SEND_METRICS: "false"
       PRODUCTION_CUSTOM_DOMAIN: ${{ vars.PRODUCTION_CUSTOM_DOMAIN }}
+      PRODUCTION_EMAIL_ENABLED: ${{ vars.PRODUCTION_EMAIL_ENABLED }}
+      EMAIL_EVENT_SUBSCRIPTION: ${{ vars.PRODUCTION_EMAIL_EVENT_SUBSCRIPTION }}
     steps:
       - uses: actions/checkout@v4
         with:

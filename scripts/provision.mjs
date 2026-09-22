@@ -1,3 +1,4 @@
+import { configureDeployment } from "./deployment-config.mjs";
 import { readFile, writeFile, appendFile } from "node:fs/promises";
 const account = process.env.CLOUDFLARE_ACCOUNT_ID,
   token = process.env.CLOUDFLARE_API_TOKEN;
@@ -38,15 +39,7 @@ const config = JSON.parse(
     "utf8",
   ),
 );
-const customDomain =
-  target === "production" && process.env.PRODUCTION_CUSTOM_DOMAIN === "true";
-if (
-  customDomain &&
-  (!process.env.GITHUB_CLIENT_ID || !process.env.GITHUB_CLIENT_SECRET)
-)
-  throw Error(
-    "Production OAuth credentials must be configured before domain activation",
-  );
+const customDomain = configureDeployment(config, target, process.env);
 const checks = await Promise.allSettled([
   pages("/d1/database"),
   api("/r2/buckets"),
@@ -84,25 +77,8 @@ if (customDomain)
   config.routes = [{ pattern: "proofs.rs", custom_domain: true }];
 config.vars.CLOUDFLARE_ACCOUNT_ID = account;
 config.vars.DB_ID = database.uuid;
-for (const name of [
-  "GITHUB_CLIENT_ID",
-  "EMAIL_FROM",
-  "EMAIL_ALLOWLIST",
-  "EMAIL_DOMAIN",
-  "EMAIL_EVENT_SUBSCRIPTION",
-  "ADMIN_GITHUB_IDS",
-])
+for (const name of ["GITHUB_CLIENT_ID", "ADMIN_GITHUB_IDS"])
   if (process.env[name]) config.vars[name] = process.env[name];
-if (config.vars.EMAIL_DISABLED !== "true" && config.vars.EMAIL_FROM)
-  config.send_email = [
-    {
-      name: "EMAIL",
-      allowed_sender_addresses: [config.vars.EMAIL_FROM],
-      allowed_destination_addresses: config.vars.EMAIL_ALLOWLIST.split(",")
-        .map((x) => x.trim())
-        .filter(Boolean),
-    },
-  ];
 await writeFile(`wrangler.${target}.json`, JSON.stringify(config, null, 2));
 console.log(target + " URL: " + config.vars.APP_ORIGIN);
 if (process.env.GITHUB_OUTPUT)
