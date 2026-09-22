@@ -331,7 +331,7 @@ function bindStars() {
 }
 function toolReference(c: any) {
   const name = `${esc(c.tool)} ${esc(c.tool_version)}`;
-  return `${c.tool_id ? `<a href="#/tool/${enc(c.tool_id)}">${name}</a>` : name}${c.tool_version_id ? ` · <a href="#/tool-documentation/${enc(c.tool_version_id)}">Guarantees &amp; limitations</a>` : ""}`;
+  return `${name}${c.tool_version_id ? ` · <a href="#/tool-documentation/${enc(c.tool_version_id)}">Guarantees &amp; limitations</a>` : ""}`;
 }
 async function toolDocumentationPage(id: string) {
   const t = await request("/tool-versions/" + enc(id) + "/documentation");
@@ -354,10 +354,10 @@ async function toolDocumentationPage(id: string) {
     )}</ul></details><p class="meta">Tool documentation is maintained separately from reports. Reports using this version link to the latest documentation; report revisions are unchanged.</p>`;
 }
 function reportContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p>${esc(c.crate)} ${esc(c.version)} · ${toolReference(c)}</p><dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p>${esc(c.crate)} ${esc(c.version)} · ${stars ? toolReference(c) : `${esc(c.tool)} ${esc(c.tool_version)}`}</p><dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
 }
 function claimContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("claim", c) : `<h1>${esc(c.title)}</h1>`}<p><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}<dt>Tool</dt><dd>${toolReference(c)}</dd>${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("claim", c) : `<h1>${esc(c.title)}</h1>`}<p><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}<dt>Tool</dt><dd>${stars ? toolReference(c) : `${esc(c.tool)} ${esc(c.tool_version)}`}</dd>${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
 }
 async function claimPage(id: string) {
   const n = current().searchParams.get("report_revision");
@@ -868,7 +868,7 @@ async function reportForm() {
         ...body,
         ...(editing ? { report_id: editing } : {}),
       });
-      root.innerHTML = `<h1>Review before publishing</h1>${reportContent(preview)}<p>${preview.claims.length} claims · ${preview.changes.added} added · ${preview.changes.retained.length} retained · ${preview.changes.removed.length} removed</p>${preview.changes.removed.length ? `<p>Removed claim IDs: ${preview.changes.removed.map(esc).join(", ")}</p>` : ""}${preview.claims.map((x: any) => `<section>${claimContent({ ...x, tool: preview.tool, tool_version: preview.tool_version, tool_version_id: preview.tool_version_id })}</section>`).join("")}${notice}<button id="back">Back to edit</button> <button id="publish">Publish ${editing ? "revision" : "report"}</button>`;
+      root.innerHTML = `<h1>Review before publishing</h1>${reportContent(preview)}<p>${preview.claims.length} claims · ${preview.changes.added} added · ${preview.changes.retained.length} retained · ${preview.changes.removed.length} removed</p>${preview.changes.removed.length ? `<p>Removed claim IDs: ${preview.changes.removed.map(esc).join(", ")}</p>` : ""}${preview.claims.map((x: any) => `<section>${claimContent({ ...x, tool: preview.tool, tool_version: preview.tool_version })}</section>`).join("")}${notice}<button id="back">Back to edit</button> <button id="publish">Publish ${editing ? "revision" : "report"}</button>`;
       bind("#back", reportForm);
       bind("#publish", async () => {
         const r = await request(

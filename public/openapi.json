@@ -4742,164 +4742,6 @@
         }
       }
     },
-    "/api/v1/tool-versions/{id}/documentation": {
-      "get": {
-        "operationId": "get_api_v1_tool_versions_id_documentation",
-        "summary": "Get reviewed tool documentation and its revision history",
-        "tags": [
-          "Registry"
-        ],
-        "description": "",
-        "security": [
-          {},
-          {
-            "session": []
-          },
-          {
-            "bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string"
-                    },
-                    "tool_id": {
-                      "type": "string"
-                    },
-                    "tool": {
-                      "type": "string"
-                    },
-                    "version": {
-                      "type": "string"
-                    },
-                    "documentation": {
-                      "type": "object",
-                      "properties": {
-                        "id": {
-                          "type": "string"
-                        },
-                        "latest": {
-                          "type": "object",
-                          "properties": {
-                            "revision": {
-                              "type": "integer"
-                            },
-                            "date": {
-                              "type": "string"
-                            },
-                            "summary": {
-                              "type": "string"
-                            },
-                            "markdown": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "revision",
-                            "date",
-                            "summary",
-                            "markdown"
-                          ]
-                        },
-                        "revisions": {
-                          "type": "array",
-                          "items": {
-                            "type": "object",
-                            "properties": {
-                              "revision": {
-                                "type": "integer"
-                              },
-                              "date": {
-                                "type": "string"
-                              },
-                              "summary": {
-                                "type": "string"
-                              },
-                              "markdown": {
-                                "type": "string"
-                              }
-                            },
-                            "required": [
-                              "revision",
-                              "date",
-                              "summary",
-                              "markdown"
-                            ]
-                          }
-                        }
-                      },
-                      "required": [
-                        "id",
-                        "latest",
-                        "revisions"
-                      ]
-                    }
-                  },
-                  "required": [
-                    "id",
-                    "tool_id",
-                    "tool",
-                    "version",
-                    "documentation"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error400"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error409"
-          },
-          "413": {
-            "$ref": "#/components/responses/Error413"
-          },
-          "415": {
-            "$ref": "#/components/responses/Error415"
-          },
-          "428": {
-            "$ref": "#/components/responses/Error428"
-          },
-          "429": {
-            "$ref": "#/components/responses/Error429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
-          }
-        }
-      }
-    },
     "/api/v1/tools/{slug}/reports": {
       "get": {
         "operationId": "get_api_v1_tools_slug_reports",
@@ -5062,6 +4904,16 @@
               }
             }
           },
+          "202": {
+            "description": "Import pending or running",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Import"
+                }
+              }
+            }
+          },
           "400": {
             "$ref": "#/components/responses/Error400"
           },
@@ -5094,16 +4946,6 @@
           },
           "503": {
             "$ref": "#/components/responses/Error503"
-          },
-          "202": {
-            "description": "Import pending or running",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Import"
-                }
-              }
-            }
           }
         },
         "requestBody": {
@@ -6034,6 +5876,164 @@
           },
           "503": {
             "description": "OAuth not configured"
+          }
+        }
+      }
+    },
+    "/api/v1/tool-versions/{id}/documentation": {
+      "get": {
+        "operationId": "get_api_v1_tool_versions_id_documentation",
+        "summary": "Get reviewed tool documentation and its revision history",
+        "tags": [
+          "Registry"
+        ],
+        "description": "",
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string"
+                    },
+                    "tool_id": {
+                      "type": "string"
+                    },
+                    "tool": {
+                      "type": "string"
+                    },
+                    "version": {
+                      "type": "string"
+                    },
+                    "documentation": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "latest": {
+                          "type": "object",
+                          "properties": {
+                            "revision": {
+                              "type": "integer"
+                            },
+                            "date": {
+                              "type": "string"
+                            },
+                            "summary": {
+                              "type": "string"
+                            },
+                            "markdown": {
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "revision",
+                            "date",
+                            "summary",
+                            "markdown"
+                          ]
+                        },
+                        "revisions": {
+                          "type": "array",
+                          "items": {
+                            "type": "object",
+                            "properties": {
+                              "revision": {
+                                "type": "integer"
+                              },
+                              "date": {
+                                "type": "string"
+                              },
+                              "summary": {
+                                "type": "string"
+                              },
+                              "markdown": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "revision",
+                              "date",
+                              "summary",
+                              "markdown"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "latest",
+                        "revisions"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "id",
+                    "tool_id",
+                    "tool",
+                    "version",
+                    "documentation"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
           }
         }
       }
