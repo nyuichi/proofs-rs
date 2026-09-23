@@ -8,14 +8,14 @@ Publishing does **not** run either verifier, inspect a previous run's success, o
 
 ## Install
 
-Rust 1.91 or newer, Cargo, and Git must be installed. From the repository root:
+Rust 1.91 or newer, Cargo, and Git must be installed. Once the initial release is published:
 
 ```sh
-cargo install --path cli
+cargo install cargo-proofs --locked
 cargo proofs --help
 ```
 
-The CLI is developed in `cli/` alongside the service. The repository is currently private; `cargo install --git https://github.com/nyuichi/proofs-rs cargo-proofs --locked` requires Git access. This package is not released to crates.io (`publish = false`).
+The CLI is developed in `cli/` alongside the service. To install a checkout, run `cargo install --path cli --locked` from the repository root. Only the CLI package is distributed on crates.io; access to the service repository is not required to install a published version.
 
 ## Quick start
 
@@ -132,4 +132,3 @@ python3 tests/e2e.py target/debug/cargo-proofs
 ```
 
 CI runs tests on Linux and macOS. Tests use temporary Git repositories and local HTTP servers; they never publish to proofs.rs, run Kani/Creusot, or push user source repositories.
-

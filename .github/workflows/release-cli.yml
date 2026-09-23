@@ -1,0 +1,104 @@
+name: Release cargo-proofs
+
+on:
+  push:
+    tags: ['cargo-proofs-v*']
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing release tag, e.g. cargo-proofs-v0.1.0'
+        required: true
+        type: string
+      bootstrap:
+        description: 'Initial publication only: use the CARGO_REGISTRY_TOKEN secret'
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: cargo-proofs-crates-io
+  cancel-in-progress: false
+
+env:
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
+jobs:
+  verify:
+    if: github.event_name == 'push' || github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      commit: ${{ steps.release.outputs.commit }}
+    steps:
+      - name: Validate tag syntax
+        run: |
+          [[ "$RELEASE_TAG" =~ ^cargo-proofs-v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]
+      - uses: actions/checkout@v4
+        with:
+          ref: refs/tags/${{ env.RELEASE_TAG }}
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Check release metadata and main ancestry
+        id: release
+        run: |
+          git merge-base --is-ancestor HEAD origin/main
+          python3 - <<'PY'
+          import os, pathlib, tomllib
+          package = tomllib.loads(pathlib.Path('cli/Cargo.toml').read_text())['package']
+          assert package['name'] == 'cargo-proofs', 'Unexpected package'
+          assert os.environ['RELEASE_TAG'] == 'cargo-proofs-v' + package['version'], 'Tag/version mismatch'
+          assert package.get('license') or package.get('license-file'), 'Choose the CLI license before publishing'
+          assert package.get('publish') == ['crates-io'], 'Expected crates.io-only publication'
+          PY
+          echo "commit=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - run: cargo fmt --manifest-path cli/Cargo.toml --check
+      - run: cargo test --manifest-path cli/Cargo.toml --locked
+      - run: cargo clippy --manifest-path cli/Cargo.toml --locked --all-targets -- -D warnings
+      - run: cargo build --manifest-path cli/Cargo.toml --locked
+      - run: python3 cli/tests/e2e.py cli/target/debug/cargo-proofs
+      - run: cargo publish --manifest-path cli/Cargo.toml --dry-run --locked --registry crates-io
+      - uses: actions/upload-artifact@v4
+        with:
+          name: cargo-proofs-package
+          path: cli/target/package/*.crate
+          if-no-files-found: error
+
+  publish:
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    environment: crates-io
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify.outputs.commit }}
+          persist-credentials: false
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Obtain short-lived crates.io token
+        if: ${{ !inputs.bootstrap }}
+        id: auth
+        uses: rust-lang/crates-io-auth-action@v1
+      - name: Publish using Trusted Publishing
+        if: ${{ !inputs.bootstrap }}
+        run: cargo publish --manifest-path cli/Cargo.toml --locked --registry crates-io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
+      - name: Initial publication using API token
+        if: ${{ github.event_name == 'workflow_dispatch' && inputs.bootstrap }}
+        run: |
+          test -n "$CARGO_REGISTRY_TOKEN" || { echo 'Set the CARGO_REGISTRY_TOKEN environment secret for the initial release.' >&2; exit 1; }
+          cargo publish --manifest-path cli/Cargo.toml --locked --registry crates-io
+        env:
+          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+      - name: Publication summary
+        run: |
+          echo "Published $RELEASE_TAG: https://crates.io/crates/cargo-proofs" >> "$GITHUB_STEP_SUMMARY"
+          echo 'Install: `cargo install cargo-proofs --locked`' >> "$GITHUB_STEP_SUMMARY"
