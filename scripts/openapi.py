@@ -20,6 +20,8 @@ sc['Error']=obj({'error':S(),'message':S(),'request_id':S()},['error'])
 sc['Ok']=obj({'ok':{'const':True}})
 sc['ClaimInput']=obj({'id':S(format='uuid',description='Only for an existing claim in a report revision. Omit for new claims.'),'api_item_id':S(200,minLength=1),'property':{'enum':['no_ub','panic_contract']},'title':S(1000,description='Optional. Empty or omitted titles are generated from the property, API path and report tool/version.'),'precondition':S(description='Required for panic_contract and unsafe APIs.'),'explanation':S(),'trusted_assumptions':S(),'evidence_url':S(1000,description='HTTP(S) URL or empty. At least the shared or individual evidence URL is required for each claim.'),'limitations':S()},['api_item_id','property'])
 sc['ReportInput']=obj({'crate':S(100,minLength=1),'version':S(100,minLength=1),'title':S(1000,minLength=1),'tool_version_id':S(200,minLength=1),'explanation':S(),'trusted_assumptions':S(),'environment':S(),'evidence_url':S(1000),'limitations':S(),'claims':dict(arr(ref('ClaimInput')),minItems=1,maxItems=100)},['crate','version','title','tool_version_id','claims'])
+sc['ReportInput']['properties']['run_ids']=dict(arr(S(format='uuid')),minItems=1,maxItems=10)
+sc['ReportInput']['required'].append('run_ids')
 sc['RevisionInput']={'allOf':[ref('ReportInput'),obj({'expected_revision':I})]}
 sc['ValidationInput']={'allOf':[ref('ReportInput'),obj({'report_id':I},[])]}
 sc['NormalizedClaimInput']=obj({**sc['ClaimInput']['properties'],'id':{'type':['string','null'],'format':'uuid'},'display_path':S(),'is_unsafe':{'type':'integer'}})
@@ -33,7 +35,7 @@ claimFields.update({k:{'type':'integer'} for k in ['report_id','report_revision'
 claimFields.update({k:{'type':['string','null']} for k in ['author_id','username','withdrawn_at','tool_limitations_updated_at']})
 sc['Claim']=obj(claimFields)
 sc['ClaimDetail']={'allOf':[ref('Claim'),obj({'my_star':B})]}
-sc['ReportDetail']={'allOf':[ref('Report'),obj({'my_star':B,'claims':arr(ref('ClaimDetail'))})]}
+sc['ReportDetail']={'allOf':[ref('Report'),obj({'my_star':B,'run_ids':arr(S(format='uuid')),'claims':arr(ref('ClaimDetail'))})]}
 sc['Comment']=obj({**{k:v for k,v in sc['report_comments']['properties'].items() if k!='visibility'},'username':{'type':['string','null']},'score':{'type':'integer'},'my_vote':{'type':['integer','null']},'reply_count':{'type':'integer'},'hidden':B})
 sc['Token']=obj({'id':S(format='uuid'),'created_at':S(format='date-time'),'last_used_at':{'type':['string','null'],'format':'date-time'},'expires_at':S(format='date-time')})
 sc['User']=obj({'id':S(),'github_id':I,'username':S(),'role':S(),'status':S(),'accepted_terms_version':S(),'terms_accepted_at':S(format='date-time')})
@@ -53,6 +55,12 @@ def add(path,method,summary,body=None,out=None,security=None,description='',stat
  paths.setdefault(path,{})[method]=op
 session=[{'session':[],'csrf':[]}];sessionRead=[{'session':[]}]
 P='/api/v1';cursor=[('cursor',S(description='Opaque next_cursor from the preceding response. Page size is 30.'),False)]
+add(P+'/runs/{run}/artifacts/{kind}','post','Upload immutable run artifact',out=obj({'sha256':S(),'size':I}),status=201,description='Upload source (gzip, max 32 MiB), sarif (JSON, max 8 MiB), or logs (text, max 8 MiB) as the raw request body. Exact retries succeed; changing an artifact is rejected. 90 new artifacts per user per UTC day.')
+paths[P+'/runs/{run}/artifacts/{kind}']['post']['requestBody']={'required':True,'content':{'application/octet-stream':{'schema':{'type':'string','format':'binary'}}}}
+add(P+'/runs/{run}','post','Finalize an immutable recorded run',body={'type':'object','description':'Run metadata: crate, version, tool_version_id, command (argv), working_directory, started_at, finished_at, duration_ms, exit_code, execution_successful, contracts, artifacts (SHA-256 by kind), platform, rustc and environment. All three artifacts must already exist. Contracts must map to successful SARIF results.'},out=obj({'id':S(format='uuid')}),status=201)
+add(P+'/runs/{run}','get','Get recorded run metadata',out={'type':'object'},description='Public after inclusion in a public report revision; otherwise only its author can read it.')
+add(P+'/runs/{run}/{kind}','get','Download recorded source, SARIF or logs',out={'type':'string','format':'binary'},description='kind is source, sarif or logs. Returns an attachment; access follows report visibility.')
+paths[P+'/runs/{run}/{kind}']['get']['responses']['200']['content']={'application/octet-stream':{'schema':{'type':'string','format':'binary'}}}
 add(P+'/health','get','Service health',out=obj({'ok':B,'environment':S()}))
 add(P+'/config','get','Public service configuration',out=obj({'environment':S(),'oauth_configured':B,'email_disabled':B,'email_configured':B,'terms_version':S()}))
 add(P+'/terms/current','get','Current terms',out=obj({'version':S(),'url':S(),'summary':S(),'requires_agreement':B}))
@@ -116,10 +124,10 @@ for path,params in [('/auth/github',[('return_to',S(description='Same-site hash 
 # Match actual accepted Bearer routes rather than advertising unsupported token permissions.
 for path,methods in paths.items():
  for method,op in methods.items():
-  allowed=method=='get' and (path in [P+'/me',P+'/me/reports'] or re.match(r'^/api/v1/(crates|apis|claims|reports|tools|resolve-api|imports|health|config|terms)(/|$)',path)) or method=='post' and (path in [P+'/reports',P+'/reports/validate',P+'/publish/prepare',P+'/tokens/revoke'] or re.match(r'^/api/v1/reports/[^/]+/revisions$',path))
+  allowed=method=='get' and (path in [P+'/me',P+'/me/reports'] or re.match(r'^/api/v1/(runs|crates|apis|claims|reports|tools|resolve-api|imports|health|config|terms)(/|$)',path)) or method=='post' and (path in [P+'/reports',P+'/reports/validate',P+'/publish/prepare',P+'/tokens/revoke'] or re.match(r'^/api/v1/reports/[^/]+/revisions$',path) or re.match(r'^/api/v1/runs/[^/]+(/artifacts/[^/]+)?$',path))
   if not allowed:op['security']=[x for x in op['security'] if 'bearer' not in x]
   if method=='get':op['parameters']=[x for x in op['parameters'] if x['name']!='Origin']
-spec=dict(openapi='3.1.1',info=dict(title='proofs.rs API',version='1.1.0',description='Public registry API and browser-assisted CLI authentication. CLI tokens have publish scope and a 90-day lifetime. Browser writes require same-origin Origin and X-CSRF-Token from GET /api/v1/me. Lists use opaque keyset cursors and 30 items per page unless noted. Non-2xx responses contain an error code. Request bodies are limited to 128 KiB. Current terms must be accepted in the browser before publishing. Local CLI token storage is the responsibility of the client.'),servers=[{'url':'/'}],paths=paths,components=dict(securitySchemes={'session':{'type':'apiKey','in':'cookie','name':'__Host-proofsr_session'},'csrf':{'type':'apiKey','in':'header','name':'X-CSRF-Token'},'bearer':{'type':'http','scheme':'bearer','bearerFormat':'Opaque 256-bit token'}},schemas=sc))
+spec=dict(openapi='3.1.1',info=dict(title='proofs.rs API',version='1.1.0',description='Public registry API and browser-assisted CLI authentication. CLI tokens have publish scope and a 90-day lifetime. Browser writes require same-origin Origin and X-CSRF-Token from GET /api/v1/me. Lists use opaque keyset cursors and 30 items per page unless noted. Non-2xx responses contain an error code. JSON request bodies are limited to 128 KiB; run artifact uploads have separate limits. Current terms must be accepted in the browser before publishing. Local CLI token storage is the responsibility of the client.'),servers=[{'url':'/'}],paths=paths,components=dict(securitySchemes={'session':{'type':'apiKey','in':'cookie','name':'__Host-proofsr_session'},'csrf':{'type':'apiKey','in':'header','name':'X-CSRF-Token'},'bearer':{'type':'http','scheme':'bearer','bearerFormat':'Opaque 256-bit token'}},schemas=sc))
 # Reuse error responses so the checked-in document stays readable and small.
 common={}
 for methods in paths.values():

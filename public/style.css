@@ -1,4 +1,32 @@
 /* Plain document layout; native links and form controls. */
+.reproduce {
+  margin: 16px 0;
+}
+.reproduce summary {
+  text-decoration: underline;
+}
+.reproduce pre {
+  background: #f5f5f5;
+  padding: 12px 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.reproduce details {
+  margin: 12px 0;
+}
+.reproduce table {
+  table-layout: fixed;
+}
+.reproduce th:first-child {
+  width: 60%;
+}
+.reproduce td {
+  overflow-wrap: anywhere;
+}
+.recorded-run + .recorded-run {
+  border-top: 1px solid #ccc;
+  margin-top: 20px;
+}
 body {
   margin: 16px 24px;
   color: #000;

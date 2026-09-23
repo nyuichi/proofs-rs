@@ -3,7 +3,7 @@
   "info": {
     "title": "proofs.rs API",
     "version": "1.1.0",
-    "description": "Public registry API and browser-assisted CLI authentication. CLI tokens have publish scope and a 90-day lifetime. Browser writes require same-origin Origin and X-CSRF-Token from GET /api/v1/me. Lists use opaque keyset cursors and 30 items per page unless noted. Non-2xx responses contain an error code. Request bodies are limited to 128 KiB. Current terms must be accepted in the browser before publishing. Local CLI token storage is the responsibility of the client."
+    "description": "Public registry API and browser-assisted CLI authentication. CLI tokens have publish scope and a 90-day lifetime. Browser writes require same-origin Origin and X-CSRF-Token from GET /api/v1/me. Lists use opaque keyset cursors and 30 items per page unless noted. Non-2xx responses contain an error code. JSON request bodies are limited to 128 KiB; run artifact uploads have separate limits. Current terms must be accepted in the browser before publishing. Local CLI token storage is the responsibility of the client."
   },
   "servers": [
     {
@@ -11,11 +11,396 @@
     }
   ],
   "paths": {
+    "/api/v1/runs/{run}/artifacts/{kind}": {
+      "post": {
+        "operationId": "post_api_v1_runs_run_artifacts_kind",
+        "summary": "Upload immutable run artifact",
+        "tags": [
+          "Registry"
+        ],
+        "description": "Upload source (gzip, max 32 MiB), sarif (JSON, max 8 MiB), or logs (text, max 8 MiB) as the raw request body. Exact retries succeed; changing an artifact is rejected. 90 new artifacts per user per UTC day.",
+        "security": [
+          {
+            "session": [],
+            "csrf": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            },
+            "description": "Required for browser-session writes; must equal this service origin."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "sha256": {
+                      "type": "string",
+                      "maxLength": 10000
+                    },
+                    "size": {
+                      "type": "integer",
+                      "minimum": 1
+                    }
+                  },
+                  "required": [
+                    "sha256",
+                    "size"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/octet-stream": {
+              "schema": {
+                "type": "string",
+                "format": "binary"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run}": {
+      "post": {
+        "operationId": "post_api_v1_runs_run",
+        "summary": "Finalize an immutable recorded run",
+        "tags": [
+          "Registry"
+        ],
+        "description": "",
+        "security": [
+          {
+            "session": [],
+            "csrf": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "Origin",
+            "in": "header",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            },
+            "description": "Required for browser-session writes; must equal this service origin."
+          }
+        ],
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 10000,
+                      "format": "uuid"
+                    }
+                  },
+                  "required": [
+                    "id"
+                  ]
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "description": "Run metadata: crate, version, tool_version_id, command (argv), working_directory, started_at, finished_at, duration_ms, exit_code, execution_successful, contracts, artifacts (SHA-256 by kind), platform, rustc and environment. All three artifacts must already exist. Contracts must map to successful SARIF results."
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_api_v1_runs_run",
+        "summary": "Get recorded run metadata",
+        "tags": [
+          "Registry"
+        ],
+        "description": "Public after inclusion in a public report revision; otherwise only its author can read it.",
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
+    "/api/v1/runs/{run}/{kind}": {
+      "get": {
+        "operationId": "get_api_v1_runs_run_kind",
+        "summary": "Download recorded source, SARIF or logs",
+        "tags": [
+          "Registry"
+        ],
+        "description": "kind is source, sarif or logs. Returns an attachment; access follows report visibility.",
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          },
+          {
+            "name": "kind",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
+          }
+        }
+      }
+    },
     "/api/v1/health": {
       "get": {
         "operationId": "get_api_v1_health",
         "summary": "Service health",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -43,7 +428,10 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": ["ok", "environment"]
+                  "required": [
+                    "ok",
+                    "environment"
+                  ]
                 }
               }
             }
@@ -88,7 +476,9 @@
       "get": {
         "operationId": "get_api_v1_config",
         "summary": "Public service configuration",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -177,7 +567,9 @@
       "get": {
         "operationId": "get_api_v1_terms_current",
         "summary": "Current terms",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -263,7 +655,9 @@
       "get": {
         "operationId": "get_api_v1_me",
         "summary": "Current account",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -289,7 +683,9 @@
                           "type": "null"
                         }
                       },
-                      "required": ["user"]
+                      "required": [
+                        "user"
+                      ]
                     },
                     {
                       "type": "object",
@@ -310,14 +706,20 @@
                               "type": "object",
                               "properties": {
                                 "address": {
-                                  "type": ["string", "null"]
+                                  "type": [
+                                    "string",
+                                    "null"
+                                  ]
                                 },
                                 "delivery_status": {
                                   "type": "string",
                                   "maxLength": 10000
                                 }
                               },
-                              "required": ["address", "delivery_status"]
+                              "required": [
+                                "address",
+                                "delivery_status"
+                              ]
                             }
                           ]
                         },
@@ -385,7 +787,9 @@
       "post": {
         "operationId": "post_api_v1_me_terms_acceptance",
         "summary": "Accept current terms",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {
@@ -462,7 +866,9 @@
                     "maxLength": 10000
                   }
                 },
-                "required": ["version"]
+                "required": [
+                  "version"
+                ]
               }
             }
           }
@@ -473,7 +879,9 @@
       "get": {
         "operationId": "get_api_v1_me_notification_preferences",
         "summary": "Email notification preferences",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {
@@ -490,13 +898,22 @@
                   "type": "object",
                   "properties": {
                     "replies": {
-                      "enum": [0, 1]
+                      "enum": [
+                        0,
+                        1
+                      ]
                     },
                     "report_comments": {
-                      "enum": [0, 1]
+                      "enum": [
+                        0,
+                        1
+                      ]
                     }
                   },
-                  "required": ["replies", "report_comments"]
+                  "required": [
+                    "replies",
+                    "report_comments"
+                  ]
                 }
               }
             }
@@ -539,7 +956,9 @@
       "patch": {
         "operationId": "patch_api_v1_me_notification_preferences",
         "summary": "Update email notification preferences",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {
@@ -618,7 +1037,10 @@
                     "type": "boolean"
                   }
                 },
-                "required": ["replies", "report_comments"]
+                "required": [
+                  "replies",
+                  "report_comments"
+                ]
               }
             }
           }
@@ -629,7 +1051,9 @@
       "post": {
         "operationId": "post_api_v1_notifications_unsubscribe",
         "summary": "Unsubscribe with signed link",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "Requires the signed unsubscribe value and a same-origin Origin header.",
         "security": [],
         "parameters": [],
@@ -694,7 +1118,10 @@
                     "maxLength": 10000
                   }
                 },
-                "required": ["user", "signature"]
+                "required": [
+                  "user",
+                  "signature"
+                ]
               }
             }
           }
@@ -705,7 +1132,9 @@
       "get": {
         "operationId": "get_api_v1_home",
         "summary": "Recent reports and discussion",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -758,10 +1187,16 @@
                             "maxLength": 10000
                           },
                           "username": {
-                            "type": ["string", "null"]
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           },
                           "author_id": {
-                            "type": ["string", "null"]
+                            "type": [
+                              "string",
+                              "null"
+                            ]
                           }
                         },
                         "required": [
@@ -777,7 +1212,10 @@
                       }
                     }
                   },
-                  "required": ["reports", "discussion"]
+                  "required": [
+                    "reports",
+                    "discussion"
+                  ]
                 }
               }
             }
@@ -822,7 +1260,9 @@
       "get": {
         "operationId": "get_api_v1_crates",
         "summary": "Search crates with claims",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -901,11 +1341,17 @@
                           }
                         },
                         "next_cursor": {
-                          "type": ["string", "null"],
+                          "type": [
+                            "string",
+                            "null"
+                          ],
                           "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                         }
                       },
-                      "required": ["items", "next_cursor"]
+                      "required": [
+                        "items",
+                        "next_cursor"
+                      ]
                     },
                     {
                       "type": "object",
@@ -919,7 +1365,10 @@
                           "description": "Total matches for q, independent of cursor."
                         }
                       },
-                      "required": ["total_count", "matching_count"]
+                      "required": [
+                        "total_count",
+                        "matching_count"
+                      ]
                     }
                   ]
                 }
@@ -966,7 +1415,9 @@
       "get": {
         "operationId": "get_api_v1_crates_name_releases",
         "summary": "List releases with claims",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -1011,7 +1462,10 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": ["items", "description"]
+                  "required": [
+                    "items",
+                    "description"
+                  ]
                 }
               }
             }
@@ -1056,7 +1510,9 @@
       "get": {
         "operationId": "get_api_v1_crates_name_version_apis",
         "summary": "List imported public functions and inherent methods",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -1131,17 +1587,26 @@
                                 "type": "integer"
                               }
                             },
-                            "required": ["no_ub_count", "panic_count"]
+                            "required": [
+                              "no_ub_count",
+                              "panic_count"
+                            ]
                           }
                         ]
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -1186,7 +1651,9 @@
       "get": {
         "operationId": "get_api_v1_crates_name_version_reports",
         "summary": "List reports for a crate version",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "Current public, nonwithdrawn reports for the exact selected version, newest first.",
         "security": [
           {},
@@ -1242,11 +1709,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -1291,7 +1764,9 @@
       "get": {
         "operationId": "get_api_v1_apis_id",
         "summary": "Get imported API",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -1404,7 +1879,9 @@
       "get": {
         "operationId": "get_api_v1_resolve_api",
         "summary": "Resolve a crate API path to its ID",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -1457,7 +1934,9 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": ["id"]
+                  "required": [
+                    "id"
+                  ]
                 }
               }
             }
@@ -1502,7 +1981,9 @@
       "get": {
         "operationId": "get_api_v1_apis_id_claims",
         "summary": "List latest claims for an API",
-        "tags": ["Claims"],
+        "tags": [
+          "Claims"
+        ],
         "description": "",
         "security": [
           {},
@@ -1549,11 +2030,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -1598,7 +2085,9 @@
       "get": {
         "operationId": "get_api_v1_claims_id",
         "summary": "Read a claim and its shared report context",
-        "tags": ["Claims"],
+        "tags": [
+          "Claims"
+        ],
         "description": "Default: last report revision containing this claim. in_current_report is 0 if removed. The permanent ID and stars survive removal and revision. Comments are only available on the report.",
         "security": [
           {},
@@ -1680,7 +2169,9 @@
       "get": {
         "operationId": "get_api_v1_reports",
         "summary": "List current reports",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "",
         "security": [
           {},
@@ -1718,11 +2209,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -1765,7 +2262,9 @@
       "post": {
         "operationId": "post_api_v1_reports",
         "summary": "Publish a report and all its claims atomically",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "20 report publications or revisions per user per UTC day. No drafts. All claims must target this exact crate version. Prepare the catalogue first. Repeating an API/property with different scope is allowed. At most 100 claims, subject to the 128 KiB total request limit.",
         "security": [
           {
@@ -1813,7 +2312,9 @@
                       "minimum": 1
                     }
                   },
-                  "required": ["id"]
+                  "required": [
+                    "id"
+                  ]
                 }
               }
             }
@@ -1868,7 +2369,9 @@
       "post": {
         "operationId": "post_api_v1_reports_validate",
         "summary": "Validate without saving and preview generated titles and membership changes",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "Include report_id when previewing a revision; only its author may do so. Returns indexed claim validation errors. New claim IDs are null in the preview; omit them when publishing.",
         "security": [
           {
@@ -1952,7 +2455,9 @@
       "get": {
         "operationId": "get_api_v1_reports_id",
         "summary": "Read current report and all claims",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "",
         "security": [
           {},
@@ -2025,7 +2530,9 @@
       "get": {
         "operationId": "get_api_v1_reports_id_revisions",
         "summary": "List report revisions",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "",
         "security": [
           {},
@@ -2079,15 +2586,24 @@
                             "maxLength": 10000
                           }
                         },
-                        "required": ["revision_no", "created_at"]
+                        "required": [
+                          "revision_no",
+                          "created_at"
+                        ]
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -2130,7 +2646,9 @@
       "post": {
         "operationId": "post_api_v1_reports_id_revisions",
         "summary": "Publish a complete replacement report revision atomically",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "Author only. expected_revision must match. Include IDs for retained claims; omit IDs for new claims. Omitted existing claims are removed from the new revision but retain history, permanent URLs and stars. API/property and report crate/version are immutable. Withdrawn reports cannot be revised.",
         "security": [
           {
@@ -2191,7 +2709,10 @@
                       "minimum": 1
                     }
                   },
-                  "required": ["id", "revision_no"]
+                  "required": [
+                    "id",
+                    "revision_no"
+                  ]
                 }
               }
             }
@@ -2246,7 +2767,9 @@
       "get": {
         "operationId": "get_api_v1_reports_id_revisions_n",
         "summary": "Read a specific immutable report revision",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "",
         "security": [
           {},
@@ -2328,7 +2851,9 @@
       "put": {
         "operationId": "put_api_v1_reports_id_withdrawal",
         "summary": "Withdraw a report; retain public history and discussion",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "",
         "security": [
           {
@@ -2408,7 +2933,9 @@
       "get": {
         "operationId": "get_api_v1_reports_id_stars",
         "summary": "List people who starred this report",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "Public. Newest stars first, ordered by user ID for ties. Uses the same visibility rules as the target, including withdrawn reports and removed claims.",
         "security": [
           {},
@@ -2467,15 +2994,25 @@
                             "format": "date-time"
                           }
                         },
-                        "required": ["id", "username", "created_at"]
+                        "required": [
+                          "id",
+                          "username",
+                          "created_at"
+                        ]
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -2520,7 +3057,9 @@
       "put": {
         "operationId": "put_api_v1_reports_id_star",
         "summary": "Star report",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "Idempotent. Stars are independent of revisions. Self-stars are allowed; they do not add karma. Only report stars contribute to karma.",
         "security": [
           {
@@ -2598,7 +3137,9 @@
       "delete": {
         "operationId": "delete_api_v1_reports_id_star",
         "summary": "Unstar report",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "Idempotent. Stars are independent of revisions. Self-stars are allowed; they do not add karma. Only report stars contribute to karma.",
         "security": [
           {
@@ -2678,7 +3219,9 @@
       "get": {
         "operationId": "get_api_v1_me_starred_reports",
         "summary": "List your starred reports",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {
@@ -2720,17 +3263,25 @@
                                 "maxLength": 10000
                               }
                             },
-                            "required": ["starred_at"]
+                            "required": [
+                              "starred_at"
+                            ]
                           }
                         ]
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -2775,7 +3326,9 @@
       "get": {
         "operationId": "get_api_v1_claims_id_stars",
         "summary": "List people who starred this claim",
-        "tags": ["Claims"],
+        "tags": [
+          "Claims"
+        ],
         "description": "Public. Newest stars first, ordered by user ID for ties. Uses the same visibility rules as the target, including withdrawn reports and removed claims.",
         "security": [
           {},
@@ -2834,15 +3387,25 @@
                             "format": "date-time"
                           }
                         },
-                        "required": ["id", "username", "created_at"]
+                        "required": [
+                          "id",
+                          "username",
+                          "created_at"
+                        ]
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -2887,7 +3450,9 @@
       "put": {
         "operationId": "put_api_v1_claims_id_star",
         "summary": "Star claim",
-        "tags": ["Claims"],
+        "tags": [
+          "Claims"
+        ],
         "description": "Idempotent. Stars are independent of revisions. Self-stars are allowed; they do not add karma. Only report stars contribute to karma.",
         "security": [
           {
@@ -2965,7 +3530,9 @@
       "delete": {
         "operationId": "delete_api_v1_claims_id_star",
         "summary": "Unstar claim",
-        "tags": ["Claims"],
+        "tags": [
+          "Claims"
+        ],
         "description": "Idempotent. Stars are independent of revisions. Self-stars are allowed; they do not add karma. Only report stars contribute to karma.",
         "security": [
           {
@@ -3045,7 +3612,9 @@
       "get": {
         "operationId": "get_api_v1_me_starred_claims",
         "summary": "List your starred claims",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {
@@ -3087,17 +3656,25 @@
                                 "maxLength": 10000
                               }
                             },
-                            "required": ["starred_at"]
+                            "required": [
+                              "starred_at"
+                            ]
                           }
                         ]
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -3142,7 +3719,9 @@
       "get": {
         "operationId": "get_api_v1_reports_id_comments",
         "summary": "List root comments or replies",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "Omit parent_id for roots. Deleted or hidden comments remain as tombstones; body is null.",
         "security": [
           {},
@@ -3198,11 +3777,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -3245,7 +3830,9 @@
       "post": {
         "operationId": "post_api_v1_reports_id_comments",
         "summary": "Post a comment or reply",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "100 new comments per user per UTC day.",
         "security": [
           {
@@ -3299,7 +3886,9 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": ["id"]
+                  "required": [
+                    "id"
+                  ]
                 }
               }
             }
@@ -3359,7 +3948,10 @@
                     "maxLength": 100
                   }
                 },
-                "required": ["body", "revision_no"]
+                "required": [
+                  "body",
+                  "revision_no"
+                ]
               }
             }
           }
@@ -3370,7 +3962,9 @@
       "get": {
         "operationId": "get_api_v1_comments_id",
         "summary": "Get comment and ancestor IDs",
-        "tags": ["Comments"],
+        "tags": [
+          "Comments"
+        ],
         "description": "",
         "security": [
           {},
@@ -3410,7 +4004,9 @@
                           }
                         }
                       },
-                      "required": ["ancestors"]
+                      "required": [
+                        "ancestors"
+                      ]
                     }
                   ]
                 }
@@ -3455,7 +4051,9 @@
       "patch": {
         "operationId": "patch_api_v1_comments_id",
         "summary": "Edit your comment",
-        "tags": ["Comments"],
+        "tags": [
+          "Comments"
+        ],
         "description": "",
         "security": [
           {
@@ -3500,7 +4098,10 @@
                       "minimum": 1
                     }
                   },
-                  "required": ["ok", "edit_version"]
+                  "required": [
+                    "ok",
+                    "edit_version"
+                  ]
                 }
               }
             }
@@ -3556,7 +4157,10 @@
                     "minimum": 1
                   }
                 },
-                "required": ["body", "edit_version"]
+                "required": [
+                  "body",
+                  "edit_version"
+                ]
               }
             }
           }
@@ -3565,7 +4169,9 @@
       "delete": {
         "operationId": "delete_api_v1_comments_id",
         "summary": "Delete your comment",
-        "tags": ["Comments"],
+        "tags": [
+          "Comments"
+        ],
         "description": "Requires JSON body. Leaves a discussion tombstone; history is private.",
         "security": [
           {
@@ -3610,7 +4216,10 @@
                       "minimum": 1
                     }
                   },
-                  "required": ["ok", "edit_version"]
+                  "required": [
+                    "ok",
+                    "edit_version"
+                  ]
                 }
               }
             }
@@ -3661,7 +4270,9 @@
                     "minimum": 1
                   }
                 },
-                "required": ["edit_version"]
+                "required": [
+                  "edit_version"
+                ]
               }
             }
           }
@@ -3672,7 +4283,9 @@
       "put": {
         "operationId": "put_api_v1_comments_id_vote",
         "summary": "Set comment vote",
-        "tags": ["Comments"],
+        "tags": [
+          "Comments"
+        ],
         "description": "",
         "security": [
           {
@@ -3754,10 +4367,15 @@
                 "type": "object",
                 "properties": {
                   "value": {
-                    "enum": [-1, 1]
+                    "enum": [
+                      -1,
+                      1
+                    ]
                   }
                 },
-                "required": ["value"]
+                "required": [
+                  "value"
+                ]
               }
             }
           }
@@ -3766,7 +4384,9 @@
       "delete": {
         "operationId": "delete_api_v1_comments_id_vote",
         "summary": "Remove comment vote",
-        "tags": ["Comments"],
+        "tags": [
+          "Comments"
+        ],
         "description": "",
         "security": [
           {
@@ -3846,7 +4466,9 @@
       "get": {
         "operationId": "get_api_v1_users_id",
         "summary": "Get public account activity profile",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -3944,7 +4566,9 @@
       "get": {
         "operationId": "get_api_v1_users_id_reports",
         "summary": "List user reports",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "Deleted comments are excluded from activity.",
         "security": [
           {},
@@ -3988,11 +4612,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -4037,7 +4667,9 @@
       "get": {
         "operationId": "get_api_v1_users_id_comments",
         "summary": "List user comments",
-        "tags": ["Comments"],
+        "tags": [
+          "Comments"
+        ],
         "description": "Deleted comments are excluded from activity.",
         "security": [
           {},
@@ -4081,11 +4713,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -4130,7 +4768,9 @@
       "get": {
         "operationId": "get_api_v1_me_reports",
         "summary": "List user reports",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "Deleted comments are excluded from activity.",
         "security": [
           {
@@ -4167,11 +4807,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -4216,7 +4862,9 @@
       "get": {
         "operationId": "get_api_v1_me_comments",
         "summary": "List user comments",
-        "tags": ["Comments"],
+        "tags": [
+          "Comments"
+        ],
         "description": "Deleted comments are excluded from activity.",
         "security": [
           {
@@ -4250,11 +4898,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -4299,7 +4953,9 @@
       "get": {
         "operationId": "get_api_v1_tools",
         "summary": "List registered tools and versions",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -4332,7 +4988,10 @@
                       }
                     }
                   },
-                  "required": ["items", "versions"]
+                  "required": [
+                    "items",
+                    "versions"
+                  ]
                 }
               }
             }
@@ -4377,7 +5036,9 @@
       "get": {
         "operationId": "get_api_v1_tools_slug",
         "summary": "Get registered tool",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "",
         "security": [
           {},
@@ -4419,7 +5080,9 @@
                           }
                         }
                       },
-                      "required": ["versions"]
+                      "required": [
+                        "versions"
+                      ]
                     }
                   ]
                 }
@@ -4466,7 +5129,9 @@
       "get": {
         "operationId": "get_api_v1_tool_versions_id",
         "summary": "Get tool version and current known limitations",
-        "tags": ["Registry"],
+        "tags": [
+          "Registry"
+        ],
         "description": "Operator-maintained plain text. Empty limitations means no information has been recorded, not that the tool has no limitations. Updates also appear on existing report and claim revisions.",
         "security": [
           {},
@@ -4503,7 +5168,9 @@
                           "maxLength": 10000
                         }
                       },
-                      "required": ["tool"]
+                      "required": [
+                        "tool"
+                      ]
                     }
                   ]
                 }
@@ -4550,7 +5217,9 @@
       "get": {
         "operationId": "get_api_v1_tool_versions_id_reports",
         "summary": "List current reports using this exact tool version",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "",
         "security": [
           {},
@@ -4594,11 +5263,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -4643,7 +5318,9 @@
       "get": {
         "operationId": "get_api_v1_tools_slug_reports",
         "summary": "List reports using a tool",
-        "tags": ["Reports"],
+        "tags": [
+          "Reports"
+        ],
         "description": "",
         "security": [
           {},
@@ -4690,11 +5367,17 @@
                       }
                     },
                     "next_cursor": {
-                      "type": ["string", "null"],
+                      "type": [
+                        "string",
+                        "null"
+                      ],
                       "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
                     }
                   },
-                  "required": ["items", "next_cursor"]
+                  "required": [
+                    "items",
+                    "next_cursor"
+                  ]
                 }
               }
             }
@@ -4739,7 +5422,9 @@
       "post": {
         "operationId": "post_api_v1_publish_prepare",
         "summary": "Prepare exact crate version",
-        "tags": ["Imports"],
+        "tags": [
+          "Imports"
+        ],
         "description": "Returns 200 when cached, otherwise 202 with an import job ID. Poll GET /imports/{id}. 5 new imports per user per UTC day, 50 per IP. No proof execution.",
         "security": [
           {
@@ -4782,7 +5467,11 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": ["status", "crate", "version"]
+                  "required": [
+                    "status",
+                    "crate",
+                    "version"
+                  ]
                 }
               }
             }
@@ -4849,7 +5538,10 @@
                     "minLength": 1
                   }
                 },
-                "required": ["crate", "version"]
+                "required": [
+                  "crate",
+                  "version"
+                ]
               }
             }
           }
@@ -4860,7 +5552,9 @@
       "get": {
         "operationId": "get_api_v1_imports_id",
         "summary": "Check import status",
-        "tags": ["Imports"],
+        "tags": [
+          "Imports"
+        ],
         "description": "",
         "security": [
           {
@@ -4932,7 +5626,9 @@
       "post": {
         "operationId": "post_auth_device_code",
         "summary": "Start CLI browser authorization",
-        "tags": ["Authentication"],
+        "tags": [
+          "Authentication"
+        ],
         "description": "Device Flow with a fixed public client. Request expires in 600 seconds; initial poll interval 5 seconds. 30 starts per IP per UTC day. Display the user_code in the terminal before opening verification_uri_complete.",
         "security": [],
         "parameters": [],
@@ -5031,7 +5727,9 @@
                     "const": "publish"
                   }
                 },
-                "required": ["client_id"]
+                "required": [
+                  "client_id"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
@@ -5045,7 +5743,9 @@
                     "const": "publish"
                   }
                 },
-                "required": ["client_id"]
+                "required": [
+                  "client_id"
+                ]
               }
             }
           }
@@ -5056,7 +5756,9 @@
       "post": {
         "operationId": "post_auth_device_token",
         "summary": "Poll authorization and exchange once",
-        "tags": ["Authentication"],
+        "tags": [
+          "Authentication"
+        ],
         "description": "400 authorization_pending: keep polling. 400 slow_down: increase interval by 5 seconds (server caps interval at 60 seconds). expired_token, access_denied, invalid_grant: stop. 429: stop or retry later. Token expires in 90 days; no refresh token. Exchange succeeds once; if the response is lost, start login again. 10000 polls per IP per UTC day.",
         "security": [],
         "parameters": [],
@@ -5151,7 +5853,11 @@
                     "const": "urn:ietf:params:oauth:grant-type:device_code"
                   }
                 },
-                "required": ["client_id", "device_code", "grant_type"]
+                "required": [
+                  "client_id",
+                  "device_code",
+                  "grant_type"
+                ]
               }
             },
             "application/x-www-form-urlencoded": {
@@ -5169,7 +5875,11 @@
                     "const": "urn:ietf:params:oauth:grant-type:device_code"
                   }
                 },
-                "required": ["client_id", "device_code", "grant_type"]
+                "required": [
+                  "client_id",
+                  "device_code",
+                  "grant_type"
+                ]
               }
             }
           }
@@ -5180,7 +5890,9 @@
       "post": {
         "operationId": "post_auth_device_inspect",
         "summary": "Inspect device request",
-        "tags": ["Authentication"],
+        "tags": [
+          "Authentication"
+        ],
         "description": "Browser only. Requires current terms. 100 code inspections/approvals per IP per UTC day.",
         "security": [
           {
@@ -5209,14 +5921,22 @@
                   "type": "object",
                   "properties": {
                     "state": {
-                      "enum": ["pending", "approved", "denied", "consumed"]
+                      "enum": [
+                        "pending",
+                        "approved",
+                        "denied",
+                        "consumed"
+                      ]
                     },
                     "expires_at": {
                       "type": "string",
                       "maxLength": 10000
                     }
                   },
-                  "required": ["state", "expires_at"]
+                  "required": [
+                    "state",
+                    "expires_at"
+                  ]
                 }
               }
             }
@@ -5267,7 +5987,9 @@
                     "maxLength": 20
                   }
                 },
-                "required": ["user_code"]
+                "required": [
+                  "user_code"
+                ]
               }
             }
           }
@@ -5278,7 +6000,9 @@
       "post": {
         "operationId": "post_auth_device_approve",
         "summary": "Authorize device request",
-        "tags": ["Authentication"],
+        "tags": [
+          "Authentication"
+        ],
         "description": "Browser only. Requires current terms. 100 code inspections/approvals per IP per UTC day.",
         "security": [
           {
@@ -5355,7 +6079,9 @@
                     "maxLength": 20
                   }
                 },
-                "required": ["user_code"]
+                "required": [
+                  "user_code"
+                ]
               }
             }
           }
@@ -5366,7 +6092,9 @@
       "get": {
         "operationId": "get_api_v1_me_tokens",
         "summary": "List your unexpired, unrevoked tokens",
-        "tags": ["Tokens"],
+        "tags": [
+          "Tokens"
+        ],
         "description": "UUID is a public management identifier, never the secret token. Last used is updated at most once per hour. No token names are stored.",
         "security": [
           {
@@ -5389,7 +6117,9 @@
                       }
                     }
                   },
-                  "required": ["items"]
+                  "required": [
+                    "items"
+                  ]
                 }
               }
             }
@@ -5434,7 +6164,9 @@
       "delete": {
         "operationId": "delete_api_v1_me_tokens_id",
         "summary": "Revoke your token",
-        "tags": ["Tokens"],
+        "tags": [
+          "Tokens"
+        ],
         "description": "Idempotent. Only tokens belonging to the current user can be revoked.",
         "security": [
           {
@@ -5514,7 +6246,9 @@
       "post": {
         "operationId": "post_api_v1_tokens_revoke",
         "summary": "Revoke the current CLI token",
-        "tags": ["Tokens"],
+        "tags": [
+          "Tokens"
+        ],
         "description": "Use for CLI logout. Works even if terms have changed.",
         "security": [
           {
@@ -5573,7 +6307,9 @@
       "get": {
         "operationId": "get_auth_signup",
         "summary": "Read pending first-time registration",
-        "tags": ["Authentication"],
+        "tags": [
+          "Authentication"
+        ],
         "description": "Requires the HttpOnly pending signup cookie set after GitHub OAuth. Expires after 10 minutes. Does not create an account.",
         "security": [],
         "parameters": [],
@@ -5602,7 +6338,12 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": ["username", "csrf", "terms_version", "return_to"]
+                  "required": [
+                    "username",
+                    "csrf",
+                    "terms_version",
+                    "return_to"
+                  ]
                 }
               }
             }
@@ -5645,7 +6386,9 @@
       "post": {
         "operationId": "post_auth_signup",
         "summary": "Confirm first-time registration",
-        "tags": ["Authentication"],
+        "tags": [
+          "Authentication"
+        ],
         "description": "Requires same-origin Origin, pending signup cookie, and X-CSRF-Token returned by GET /auth/signup. Atomically consumes the pending request and creates the account and session. Terms version must still be current. Cannot be used with a CLI bearer token.",
         "security": [],
         "parameters": [],
@@ -5662,7 +6405,9 @@
                       "maxLength": 10000
                     }
                   },
-                  "required": ["return_to"]
+                  "required": [
+                    "return_to"
+                  ]
                 }
               }
             }
@@ -5713,7 +6458,9 @@
                     "maxLength": 10000
                   }
                 },
-                "required": ["terms_version"]
+                "required": [
+                  "terms_version"
+                ]
               }
             }
           }
@@ -5724,7 +6471,9 @@
       "post": {
         "operationId": "post_auth_logout",
         "summary": "Sign out of browser session",
-        "tags": ["Authentication"],
+        "tags": [
+          "Authentication"
+        ],
         "description": "",
         "security": [
           {
@@ -5795,7 +6544,9 @@
       "get": {
         "operationId": "get_auth_github",
         "summary": "Start GitHub sign-in",
-        "tags": ["Authentication"],
+        "tags": [
+          "Authentication"
+        ],
         "description": "",
         "security": [],
         "parameters": [
@@ -5837,7 +6588,9 @@
       "get": {
         "operationId": "get_auth_github_callback",
         "summary": "Complete GitHub sign-in",
-        "tags": ["Authentication"],
+        "tags": [
+          "Authentication"
+        ],
         "description": "",
         "security": [],
         "parameters": [
@@ -5909,7 +6662,12 @@
             "type": "string"
           }
         },
-        "required": ["id", "registry", "name", "description"]
+        "required": [
+          "id",
+          "registry",
+          "name",
+          "description"
+        ]
       },
       "releases": {
         "type": "object",
@@ -5924,7 +6682,10 @@
             "type": "string"
           },
           "checksum": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "yanked": {
             "type": "integer"
@@ -6000,7 +6761,13 @@
             "type": "integer"
           }
         },
-        "required": ["id", "name", "description", "official_url", "active"]
+        "required": [
+          "id",
+          "name",
+          "description",
+          "official_url",
+          "active"
+        ]
       },
       "tool_versions": {
         "type": "object",
@@ -6021,7 +6788,10 @@
             "type": "string"
           },
           "limitations_updated_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -6049,13 +6819,22 @@
             "type": "integer"
           },
           "author_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "reply_to_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "body": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "edit_version": {
             "type": "integer"
@@ -6064,10 +6843,16 @@
             "type": "string"
           },
           "edited_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "deleted_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "visibility": {
             "type": "string"
@@ -6104,7 +6889,9 @@
             "maxLength": 10000
           }
         },
-        "required": ["error"]
+        "required": [
+          "error"
+        ]
       },
       "Ok": {
         "type": "object",
@@ -6113,7 +6900,9 @@
             "const": true
           }
         },
-        "required": ["ok"]
+        "required": [
+          "ok"
+        ]
       },
       "ClaimInput": {
         "type": "object",
@@ -6130,7 +6919,10 @@
             "minLength": 1
           },
           "property": {
-            "enum": ["no_ub", "panic_contract"]
+            "enum": [
+              "no_ub",
+              "panic_contract"
+            ]
           },
           "title": {
             "type": "string",
@@ -6160,7 +6952,10 @@
             "maxLength": 10000
           }
         },
-        "required": ["api_item_id", "property"]
+        "required": [
+          "api_item_id",
+          "property"
+        ]
       },
       "ReportInput": {
         "type": "object",
@@ -6212,9 +7007,26 @@
             },
             "minItems": 1,
             "maxItems": 100
+          },
+          "run_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 10000,
+              "format": "uuid"
+            },
+            "minItems": 1,
+            "maxItems": 10
           }
         },
-        "required": ["crate", "version", "title", "tool_version_id", "claims"]
+        "required": [
+          "crate",
+          "version",
+          "title",
+          "tool_version_id",
+          "claims",
+          "run_ids"
+        ]
       },
       "RevisionInput": {
         "allOf": [
@@ -6229,7 +7041,9 @@
                 "minimum": 1
               }
             },
-            "required": ["expected_revision"]
+            "required": [
+              "expected_revision"
+            ]
           }
         ]
       },
@@ -6254,7 +7068,10 @@
         "type": "object",
         "properties": {
           "id": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "uuid"
           },
           "api_item_id": {
@@ -6263,7 +7080,10 @@
             "minLength": 1
           },
           "property": {
-            "enum": ["no_ub", "panic_contract"]
+            "enum": [
+              "no_ub",
+              "panic_contract"
+            ]
           },
           "title": {
             "type": "string",
@@ -6363,6 +7183,16 @@
               "$ref": "#/components/schemas/NormalizedClaimInput"
             }
           },
+          "run_ids": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "maxLength": 10000,
+              "format": "uuid"
+            },
+            "minItems": 1,
+            "maxItems": 10
+          },
           "release_id": {
             "type": "integer",
             "minimum": 1
@@ -6396,7 +7226,11 @@
                 }
               }
             },
-            "required": ["added", "retained", "removed"]
+            "required": [
+              "added",
+              "retained",
+              "removed"
+            ]
           }
         },
         "required": [
@@ -6410,6 +7244,7 @@
           "evidence_url",
           "limitations",
           "claims",
+          "run_ids",
           "release_id",
           "tool",
           "tool_version",
@@ -6507,16 +7342,28 @@
             "type": "integer"
           },
           "author_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "username": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "withdrawn_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "tool_limitations_updated_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -6688,16 +7535,28 @@
             "type": "integer"
           },
           "author_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "username": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "withdrawn_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "tool_limitations_updated_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           }
         },
         "required": [
@@ -6755,7 +7614,9 @@
                 "type": "boolean"
               }
             },
-            "required": ["my_star"]
+            "required": [
+              "my_star"
+            ]
           }
         ]
       },
@@ -6770,6 +7631,14 @@
               "my_star": {
                 "type": "boolean"
               },
+              "run_ids": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "maxLength": 10000,
+                  "format": "uuid"
+                }
+              },
               "claims": {
                 "type": "array",
                 "items": {
@@ -6777,7 +7646,11 @@
                 }
               }
             },
-            "required": ["my_star", "claims"]
+            "required": [
+              "my_star",
+              "run_ids",
+              "claims"
+            ]
           }
         ]
       },
@@ -6797,13 +7670,22 @@
             "type": "integer"
           },
           "author_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "reply_to_id": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "body": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "edit_version": {
             "type": "integer"
@@ -6812,19 +7694,31 @@
             "type": "string"
           },
           "edited_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "deleted_at": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "username": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "score": {
             "type": "integer"
           },
           "my_vote": {
-            "type": ["integer", "null"]
+            "type": [
+              "integer",
+              "null"
+            ]
           },
           "reply_count": {
             "type": "integer"
@@ -6866,7 +7760,10 @@
             "format": "date-time"
           },
           "last_used_at": {
-            "type": ["string", "null"],
+            "type": [
+              "string",
+              "null"
+            ],
             "format": "date-time"
           },
           "expires_at": {
@@ -6875,7 +7772,12 @@
             "format": "date-time"
           }
         },
-        "required": ["id", "created_at", "last_used_at", "expires_at"]
+        "required": [
+          "id",
+          "created_at",
+          "last_used_at",
+          "expires_at"
+        ]
       },
       "User": {
         "type": "object",
@@ -6928,10 +7830,19 @@
             "maxLength": 10000
           },
           "status": {
-            "enum": ["pending", "running", "retry", "ready", "failed"]
+            "enum": [
+              "pending",
+              "running",
+              "retry",
+              "ready",
+              "failed"
+            ]
           },
           "error_code": {
-            "type": ["string", "null"]
+            "type": [
+              "string",
+              "null"
+            ]
           },
           "crate": {
             "type": "string",
@@ -6942,7 +7853,10 @@
             "maxLength": 10000
           }
         },
-        "required": ["id", "status"]
+        "required": [
+          "id",
+          "status"
+        ]
       }
     },
     "responses": {

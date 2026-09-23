@@ -130,3 +130,11 @@ as synthetic. Demo API signatures are illustrative and have no doc_snapshots;
 they are for browsing, comments and voting, not publishing new reports or testing
 docs.rs import. Use a real release for publication tests. No proof was run.
 The generator and original sample data are retained in scripts/fixtures.
+
+## Recorded verification evidence (CLI 0.2.0)
+
+Deploy migration `0005_verification_runs.sql` and the service before releasing CLI 0.2.0. New reports/revisions require `run_ids`; old clients cannot publish. Existing reports remain readable without a Reproduce section.
+
+Source, SARIF, and logs are private R2 objects under `runs/<author>/<run>/<kind>/<sha256>`. D1 stores immutable metadata and per-revision associations. All three hashes must match before finalization; the service checks result-to-contract consistency but does not execute verification or authenticate an author's local machine. Limits: 32 MiB source, 8 MiB each SARIF/log, 90 new artifact uploads per author per UTC day. Exact retries are free and immutable. Unattached runs are readable only by the author. Any public report revision referencing a run makes it public; hiding the report removes anonymous access unless another public report references it. Exceptional revision redaction also removes that revision's run associations.
+
+Published evidence is retained with report history. Unattached or interrupted uploads currently remain private until operator cleanup; include this R2 prefix in storage monitoring and backup/restore procedures. Do not expire it with a blanket lifecycle rule. Source/log files may contain author-supplied data; removing an account anonymizes ownership but does not remove published evidence, consistent with retained reports. When responding to an erasure request for evidence contents, hide every referencing report, remove the affected R2 objects, and retain the existing audited restore marker process so backups cannot republish removed content.

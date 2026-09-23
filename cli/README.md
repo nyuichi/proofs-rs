@@ -4,11 +4,13 @@ A Rust CLI for publishing verification reports to [proofs.rs](https://proofs.rs)
 
 Creusot publishes only `panic_contract`, not `no_ub` or functional correctness claims.
 
-Publishing does **not** run verification tools, inspect a previous run's success, or certify correctness. It records the author's claims and links to the verification source. A contract harness may constrain inputs, concrete types, stubs, or execution in ways that are not captured by the extracted `requires`. Review the preview and describe such restrictions in the report's assumptions/limitations. No verification logs or proofs-specific source comments are required.
+Run verification through `cargo proofs run` before publishing. The CLI executes the tool on a frozen source snapshot, records observed check results as SARIF 2.1.0, and saves stdout/stderr. `publish` uploads the snapshot, SARIF, and logs to proofs.rs. No Git commit, remote, or push is required.
+
+Reports remain author-submitted evidence, not independent service certification. A harness may constrain inputs, concrete types, stubs, or execution beyond the extracted `requires`; describe those restrictions in the report's assumptions/limitations.
 
 ## Install
 
-Rust 1.91 or newer, Cargo, and Git must be installed:
+Rust 1.91 or newer, Cargo, and the selected verification tool must be installed:
 
 ```sh
 cargo install cargo-proofs --locked
@@ -19,11 +21,12 @@ The CLI is developed in `cli/` alongside the service. To install a checkout, run
 
 ## Quick start
 
-Run inside a crate whose contract verification you have already performed:
+Run inside the crate to verify:
 
 ```sh
 cargo proofs init --tool-version 0.66.0 --title 'Contract verification of my crate'
 cargo proofs login
+cargo proofs run -- cargo kani
 cargo proofs publish --dry-run
 cargo proofs publish
 ```
@@ -42,8 +45,6 @@ title = "Contract verification of my crate" # required
 name = "kani"
 version = "0.66.0" # must be registered/selectable on the selected service
 
-# [git]
-# remote = "origin" # optional
 ```
 
 Crate name/version come from Cargo metadata, including workspace inheritance. There is no `[crate]` section. One selected library crate and one tool/version are supported per publication. Use `-p NAME` or `--manifest-path PATH` to select a workspace package. A virtual workspace with multiple packages requires `-p`.
@@ -65,13 +66,14 @@ You may set `PROOFS_SERVER` instead. The default is `https://proofs.rs`. Tokens 
 - Multiple contract harnesses for one API, ambiguous targets/reexports, trait methods, and `include!` source trees stop publication. Glob imports are not used to guess targets. Macro-generated functions/harnesses are not expanded or discovered; this is a source parser, not a Rust compiler frontend.
 - Conditional compilation is evaluated with `kani`, the selected Cargo features, and `rustc --print cfg` for the host or `--target`. Pass `--features foo,bar`, `--all-features`, `--no-default-features`, and `--target` to match verification. Build-script/custom cfgs are not inferred; encountered unsupported cfgs stop discovery. Integration-test targets are not scanned. Target-dependent dependency feature unification and RUSTFLAGS are not used to infer library features.
 - The service's imported public API catalogue is authoritative. Missing APIs or multiple public API matches stop publication; no silent skipping.
-- The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact fork commit.
+- The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact source snapshot.
 
 ## Creusot
 
 ```sh
 cargo proofs init --tool creusot --tool-target annotated --tool-version VERSION --title 'My verification report'
 cargo proofs login
+cargo proofs run -- cargo creusot
 cargo proofs publish --dry-run
 cargo proofs publish
 ```
@@ -98,27 +100,33 @@ target = "annotated" # required: "annotated" or "all"
 
 `[tool].target` selects APIs; CLI `--target` selects the Rust compilation target. They are separate settings. Kani does not accept `[tool].target`: its targets remain explicit `proof_for_contract` harnesses.
 
-## Git and evidence
+## Recording and reproduction
 
-Select a remote from `[git].remote`, the branch's tracking remote, `origin`, or the sole remote, in that order. Only GitHub HTTPS/SSH remotes are supported.
+`run` checks the installed tool version against `proofs.toml`, resolves Cargo dependencies and updates Cargo.lock if necessary, then copies the source. The source root is the Git root when available, otherwise the Cargo workspace root. All local path dependencies must fit inside it. Verification runs in that copy with a separate build directory; changing the original checkout afterwards does not change the recorded evidence.
 
-Publication fetches remote heads/tags into temporary refs and verifies that HEAD is reachable from a freshly fetched remote commit. Stale tracking refs are not trusted. Unpushed or unverifiable commits stop publication. No automatic commit or push occurs. Shallow history may require `git fetch --unshallow`.
+The snapshot respects ignore files and includes Cargo.lock even when ignored. It excludes `.git`, `target`, `node_modules`, `.proofs`, common credential directories, `.env*`, `*.pem`, and `*.key`; symlinks are rejected. This is not a general secret scanner: review the local source archive and logs before publishing. The CLI prints their location. Source contents are limited to 32 MiB and 10,000 files; uploaded SARIF and logs are each limited to 8 MiB.
 
-Commit working-tree changes before publishing. The initial implementation conservatively rejects all nonignored changes across the repository, except the selected `proofs.toml`. This also covers workspace configuration/dependencies. Keep unrelated generated files ignored. The shared evidence is a commit-fixed GitHub tree URL; each claim links directly to its Kani harness or Creusot API's file and line range at that commit. Source files must be tracked and within the repository.
+- Kani: regular serial check output is supported. Checks are associated with the exact observed contract harness. Quiet/terse output, parallel jobs, options disabling safety checks, and unknown result formats are rejected. Unexecuted harnesses do not generate claims; unreachable checks remain labeled unreachable.
+- Creusot: a prover run must create fresh `proof.json` sessions that map unambiguously to selected APIs. Compilation alone, unchanged stale sessions, unresolved proof goals, and unsupported proof layouts do not certify an API. The usual free-function layout is supported; generated method layouts may require an adapter extension.
+- A failed process, changed snapshot, or run without verified contracts cannot be published. Failed recordings remain local for inspection.
+- Pass compilation flags **after** `--`, as part of the actual verifier command, for example `cargo proofs run -- cargo kani --features foo`. The same flags drive contract discovery. Select the workspace package with `-p NAME` as appropriate.
+- One run per CLI publication is supported. `publish` selects the latest recording, or use `publish --run UUID` for an explicit recording. Changes to tool configuration or crate/version require a new run.
+
+The report's collapsed **Reproduce** section contains source download/extraction commands, the exact recorded command, check-to-claim links, execution metadata, and source/SARIF/log downloads. Install the report's tool version and recorded Rust toolchain first. Cargo.lock and recorded compiler flags help reproduce the build; external system dependencies and unrecorded environment inputs are not bundled. Only `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, and `RUSTDOCFLAGS` environment overrides are recorded; arbitrary environment variables and credentials are not uploaded.
 
 ## Revisions, conflicts, and recovery
 
-Publication state is stored under the Git common directory in `cargo-proofs/`, isolated by server, author, package manifest, crate and version. It is not committed. One process may publish a given package/state at a time.
+Publication state is stored in the OS local data directory under `cargo-proofs/`, isolated by server, author, package manifest, crate and version. It is not committed. One process may publish a given package/state at a time.
 
 - Repeat `publish` revises the same report and preserves existing claim IDs. An unchanged report produces no revision.
 - A changed crate version starts a new report (the service makes report crate/version immutable).
 - On another machine, or after losing local state, use `publish --report ID` to attach explicitly. The CLI matches claims by API/property and refuses duplicate matches.
-- Titles/explanations and other individual editorial fields from the server are preserved. The report title is controlled by TOML; shared optional fields are preserved when absent, or cleared when explicitly `""`. Contracts and evidence are controlled by the current source/Git state.
+- Titles/explanations and other individual editorial fields from the server are preserved. The report title is controlled by TOML; shared optional fields are preserved when absent, or cleared when explicitly `""`. Contracts and evidence are controlled by the selected recorded snapshot.
 - If the server revision changed since the last publication, show the differences and stop. `publish --dry-run` previews the prospective update. `publish --force` applies the local/config-owned fields over the latest server state, preserving unspecified editorial fields. It still sends `expected_revision` so a concurrent edit after fetching is rejected.
-- Missing contracts remove claims only after a yes/no prompt. Noninteractive approval requires `--yes`. `--force` does not approve deletions or bypass Git checks. Removed claims retain their history/permanent links on the service. Locally known removed claim IDs are reused if their contracts are later restored; recovering removed IDs on a different machine is not automatic.
-- Before a write, the CLI saves the exact request and idempotency key atomically. If publication is interrupted, `publish --resume` retries that saved request rather than generating another report. It prints the saved payload and uses its original evidence commit, not today's worktree. No fresh Git check is required for resending an already approved request. Definite rejected requests are cleared so they can be corrected; ambiguous/network failures retain the journal.
+- Missing contracts remove claims only after a yes/no prompt. Noninteractive approval requires `--yes`. `--force` does not approve deletions or bypass recorded-run checks. Removed claims retain their history/permanent links on the service. Locally known removed claim IDs are reused if their contracts are later restored; recovering removed IDs on a different machine is not automatic.
+- Before a write, the CLI saves the exact request and idempotency key atomically. If publication is interrupted, `publish --resume` retries that saved request rather than generating another report. It prints the saved payload and uses its original recorded evidence. Definite rejected requests are cleared so they can be corrected; ambiguous/network failures retain the journal.
 
-`--dry-run` never publishes a report or updates its local baseline, but authenticates, verifies Git, and may ask the service to import the API catalogue. Imports can take several minutes. The report limit is 100 claims (50 Kani APIs or 100 Creusot APIs) and 128 KiB; automatic splitting is deliberately unsupported.
+`--dry-run` never publishes a report or updates its local baseline, but authenticates, verifies local artifact hashes, and may ask the service to import the API catalogue. It does not upload artifacts or perform the final server-side run validation. Imports can take several minutes. The report limit is 100 claims (50 Kani APIs or 100 Creusot APIs) and 128 KiB; automatic splitting is deliberately unsupported.
 
 ## Development
 

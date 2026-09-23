@@ -1,8 +1,7 @@
 use crate::{
     api::Api,
     config::{Config, Project},
-    git::Repository,
-    scan,
+    record,
     state::{self, Pending, State},
     ProjectArgs,
 };
@@ -18,6 +17,7 @@ use std::{
 
 pub struct Options {
     pub dry_run: bool,
+    pub run: Option<String>,
     pub report: Option<u64>,
     pub force: bool,
     pub yes: bool,
@@ -53,6 +53,7 @@ fn snapshot(report: &Value) -> Result<Value> {
     for key in REPORT_FIELDS {
         value[*key] = text(report, key);
     }
+    value["run_ids"] = report.get("run_ids").cloned().unwrap_or_else(|| json!([]));
     value["claims"] = Value::Array(
         report["claims"]
             .as_array()
@@ -97,6 +98,7 @@ fn merge(config: &Config, mut generated: Value, existing: Option<&Value>) -> Res
     for field in ["crate", "version", "tool_version_id", "evidence_url"] {
         body[field] = generated[field].take();
     }
+    body["run_ids"] = generated["run_ids"].take();
     body["title"] = json!(config.report.title.trim());
     for (field, value) in [
         ("explanation", &config.report.explanation),
@@ -143,6 +145,9 @@ fn same_content(a: &Value, b: &Value) -> bool {
     canonical(a.clone()) == canonical(b.clone())
 }
 fn diff(before: &Value, after: &Value) {
+    if before["run_ids"] != after["run_ids"] {
+        eprintln!("  run_ids: {} -> {}", before["run_ids"], after["run_ids"]);
+    }
     for field in REPORT_FIELDS {
         if before[*field] != after[*field] {
             eprintln!("  {field}: {} -> {}", before[*field], after[*field]);
@@ -247,21 +252,22 @@ fn complete(api: &Api, state: &mut State, path: &Path) -> Result<()> {
     Ok(())
 }
 pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
-    let mut project = Project::load(args)?;
-    let mut repo = Repository::open(project.manifest.parent().unwrap())?;
+    let project = Project::load(args)?;
     let api = Api::new(server, true)?;
     let me = api.get("/api/v1/me")?;
     let user = me["user"]["id"]
         .as_str()
         .context("Not authenticated; run login again")?;
-    let manifest = project.manifest.strip_prefix(&repo.root)?.to_string_lossy();
-    let path = repo.common.join("cargo-proofs").join(format!(
-        "{}.json",
-        state::digest(&format!(
-            "{server}\n{user}\n{manifest}\n{}\n{}",
-            project.name, project.version
-        ))
-    ));
+    let manifest = project.manifest.to_string_lossy();
+    let path = record::state_dir(&project)?
+        .join("publication")
+        .join(format!(
+            "{}.json",
+            state::digest(&format!(
+                "{server}\n{user}\n{manifest}\n{}\n{}",
+                project.name, project.version
+            ))
+        ));
     fs::create_dir_all(path.parent().unwrap())?;
     let lock = fs::OpenOptions::new()
         .create(true)
@@ -286,19 +292,40 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
     }
     ensure!(saved.pending.is_none(), "An interrupted publication is saved. Run publish --resume before starting another publication");
     let config = project.config()?;
-    project.cfg.insert(
-        if config.tool.is_creusot() {
-            "creusot"
-        } else {
-            "kani"
-        }
-        .into(),
+    let (run_dir, recorded) = record::load(&project, options.run.as_deref())?;
+    let contracts = &recorded.contracts;
+    let run_id = recorded.metadata["id"].as_str().context("Missing run ID")?;
+    ensure!(
+        contracts.len() * config.tool.properties().len() <= 100,
+        "Too many claims"
     );
-    repo.clean(&project.config_path())?;
-    let contracts = scan::discover_for_tool(&project, &config.tool)?;
-    ensure!(contracts.len() * config.tool.properties().len() <= 100, "{} contracts generate more than the service limit of 100 claims; automatic report splitting is unsupported", contracts.len());
-    repo.check_pushed(config.git.as_ref().and_then(|g| g.remote.as_deref()))?;
     let tool = api.tool_version(&config.tool.name, &config.tool.version)?;
+    let mut run_metadata = recorded.metadata.clone();
+    run_metadata["tool_version_id"] = json!(tool);
+    if options.dry_run {
+        println!(
+            "Recorded run (will upload on publish):\n{}",
+            serde_json::to_string_pretty(&run_metadata)?
+        );
+        println!("Artifacts: {}", run_dir.display());
+    } else {
+        for (kind, file) in [
+            ("source", "source.tar.gz"),
+            ("sarif", "run.sarif.json"),
+            ("logs", "run.log"),
+        ] {
+            api.upload(
+                &format!("/api/v1/runs/{run_id}/artifacts/{kind}"),
+                &fs::read(run_dir.join(file))?,
+            )?;
+        }
+        api.request(
+            "POST",
+            &format!("/api/v1/runs/{run_id}"),
+            Some(&run_metadata),
+            None,
+        )?;
+    }
     api.prepare(&project.name, &project.version)?;
     let mut claims = vec![];
     let mut seen = BTreeSet::new();
@@ -309,7 +336,7 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
             seen.insert(api_id.clone()),
             "Multiple contracts resolve to the same public API {api_path}"
         );
-        let evidence = repo.evidence(&contract.file, contract.first_line, contract.last_line)?;
+        let evidence = format!("{}/api/v1/runs/{run_id}/source", api.server);
         println!(
             "{} → {}\n  precondition: {}\n  evidence: {}",
             contract.harness, api_path, contract.precondition, evidence
@@ -350,7 +377,7 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
             bail!("Web revision conflict. Inspect publish --dry-run; use --force to publish local changes over the latest revision");
         }
     }
-    let generated = json!({"crate":project.name,"version":project.version,"tool_version_id":tool,"evidence_url":repo.shared_evidence(),"claims":claims});
+    let generated = json!({"crate":project.name,"version":project.version,"tool_version_id":tool,"evidence_url":format!("{}/api/v1/runs/{run_id}/source",api.server),"run_ids":[run_id],"claims":claims});
     // Unspecified editorial fields are preserved. Force changes only fields owned by this CLI/config.
     let mut baseline = remote.clone();
     if saved.report_id == selected {
@@ -378,12 +405,16 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
         serde_json::to_vec(&validation_body)?.len() <= 131072,
         "Report exceeds the service's 128 KiB request limit"
     );
-    let preview = api.request(
-        "POST",
-        "/api/v1/reports/validate",
-        Some(&validation_body),
-        None,
-    )?;
+    let preview = if options.dry_run {
+        body.clone()
+    } else {
+        api.request(
+            "POST",
+            "/api/v1/reports/validate",
+            Some(&validation_body),
+            None,
+        )?
+    };
     let normalized = snapshot(&preview)?;
     let removed: Vec<Value> = if let Some(report) = &remote {
         let retained: BTreeSet<_> = body["claims"]
@@ -430,7 +461,7 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
         }
     }
     confirm_removal(&removed, options.yes)?;
-    repo.clean(&project.config_path())?;
+
     saved.pending = Some(Pending {
         path: selected.map_or_else(
             || "/api/v1/reports".into(),

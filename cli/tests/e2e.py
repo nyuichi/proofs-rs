@@ -51,7 +51,7 @@ class Handler(BaseHTTPRequestHandler):
             return self.reply(200, {'items': [{'id': 'kani', 'name': 'Kani', 'active': 1}, {'id': 'creusot', 'name': 'Creusot', 'active': 1}], 'versions': [{'id': 'kani-version', 'tool_id': 'kani', 'version': '0.66.0', 'selectable': 1}, {'id': 'creusot-version', 'tool_id': 'creusot', 'version': '0.9.0', 'selectable': 1}]})
         if self.path.startswith('/api/v1/resolve-api?'):
             from urllib.parse import parse_qs, urlparse
-            path = parse_qs(urlparse(self.path).query)['path'][0]
+            path = parse_qs(urlparse(self.path).query)['path'][0].removeprefix('fixture::')
             if path not in ['f', 'g']:
                 return self.reply(404, {'error': 'api_not_found'})
             return self.reply(200, {'id': 'api-' + path})
@@ -64,7 +64,15 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         global next_claim, polls, lose_reply, race
-        body = json.loads(self.rfile.read(int(self.headers['Content-Length'])))
+        raw = self.rfile.read(int(self.headers['Content-Length']))
+        if '/artifacts/' in self.path:
+            assert self.headers.get('Authorization') == 'Bearer fixture-token'
+            return self.reply(201, {'ok': True})
+        body = json.loads(raw)
+        if self.path.startswith('/api/v1/runs/'):
+            assert body['execution_successful']
+            assert body['contracts']
+            return self.reply(201, {'id': body['id']})
         if self.path == '/auth/device/code':
             assert body == {'client_id': 'proofs-cli', 'scope': 'publish'}
             return self.reply(200, {'device_code': 'fixture-device', 'user_code': 'ABCD-EFGH', 'verification_uri': origin + '/#/device', 'expires_in': 60, 'interval': 1})
@@ -149,6 +157,39 @@ with tempfile.TemporaryDirectory() as tmp:
     script.write_text('#!/bin/sh\nif [ "$1" = remote ] && [ "$2" = get-url ]; then\n echo https://github.com/fixture/source\nelse\n exec "$TEST_REAL_GIT" "$@"\nfi\n')
     script.chmod(0o755)
     env = dict(os.environ, PATH=str(wrapper) + os.pathsep + os.environ['PATH'], TEST_REAL_GIT=real_git, PROOFS_CONFIG_DIR=str(root / 'credentials'))
+    env['XDG_DATA_HOME'] = str(root / 'data')
+    # Exercise aliased temporary roots on every Unix runner, including Linux.
+    # macOS normally uses /var paths whose canonical form starts /private/var.
+    (root / 'real-tmp').mkdir()
+    (root / 'alias-tmp').symlink_to(root / 'real-tmp', target_is_directory=True)
+    env['TMPDIR'] = str(root / 'alias-tmp')
+    tool = wrapper / 'cargo-kani'
+    tool.write_text(r"""#!/usr/bin/env python3
+import sys,re,pathlib
+if '--version' in sys.argv:
+    print('kani 0.66.0');sys.exit(0)
+source=pathlib.Path('src/lib.rs').read_text()
+for harness in re.findall(r'fn (check_\w+)\(',source):
+    print('Checking harness fixture::'+harness+'...')
+    print('RESULTS:')
+    print('Check 1: f.pointer.1')
+    print(' - Status: SUCCESS')
+    print(' - Description: "pointer check"')
+    print('VERIFICATION:- SUCCESSFUL')
+""")
+    tool.chmod(0o755)
+    creusot = wrapper / 'cargo-creusot'
+    creusot.write_text("""#!/usr/bin/env python3
+import sys,pathlib,json
+if '--version' in sys.argv:
+    print('creusot 0.9.0');sys.exit(0)
+for name in ['f','g']:
+    p=pathlib.Path('verif/fixture_rlib')/name/'proof.json'
+    p.parent.mkdir(parents=True,exist_ok=True)
+    p.write_text(json.dumps({'proofs':{'M':{'vc_'+name:{'prover':'z3','time':0.1}}}}))
+print('Proved (2 files)')
+""")
+    creusot.chmod(0o755)
     server = ThreadingHTTPServer(('127.0.0.1', 0), Handler)
     origin = f'http://127.0.0.1:{server.server_port}'
     thread = threading.Thread(target=server.serve_forever, daemon=True)
@@ -169,15 +210,16 @@ with tempfile.TemporaryDirectory() as tmp:
         cli('login', '--no-browser')
         git('add', 'src/lib.rs', 'Cargo.toml', '.gitignore')
         git('commit', '-qm', 'fixture')
-        assert 'not reachable' in cli('publish', ok=False)
-        git('push', '-q', 'origin', 'HEAD:refs/heads/main')
+        assert 'No recorded run' in cli('publish', ok=False)
+        cli('run', '--', 'cargo', 'kani')
+        # No push is necessary.
         cli('publish', '--dry-run')
         assert not reports
         cli('publish')
         assert len(reports[1]['claims']) == 2
         original_ids = [c['id'] for c in reports[1]['claims']]
         assert all(c['precondition'] == '(x > 0)' for c in reports[1]['claims'])
-        assert all('/blob/' in c['evidence_url'] and '#L3-L5' in c['evidence_url'] for c in reports[1]['claims'])
+        assert all('/runs/' in c['evidence_url'] and c['evidence_url'].endswith('/source') for c in reports[1]['claims'])
         assert 'No changes' in cli('publish')
         assert reports[1]['revision_no'] == 1
         web_edit()
@@ -186,18 +228,18 @@ with tempfile.TemporaryDirectory() as tmp:
         assert [c['id'] for c in reports[1]['claims']] == original_ids
         assert reports[1]['claims'][0]['title'] == 'Preserve my claim title'
         (work / 'src/lib.rs').write_text(source + extra)
-        assert 'Commit changes' in cli('publish', ok=False)
-        commit_push()
+        assert 'No changes' in cli('publish')  # Still publishes the frozen recorded source.
+        cli('run', '--', 'cargo', 'kani')
         cli('publish')
         added_ids = [c['id'] for c in reports[1]['claims'][2:]]
         assert len(reports[1]['claims']) == 4
         (work / 'src/lib.rs').write_text(source)
-        commit_push()
+        cli('run', '--', 'cargo', 'kani')
         assert 'Deletion requires confirmation' in cli('publish', ok=False)
         cli('publish', '--yes')
         assert len(reports[1]['claims']) == 2
         (work / 'src/lib.rs').write_text(source + extra)
-        commit_push()
+        cli('run', '--', 'cargo', 'kani')
         cli('publish')
         assert [c['id'] for c in reports[1]['claims'][2:]] == added_ids
         (work / 'proofs.toml').write_text((work / 'proofs.toml').read_text().replace('My report', 'Changed report'))
@@ -222,7 +264,7 @@ with tempfile.TemporaryDirectory() as tmp:
             '#[cfg_attr(creusot, requires(x@ > 0))]\npub fn f(x: u32) {}\n'
             'pub fn g() {}\n#[trusted] pub fn ignored() {}\n'
             '#[logic] pub fn model(x: u32) -> Int { x@ }\n')
-        commit_push()
+        cli('run', '--', 'cargo', 'creusot', 'prove')
         cli('publish', '--dry-run')
         assert len(reports) == 1
         cli('publish')
@@ -231,21 +273,23 @@ with tempfile.TemporaryDirectory() as tmp:
         claim = reports[2]['claims'][0]
         assert claim['property'] == 'panic_contract'
         assert claim['precondition'] == '(x@ > 0)'
-        assert '#L1-L2' in claim['evidence_url']
+        assert claim['evidence_url'].endswith('/source')
         assert 'No changes' in cli('publish')
         config = work / 'proofs.toml'
         config.write_text(config.read_text().replace('target = "annotated"', 'target = "all"'))
+        cli('run', '--', 'cargo', 'creusot', 'prove')
         cli('publish')
         assert len(reports[2]['claims']) == 2
         assert all(c['property'] == 'panic_contract' for c in reports[2]['claims'])
         assert reports[2]['claims'][1]['precondition'] == 'true'
         config.write_text(config.read_text().replace('target = "all"', 'target = "annotated"'))
+        cli('run', '--', 'cargo', 'creusot', 'prove')
         assert 'Deletion requires confirmation' in cli('publish', ok=False)
         cli('publish', '--yes')
         assert reports[2]['claims'][0]['id'] == claim['id']
         cli('logout')
         assert 'Not logged in' in cli('publish', ok=False)
-        print('End-to-end: login, discovery, Git, dry-run, create, no-op, conflict, force, removal, restore, retry, Creusot targets/claims/evidence, logout passed')
+        print('End-to-end: login, snapshot recording, unpushed source, dry-run, create, no-op, conflict, force, removal, restore, retry, Creusot targets/claims/evidence, logout passed')
     finally:
         server.shutdown()
         thread.join()

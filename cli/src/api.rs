@@ -107,6 +107,22 @@ impl Api {
         }
         Ok(value)
     }
+    pub fn upload(&self, path: &str, bytes: &[u8]) -> Result<()> {
+        ensure!(path.starts_with("/api/v1/runs/"), "Invalid artifact path");
+        let response = self
+            .client
+            .post(format!("{}{}", self.server, path))
+            .bearer_auth(self.token.as_ref().context("Not logged in")?)
+            .header("Content-Type", "application/octet-stream")
+            .body(bytes.to_vec())
+            .send()?;
+        ensure!(
+            response.status().is_success(),
+            "Artifact upload failed: {}",
+            response.text()?
+        );
+        Ok(())
+    }
     pub fn get(&self, path: &str) -> Result<Value> {
         self.request("GET", path, None, None)
     }
