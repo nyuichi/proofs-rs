@@ -247,7 +247,7 @@ fn complete(api: &Api, state: &mut State, path: &Path) -> Result<()> {
     Ok(())
 }
 pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
-    let project = Project::load(args)?;
+    let mut project = Project::load(args)?;
     let mut repo = Repository::open(project.manifest.parent().unwrap())?;
     let api = Api::new(server, true)?;
     let me = api.get("/api/v1/me")?;
@@ -286,9 +286,10 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
     }
     ensure!(saved.pending.is_none(), "An interrupted publication is saved. Run publish --resume before starting another publication");
     let config = project.config()?;
+    project.cfg.insert(if config.tool.is_creusot() { "creusot" } else { "kani" }.into());
     repo.clean(&project.config_path())?;
-    let contracts = scan::discover(&project)?;
-    ensure!(contracts.len() <= 50, "{} contracts generate more than the service limit of 100 claims; automatic report splitting is unsupported", contracts.len());
+    let contracts = scan::discover_for_tool(&project, &config.tool)?;
+    ensure!(contracts.len() * config.tool.properties().len() <= 100, "{} contracts generate more than the service limit of 100 claims; automatic report splitting is unsupported", contracts.len());
     repo.check_pushed(config.git.as_ref().and_then(|g| g.remote.as_deref()))?;
     let tool = api.tool_version(&config.tool.name, &config.tool.version)?;
     api.prepare(&project.name, &project.version)?;
@@ -299,14 +300,14 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
             api.resolve(&project.name, &project.version, &contract.api_paths)?;
         ensure!(
             seen.insert(api_id.clone()),
-            "Multiple harnesses resolve to the same public API {api_path}"
+            "Multiple contracts resolve to the same public API {api_path}"
         );
         let evidence = repo.evidence(&contract.file, contract.first_line, contract.last_line)?;
         println!(
             "{} → {}\n  precondition: {}\n  evidence: {}",
             contract.harness, api_path, contract.precondition, evidence
         );
-        for property in ["no_ub", "panic_contract"] {
+        for property in config.tool.properties() {
             claims.push(json!({"api_item_id":api_id,"property":property,"precondition":contract.precondition,"evidence_url":evidence}));
         }
     }

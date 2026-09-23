@@ -1,8 +1,10 @@
 # cargo-proofs
 
-A Rust CLI for publishing existing Kani contract verification to [proofs.rs](https://proofs.rs). It discovers `#[kani::proof_for_contract(...)]` harnesses and publishes one report containing two claims per API: `no_ub` and `panic_contract`, both under the target's `requires` conditions.
+A Rust CLI for publishing existing Kani or Creusot verification to [proofs.rs](https://proofs.rs). For Kani, it discovers `#[kani::proof_for_contract(...)]` harnesses and publishes two claims per API: `no_ub` and `panic_contract`, both under the target's `requires` conditions.
 
-Publishing does **not** run Kani, inspect a previous run's success, or certify correctness. It records the author's claims and links to the verification source. A contract harness may constrain inputs, concrete types, stubs, or execution in ways that are not captured by the extracted `requires`. Review the preview and describe such restrictions in the report's assumptions/limitations. No verification logs or proofs-specific source comments are required.
+Creusot publishes only `panic_contract`, not `no_ub` or functional correctness claims.
+
+Publishing does **not** run either verifier, inspect a previous run's success, or certify correctness. It records the author's claims and links to the verification source. A contract harness may constrain inputs, concrete types, stubs, or execution in ways that are not captured by the extracted `requires`. Review the preview and describe such restrictions in the report's assumptions/limitations. No verification logs or proofs-specific source comments are required.
 
 ## Install
 
@@ -65,13 +67,44 @@ You may set `PROOFS_SERVER` instead. The default is `https://proofs.rs`. Tokens 
 - The service's imported public API catalogue is authoritative. Missing APIs or multiple public API matches stop publication; no silent skipping.
 - The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact fork commit.
 
+## Creusot
+
+```sh
+cargo proofs init --tool creusot --tool-target annotated --tool-version VERSION --title 'My verification report'
+cargo proofs login
+cargo proofs publish --dry-run
+cargo proofs publish
+```
+
+Use the version actually used for verification; it must be registered on the service. `init` tries `cargo creusot --version` when `--tool-version` is omitted. Review tool-version limitations on proofs.rs, including any panics outside the verifier's coverage.
+
+```toml
+[report]
+title = "My verification report"
+
+[tool]
+name = "creusot"
+version = "VERSION"
+target = "annotated" # required: "annotated" or "all"
+```
+
+- `annotated`: public free functions and inherent methods with `requires` or `ensures`.
+- `all`: public free functions and inherent methods even without these annotations. This selects source APIs; it does not attest that every function was verified.
+- Both exclude `trusted`, `logic`, `predicate`, `law`, and `check(ghost)` functions, including explicitly imported aliases. Private functions/types and APIs without a public path are excluded. Trait methods, macro-generated APIs and glob reexports are not discovered. Explicit function/type/module reexports are supported; complex reexport chains may require future compiler-backed discovery.
+- Recognizes bare attributes, `creusot_std::...` / legacy `creusot_contracts::...`, and `cfg_attr`. Explicit macro imports/aliases are resolved; arbitrary user-defined wrapper macros and renamed dependency crates are unsupported. Bare attribute names are interpreted as Creusot attributes under this tool selection.
+- `requires` retains its original Pearlite source text, including `@`, `^`, quantifiers and implication. Multiple predicates are parenthesized and joined with `&&`; absence means `true`. `ensures` only selects an API, never becomes a precondition or functional correctness claim.
+- Evidence points to the API declaration and body, including its attributes. Logic bodies are not parsed as Rust expressions.
+- Conditional compilation uses `creusot` instead of `kani`, together with selected Cargo features and platform cfgs. The existing source-discovery limitations still apply.
+
+`[tool].target` selects APIs; CLI `--target` selects the Rust compilation target. They are separate settings. Kani does not accept `[tool].target`: its targets remain explicit `proof_for_contract` harnesses.
+
 ## Git and evidence
 
 Select a remote from `[git].remote`, the branch's tracking remote, `origin`, or the sole remote, in that order. Only GitHub HTTPS/SSH remotes are supported.
 
 Publication fetches remote heads/tags into temporary refs and verifies that HEAD is reachable from a freshly fetched remote commit. Stale tracking refs are not trusted. Unpushed or unverifiable commits stop publication. No automatic commit or push occurs. Shallow history may require `git fetch --unshallow`.
 
-Commit working-tree changes before publishing. The initial implementation conservatively rejects all nonignored changes across the repository, except the selected `proofs.toml`. This also covers workspace configuration/dependencies. Keep unrelated generated files ignored. The shared evidence is a commit-fixed GitHub tree URL; each claim links directly to its harness's file and line range at that commit. Source files must be tracked and within the repository.
+Commit working-tree changes before publishing. The initial implementation conservatively rejects all nonignored changes across the repository, except the selected `proofs.toml`. This also covers workspace configuration/dependencies. Keep unrelated generated files ignored. The shared evidence is a commit-fixed GitHub tree URL; each claim links directly to its Kani harness or Creusot API's file and line range at that commit. Source files must be tracked and within the repository.
 
 ## Revisions, conflicts, and recovery
 
@@ -85,7 +118,7 @@ Publication state is stored under the Git common directory in `cargo-proofs/`, i
 - Missing contracts remove claims only after a yes/no prompt. Noninteractive approval requires `--yes`. `--force` does not approve deletions or bypass Git checks. Removed claims retain their history/permanent links on the service. Locally known removed claim IDs are reused if their contracts are later restored; recovering removed IDs on a different machine is not automatic.
 - Before a write, the CLI saves the exact request and idempotency key atomically. If publication is interrupted, `publish --resume` retries that saved request rather than generating another report. It prints the saved payload and uses its original evidence commit, not today's worktree. No fresh Git check is required for resending an already approved request. Definite rejected requests are cleared so they can be corrected; ambiguous/network failures retain the journal.
 
-`--dry-run` never publishes a report or updates its local baseline, but authenticates, verifies Git, and may ask the service to import the API catalogue. Imports can take several minutes. The report limit is 100 claims (50 detected APIs) and 128 KiB; automatic splitting is deliberately unsupported.
+`--dry-run` never publishes a report or updates its local baseline, but authenticates, verifies Git, and may ask the service to import the API catalogue. Imports can take several minutes. The report limit is 100 claims (50 Kani APIs or 100 Creusot APIs) and 128 KiB; automatic splitting is deliberately unsupported.
 
 ## Development
 
@@ -98,4 +131,5 @@ cargo build --locked
 python3 tests/e2e.py target/debug/cargo-proofs
 ```
 
-CI runs tests on Linux and macOS. Tests use temporary Git repositories and local HTTP servers; they never publish to proofs.rs, run Kani, or push user source repositories.
+CI runs tests on Linux and macOS. Tests use temporary Git repositories and local HTTP servers; they never publish to proofs.rs, run Kani/Creusot, or push user source repositories.
+

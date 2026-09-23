@@ -48,7 +48,7 @@ class Handler(BaseHTTPRequestHandler):
         if self.path == '/api/v1/me':
             return self.reply(200, {'user': {'id': 'author'}})
         if self.path == '/api/v1/tools':
-            return self.reply(200, {'items': [{'id': 'kani', 'name': 'Kani', 'active': 1}], 'versions': [{'id': 'kani-version', 'tool_id': 'kani', 'version': '0.66.0', 'selectable': 1}]})
+            return self.reply(200, {'items': [{'id': 'kani', 'name': 'Kani', 'active': 1}, {'id': 'creusot', 'name': 'Creusot', 'active': 1}], 'versions': [{'id': 'kani-version', 'tool_id': 'kani', 'version': '0.66.0', 'selectable': 1}, {'id': 'creusot-version', 'tool_id': 'creusot', 'version': '0.9.0', 'selectable': 1}]})
         if self.path.startswith('/api/v1/resolve-api?'):
             from urllib.parse import parse_qs, urlparse
             path = parse_qs(urlparse(self.path).query)['path'][0]
@@ -213,9 +213,40 @@ with tempfile.TemporaryDirectory() as tmp:
         cli('publish', '--resume')
         assert reports[1]['revision_no'] == revision
         assert 'No changes' in cli('publish')
+        # A new crate version starts a separate report using the Creusot adapter.
+        manifest = work / 'Cargo.toml'
+        manifest.write_text(manifest.read_text().replace('1.0.0', '1.0.1'))
+        (work / 'proofs.toml').unlink()
+        cli('init', '--tool', 'creusot', '--tool-target', 'annotated', '--tool-version', '0.9.0')
+        (work / 'src/lib.rs').write_text(
+            '#[cfg_attr(creusot, requires(x@ > 0))]\npub fn f(x: u32) {}\n'
+            'pub fn g() {}\n#[trusted] pub fn ignored() {}\n'
+            '#[logic] pub fn model(x: u32) -> Int { x@ }\n')
+        commit_push()
+        cli('publish', '--dry-run')
+        assert len(reports) == 1
+        cli('publish')
+        assert reports[2]['tool_version_id'] == 'creusot-version'
+        assert len(reports[2]['claims']) == 1
+        claim = reports[2]['claims'][0]
+        assert claim['property'] == 'panic_contract'
+        assert claim['precondition'] == '(x@ > 0)'
+        assert '#L1-L2' in claim['evidence_url']
+        assert 'No changes' in cli('publish')
+        config = work / 'proofs.toml'
+        config.write_text(config.read_text().replace('target = "annotated"', 'target = "all"'))
+        cli('publish')
+        assert len(reports[2]['claims']) == 2
+        assert all(c['property'] == 'panic_contract' for c in reports[2]['claims'])
+        assert reports[2]['claims'][1]['precondition'] == 'true'
+        config.write_text(config.read_text().replace('target = "all"', 'target = "annotated"'))
+        assert 'Deletion requires confirmation' in cli('publish', ok=False)
+        cli('publish', '--yes')
+        assert reports[2]['claims'][0]['id'] == claim['id']
         cli('logout')
         assert 'Not logged in' in cli('publish', ok=False)
-        print('End-to-end: login, discovery, Git, dry-run, create, no-op, conflict, force, removal, restore, retry, logout passed')
+        print('End-to-end: login, discovery, Git, dry-run, create, no-op, conflict, force, removal, restore, retry, Creusot targets/claims/evidence, logout passed')
     finally:
         server.shutdown()
         thread.join()
+

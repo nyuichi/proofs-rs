@@ -14,7 +14,7 @@ use std::path::PathBuf;
     name = "cargo proofs",
     bin_name = "cargo proofs",
     version,
-    about = "Publish Kani contract verification reports to proofs.rs"
+    about = "Publish Kani or Creusot verification reports to proofs.rs"
 )]
 struct Cli {
     /// Service origin. Credentials and publication state are isolated per server.
@@ -53,7 +53,13 @@ enum Commands {
         project: ProjectArgs,
         #[arg(long)]
         title: Option<String>,
-        /// Kani version used for the existing verification (detected if omitted).
+        /// Verification tool used for the existing verification.
+        #[arg(long, default_value = "kani", value_parser = ["kani", "creusot"])]
+        tool: String,
+        /// Creusot API selection (required for Creusot). Not the compilation --target.
+        #[arg(long, value_enum)]
+        tool_target: Option<config::CreusotTarget>,
+        /// Tool version used for the existing verification (detected if omitted).
         #[arg(long)]
         tool_version: Option<String>,
     },
@@ -97,7 +103,9 @@ fn run() -> Result<()> {
             project,
             title,
             tool_version,
-        } => config::init(&project, title, tool_version),
+            tool,
+            tool_target,
+        } => config::init(&project, title, tool_version, tool, tool_target),
         Commands::Login { no_browser } => api::login(&server, no_browser),
         Commands::Logout => api::logout(&server),
         Commands::Publish {

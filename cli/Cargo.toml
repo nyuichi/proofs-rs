@@ -3,7 +3,7 @@ name = "cargo-proofs"
 version = "0.1.0"
 edition = "2021"
 rust-version = "1.91"
-description = "Publish Kani contract verification reports to proofs.rs"
+description = "Publish Kani or Creusot verification reports to proofs.rs"
 repository = "https://github.com/nyuichi/proofs-rs"
 publish = false
 
@@ -25,3 +25,4 @@ uuid = { version = "1", features = ["v4"] }
 
 [dev-dependencies]
 tiny_http = "0.12"
+

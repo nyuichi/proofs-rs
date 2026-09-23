@@ -26,7 +26,10 @@ jobs:
         with:
           components: rustfmt, clippy
           toolchain: ${{ matrix.rust }}
-      - run: cargo fmt --check
+      - run: |
+          cargo fmt
+          git diff -- cli
+          cargo fmt --check
       - run: cargo test --locked
       - run: cargo build --locked
       - run: python3 tests/e2e.py target/debug/cargo-proofs
@@ -45,3 +48,4 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+

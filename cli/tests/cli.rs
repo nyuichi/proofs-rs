@@ -66,3 +66,24 @@ fn init_uses_workspace_metadata_and_does_not_overwrite() {
         std::fs::read_to_string(d.path().join("member/proofs.toml")).unwrap()
     );
 }
+
+
+#[test]
+fn init_creusot_requires_explicit_target() {
+    let d = tempfile::tempdir().unwrap();
+    std::fs::create_dir(d.path().join("src")).unwrap();
+    std::fs::write(d.path().join("Cargo.toml"), "[package]\nname='fixture'\nversion='1.0.0'\nedition='2021'\n").unwrap();
+    std::fs::write(d.path().join("src/lib.rs"), "pub fn f() {}\n").unwrap();
+    let run = |extra: &[&str]| Command::new(env!("CARGO_BIN_EXE_cargo-proofs"))
+        .current_dir(d.path()).args(["init", "--tool", "creusot", "--tool-version", "0.9.0"])
+        .args(extra).output().unwrap();
+    let out = run(&[]);
+    assert!(!out.status.success());
+    assert!(String::from_utf8_lossy(&out.stderr).contains("target"));
+    assert!(!d.path().join("proofs.toml").exists());
+    let out = run(&["--tool-target", "annotated"]);
+    assert!(out.status.success(), "{}", String::from_utf8_lossy(&out.stderr));
+    let config = std::fs::read_to_string(d.path().join("proofs.toml")).unwrap();
+    assert!(config.contains("name = \"creusot\""));
+    assert!(config.contains("target = \"annotated\""));
+}
