@@ -14,7 +14,7 @@ use std::path::PathBuf;
     name = "cargo proofs",
     bin_name = "cargo proofs",
     version,
-    about = "Publish Kani or Creusot verification reports to proofs.rs"
+    about = "Publish Rust verification reports to proofs.rs"
 )]
 struct Cli {
     /// Service origin. Credentials and publication state are isolated per server.
