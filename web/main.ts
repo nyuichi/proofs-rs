@@ -2,11 +2,6 @@ import { legal } from "./legal";
 const root = document.querySelector<HTMLElement>("#app")!;
 let me: any = null,
   config: any = {},
-  draft: any = {},
-  draftTarget: any = null,
-  editing: number | null = null,
-  expected = 0,
-  formKey = crypto.randomUUID(),
   routeID = 0;
 const esc = (v: any) =>
   String(v ?? "").replace(
@@ -102,7 +97,6 @@ async function refreshMe() {
   document.querySelector("#logout")?.addEventListener("click", async () => {
     try {
       await request("/auth/logout", "POST", {});
-      draft = {};
       await refreshMe();
       navigate("/");
     } catch (e) {
@@ -294,7 +288,7 @@ async function cratePage(name: string) {
 }
 async function apiPage(id: string) {
   const a = await request("/apis/" + enc(id));
-  root.innerHTML = `<p><a href="#/crate/${enc(a.crate)}?version=${enc(a.version)}">${esc(a.crate)} ${esc(a.version)}</a></p><h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}" target="_blank" rel="noopener noreferrer">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="#/publish?api=${enc(a.id)}">Publish a report</a></p><h2>Claims</h2><div id="claims"></div>`;
+  root.innerHTML = `<p><a href="#/crate/${enc(a.crate)}?version=${enc(a.version)}">${esc(a.crate)} ${esc(a.version)}</a></p><h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}" target="_blank" rel="noopener noreferrer">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="#/publish">Publish a report</a></p><h2>Claims</h2><div id="claims"></div>`;
   await claimsList(
     "/apis/" + enc(id) + "/claims",
     root.querySelector("#claims")!,
@@ -404,7 +398,7 @@ async function reportPage(id: number) {
     cursor = page.next_cursor;
   } while (cursor);
   commentReply = null;
-  root.innerHTML = `<p class="breadcrumbs"><a href="#/crates">crates</a> / <a href="#/crate/${enc(c.crate)}">${esc(c.crate)}</a> / <a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.version)}</a> / Report #${id}</p>${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <a href="#/publish?update=${id}">Publish new revision</a> · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `<p class="breadcrumbs"><a href="#/crates">crates</a> / <a href="#/crate/${enc(c.crate)}">${esc(c.crate)}</a> / <a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.version)}</a> / Report #${id}</p>${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
   bindStars();
   bind("#withdraw", async () => {
     if (
@@ -714,12 +708,6 @@ async function toolsPage(id?: string) {
       )
       .join("") || "<p>No tools have been registered yet.</p>";
 }
-function manualPublish() {
-  const p = current().searchParams;
-  return ["manual", "update", "api", "crate", "version"].some((key) =>
-    p.has(key),
-  );
-}
 function publishGuide() {
   root.innerHTML = `<section class="publish-guide"><h1>Publish a report</h1>
 <p>Publish your verification reports with <code>cargo proofs</code>.</p>
@@ -752,203 +740,7 @@ cargo proofs publish</code></pre>
 <p>The CLI prints a link to your published report. Run <code>cargo proofs publish</code> again to update the same report.</p>
 <p>Using another tool? See <a href="#/tools">Tools</a> for supported tools and instructions.</p>
 <p><a href="https://github.com/nyuichi/proofs-rs/blob/main/cli/README.md" target="_blank" rel="noopener noreferrer">CLI documentation →</a></p>
-<div class="publish-manual"><p>Prefer to enter a report manually? <a href="#/publish?manual=1">Publish in your browser →</a></p></div></section>`;
-}
-async function publish() {
-  if (!manualPublish()) return publishGuide();
-  if (!me?.user) {
-    root.innerHTML =
-      '<h1>Publish</h1><p>Please <a href="/auth/github">sign in</a> to publish.</p>';
-    return;
-  }
-  if (!needUser()) return;
-  const p = current().searchParams,
-    update = Number(p.get("update") || 0);
-  if (update && editing !== update) {
-    const r = await request("/reports/" + update);
-    if (r.author_id !== me.user.id)
-      throw Error("Only the author can revise this report.");
-    draft = { ...r, claims: r.claims.map((x: any) => ({ ...x })) };
-    draftTarget = { crate: r.crate, version: r.version };
-    editing = update;
-    expected = r.revision_no;
-    formKey = crypto.randomUUID();
-  } else if (!update && editing) {
-    draft = {};
-    draftTarget = null;
-    editing = null;
-    formKey = crypto.randomUUID();
-  }
-  if (p.get("api") && !draftTarget) {
-    const a = await request("/apis/" + enc(p.get("api")!));
-    draftTarget = { crate: a.crate, version: a.version };
-    draft = {
-      claims: [
-        {
-          api_item_id: a.id,
-          display_path: a.display_path,
-          is_unsafe: a.is_unsafe,
-          property: "panic_contract",
-        },
-      ],
-    };
-  }
-  if (draftTarget) return reportForm();
-  root.innerHTML = `<h1>Publish a report</h1><form id="prepare"><label>Crate<input name="crate" required pattern="[A-Za-z0-9_-]+" value="${esc(p.get("crate"))}"></label><label>Exact version<input name="version" required value="${esc(p.get("version"))}"></label><button>Prepare API catalogue</button></form><p id="import-status" role="status"></p>`;
-  bind(
-    "#prepare",
-    async (e) => {
-      const f = new FormData(e.target),
-        crate = String(f.get("crate")),
-        version = String(f.get("version"));
-      let job = await request(
-        "/publish/prepare",
-        "POST",
-        { crate, version },
-        crypto.randomUUID(),
-      );
-      const generation = routeID;
-      while (job.status !== "ready") {
-        if (job.status === "failed")
-          throw Error(job.error_code || "Import failed");
-        root.querySelector("#import-status")!.textContent =
-          "Preparing API catalogue…";
-        await new Promise((r) => setTimeout(r, 2500));
-        if (generation !== routeID) return;
-        job = await request("/imports/" + enc(job.id));
-      }
-      draftTarget = { crate, version };
-      draft = { claims: [] };
-      formKey = crypto.randomUUID();
-      await reportForm();
-    },
-    "submit",
-  );
-}
-async function reportForm() {
-  const all = await request("/tools");
-  draft.claims ||= [];
-  const input = (name: string, label: string, value: any, required = false) =>
-    `<label>${label}<input name="${name}" ${required ? "required" : ""} maxlength="1000" value="${esc(value)}"></label>`;
-  const area = (name: string, label: string, value: any) =>
-    `<label>${label}<textarea name="${name}" maxlength="10000">${esc(value)}</textarea></label>`;
-  root.innerHTML = `<h1>${editing ? "Publish a new revision" : "Publish a report"}</h1><p>${esc(draftTarget.crate)} ${esc(draftTarget.version)}</p><form id="report-form" class="publish-form">${input("title", "Report title", draft.title, true)}${area("explanation", "Explanation", draft.explanation)}<h2>Shared verification details</h2><label>Tool / version<select name="tool_version_id" required><option value="">Select a version</option>${all.versions
-    .filter(
-      (v: any) =>
-        v.selectable &&
-        all.items.some((t: any) => t.id === v.tool_id && t.active),
-    )
-    .map(
-      (v: any) =>
-        `<option value="${esc(v.id)}" ${draft.tool_version_id === v.id ? "selected" : ""}>${esc(all.items.find((t: any) => t.id === v.tool_id)?.name)} ${esc(v.version)}</option>`,
-    )
-    .join(
-      "",
-    )}</select></label>${area("environment", "Environment", draft.environment)}${area("trusted_assumptions", "Shared trusted assumptions", draft.trusted_assumptions)}${input("evidence_url", "Shared evidence URL", draft.evidence_url)}${area("limitations", "Shared limitations", draft.limitations)}<h2>Claims</h2><div id="claim-editors">${draft.claims.map((x: any, i: number) => `<fieldset data-index="${i}"><legend>Claim ${i + 1}${x.id ? " · " + esc(x.id) : " · New"}</legend><p><code>${esc(x.display_path)}</code>${x.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><label>Property<select data-field="property" ${x.id ? "disabled" : ""}><option value="panic_contract" ${x.property === "panic_contract" ? "selected" : ""}>Panic contract</option><option value="no_ub" ${x.property === "no_ub" ? "selected" : ""}>No undefined behavior</option></select></label><label>Title (optional; generated when empty)<input data-field="title" maxlength="1000" value="${esc(x.title)}"></label><label>Preconditions <span data-pre-label></span><textarea data-field="precondition" maxlength="10000">${esc(x.precondition)}</textarea></label><details><summary>Claim-specific explanation, assumptions and evidence</summary>${["explanation", "trusted_assumptions", "evidence_url", "limitations"].map((k) => `<label>${esc(k.replaceAll("_", " "))}<textarea data-field="${k}" maxlength="${k === "evidence_url" ? 1000 : 10000}">${esc(x[k])}</textarea></label>`).join("")}</details><button type="button" data-remove="${i}">Remove claim</button></fieldset>`).join("")}</div>${notice}<button id="preview-report" ${draft.claims.length ? "" : "disabled"}>Preview report</button></form><h2>Add an API</h2><form id="api-search"><input name="q" aria-label="Filter API path" placeholder="Filter API path"><button>Search</button></form><div id="api-results"></div>`;
-  const form = root.querySelector<HTMLFormElement>("#report-form")!;
-  function collect() {
-    Object.assign(draft, Object.fromEntries(new FormData(form)));
-    form.querySelectorAll<HTMLElement>("[data-index]").forEach((el) => {
-      const x = draft.claims[Number(el.dataset.index)];
-      el.querySelectorAll<
-        HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement
-      >("[data-field]").forEach((f) => (x[f.dataset.field!] = f.value));
-      const required = x.property === "panic_contract" || !!x.is_unsafe;
-      el.querySelector("[data-pre-label]")!.textContent =
-        x.property === "no_ub"
-          ? "(optional; mandatory for unsafe APIs)"
-          : "(required)";
-      el.querySelector<HTMLTextAreaElement>(
-        '[data-field="precondition"]',
-      )!.required = required;
-    });
-  }
-  form.addEventListener("input", () => {
-    collect();
-    formKey = crypto.randomUUID();
-  });
-  form.addEventListener("change", () => {
-    collect();
-    formKey = crypto.randomUUID();
-  });
-  collect();
-  bind("[data-remove]", async (e) => {
-    collect();
-    draft.claims.splice(Number(e.currentTarget.dataset.remove), 1);
-    formKey = crypto.randomUUID();
-    await reportForm();
-  });
-  async function results(q = "", cursor: any = 0) {
-    const box = root.querySelector<HTMLElement>("#api-results")!;
-    if (!cursor) box.innerHTML = "";
-    const d = await request(
-      `/crates/${enc(draftTarget.crate)}/${enc(draftTarget.version)}/apis?q=${enc(q)}&cursor=${cursor}`,
-    );
-    for (const a of d.items) {
-      const b = document.createElement("button");
-      b.className = "api-option";
-      b.textContent = a.display_path + (a.is_unsafe ? " (unsafe)" : "");
-      b.onclick = async () => {
-        try {
-          collect();
-          draft.claims.push({
-            api_item_id: a.id,
-            display_path: a.display_path,
-            is_unsafe: a.is_unsafe,
-            property: "panic_contract",
-            title: "",
-          });
-          formKey = crypto.randomUUID();
-          await reportForm();
-        } catch (e) {
-          error(e);
-        }
-      };
-      box.append(b);
-    }
-    pager(d, (n) => results(q, n), box);
-  }
-  bind(
-    "#api-search",
-    (e) => results(String(new FormData(e.target).get("q"))),
-    "submit",
-  );
-  await results();
-  bind(
-    "#report-form",
-    async () => {
-      collect();
-      const body = {
-        ...draft,
-        ...draftTarget,
-        claims: draft.claims.map((x: any) => ({ ...x })),
-        ...(editing ? { expected_revision: expected } : {}),
-      };
-      const preview = await request("/reports/validate", "POST", {
-        ...body,
-        ...(editing ? { report_id: editing } : {}),
-      });
-      root.innerHTML = `<h1>Review before publishing</h1>${reportContent(preview)}<p>${preview.claims.length} claims · ${preview.changes.added} added · ${preview.changes.retained.length} retained · ${preview.changes.removed.length} removed</p>${preview.changes.removed.length ? `<p>Removed claim IDs: ${preview.changes.removed.map(esc).join(", ")}</p>` : ""}${preview.claims.map((x: any) => `<section>${claimContent({ ...x, tool: preview.tool, tool_version: preview.tool_version })}</section>`).join("")}${notice}<button id="back">Back to edit</button> <button id="publish">Publish ${editing ? "revision" : "report"}</button>`;
-      bind("#back", reportForm);
-      bind("#publish", async () => {
-        const r = await request(
-          editing ? `/reports/${editing}/revisions` : "/reports",
-          "POST",
-          body,
-          formKey,
-        );
-        draft = {};
-        draftTarget = null;
-        editing = null;
-        formKey = crypto.randomUUID();
-        await refreshMe();
-        navigate(
-          "/report/" + r.id + (r.revision_no ? "?v=" + r.revision_no : ""),
-        );
-      });
-    },
-    "submit",
-  );
+</section>`;
 }
 async function unsubscribe() {
   const p = current().searchParams;
@@ -998,7 +790,7 @@ async function route() {
     pageShell(p, id);
     const publicPage =
       !p ||
-      (p === "publish" && !manualPublish()) ||
+      p === "publish" ||
       [
         "crates",
         "crate",
@@ -1059,7 +851,7 @@ async function route() {
     else if (p === "reports") {
       root.innerHTML = `<h1>Reports</h1><div id="reports">${loading}</div>`;
       await claimsList("/reports", root.querySelector("#reports")!);
-    } else if (p === "publish") await publish();
+    } else if (p === "publish") publishGuide();
     else if (p === "login") login();
     else if (p === "signup") await signup();
     else if (p === "terms-update") await termsUpdate();

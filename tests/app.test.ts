@@ -810,7 +810,7 @@ test("device login, one-time exchange, scope isolation, ownership and revocation
   );
 });
 
-test("frontend publish preview, revision links and nested comment deletion", async () => {
+test("frontend CLI guide, revision links and nested comment deletion", async () => {
   const { JSDOM } = await import("jsdom");
   const { transpileModule, ModuleKind, ScriptTarget } =
     await import("typescript");
@@ -878,33 +878,15 @@ test("frontend publish preview, revision links and nested comment deletion", asy
       new w.Event("submit", { bubbles: true, cancelable: true }),
     );
   try {
-    await until("#report-form");
-    (w.document.querySelector('[data-field="property"]') as any).value =
-      "no_ub";
-    w.document
-      .querySelector('[data-field="property"]')!
-      .dispatchEvent(new w.Event("change", { bubbles: true }));
-    assert.match(
-      w.document.querySelector("[data-pre-label]")!.textContent!,
-      /optional; mandatory for unsafe APIs/,
-    );
-    assert.equal(
-      (w.document.querySelector('[data-field="precondition"]') as any).required,
-      false,
-    );
-    for (const [k, v] of Object.entries(reportInput))
-      if (w.document.querySelector('[name="' + k + '"]')) input(k, String(v));
-    submit("#report-form");
-    await until("#publish");
-    assert.match(
-      w.document.querySelector("#app")!.textContent!,
-      /Review before publishing/,
-    );
-    ((await until("#publish")) as any).click();
+    await until(".publish-guide");
+    assert.equal(w.document.querySelector("#report-form"), null);
+    const made = await request("/reports", "POST", reportInput);
+    assert.equal(made.status, 201);
+    w.location.hash = "/report/1";
     await until("#comment-form");
-    assert.match(
-      w.document.querySelector("h1")!.textContent!,
-      /A verification report/,
+    assert.equal(
+      w.document.querySelector('.report-actions a[href*="publish"]'),
+      null,
     );
     const claimLink = w.document
       .querySelector('a[href^="#/claim/"]')!
@@ -962,20 +944,21 @@ test("frontend publish preview, revision links and nested comment deletion", asy
       /Nested reply/,
     );
     w.location.hash = "/publish?update=1";
-    await until("#report-form");
-    assert.equal(
-      (w.document.querySelector('[data-field="property"]') as any).disabled,
-      true,
-    );
-    input("title", "Revised in the browser");
-    submit("#report-form");
-    await until("#publish");
-    assert.match(w.document.querySelector("#app")!.textContent!, /1 retained/);
-    (w.document.querySelector("#publish") as any).click();
+    await until(".publish-guide");
+    assert.equal(w.document.querySelector("#report-form"), null);
+    const existing = (await request("/reports/1")).body;
+    const revised = await request("/reports/1/revisions", "POST", {
+      ...reportInput,
+      title: "Revised through API",
+      expected_revision: 1,
+      claims: existing.claims,
+    });
+    assert.equal(revised.status, 201, JSON.stringify(revised.body));
+    w.location.hash = "/report/1";
     await until("#comment-form");
     assert.equal(
       w.document.querySelector("h1")!.textContent,
-      "Revised in the browser",
+      "Revised through API",
     );
     assert.match(w.document.querySelector("#app")!.textContent!, /v2/);
     w.location.hash = "/account";
@@ -1040,7 +1023,7 @@ test("frontend publish preview, revision links and nested comment deletion", asy
     await until("#crate-reports .claim-item");
     assert.match(
       w.document.querySelector("#crate-reports")!.textContent!,
-      /Revised in the browser/,
+      /Revised through API/,
     );
     w.location.hash = "/crates";
     await until("#crate-rows tr");
@@ -1104,19 +1087,17 @@ test("frontend publish preview, revision links and nested comment deletion", asy
     assert.equal(w.document.querySelector(".signin-notice"), null);
     w.location.hash = "/publish";
     await new Promise((resolve) => setTimeout(resolve, 10));
-    const manualLink = await until(
-      '.publish-guide a[href="#/publish?manual=1"]',
-    );
+    await until(".publish-guide");
     assert.match(
       w.document.querySelector(".publish-guide")!.textContent!,
       /cargo install cargo-proofs --locked/,
     );
-    w.location.hash = manualLink.getAttribute("href")!;
-    await until('#app a[href="/auth/github"]');
-    assert.equal(
-      w.document.querySelector("#app")!.textContent,
-      "PublishPlease sign in to publish.",
-    );
+    assert.equal(w.document.querySelector('a[href*="manual=1"]'), null);
+    w.location.hash = "/publish?manual=1";
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    await until(".publish-guide");
+    assert.equal(w.document.querySelector("#report-form"), null);
+    assert.equal(w.document.querySelector("#prepare"), null);
     assert.equal(w.document.querySelector('#app a[href="#/terms"]'), null);
   } finally {
     w.close();

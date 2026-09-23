@@ -257,26 +257,6 @@ pre {
     margin: 8px 0;
   }
 }
-.publish-form {
-  max-width: 720px;
-}
-.publish-form > label {
-  display: block;
-  margin: 14px 0 3px;
-}
-.publish-form > input,
-.publish-form > textarea,
-.publish-form > select {
-  display: block;
-  box-sizing: border-box;
-  width: 100%;
-}
-.publish-form > textarea {
-  min-height: 85px;
-}
-.publish-form details {
-  margin-top: 24px;
-}
 .form-actions {
   display: flex;
   gap: 12px;
@@ -397,9 +377,6 @@ main:has(> .home-search) {
   }
 }
 
-.publish-form > [hidden] {
-  display: none;
-}
 [hidden] {
   display: none !important;
 }
@@ -456,20 +433,6 @@ textarea {
   .comment-children {
     margin-left: 16px;
   }
-}
-.publish-form label input,
-.publish-form label textarea,
-.publish-form label select {
-  display: block;
-  width: 100%;
-  box-sizing: border-box;
-  margin-top: 4px;
-}
-.api-option {
-  display: block;
-  margin: 10px 0;
-  text-align: left;
-  font-family: monospace;
 }
 
 .device-label {
@@ -562,22 +525,6 @@ textarea {
 .report-actions > * {
   margin-right: 8px;
 }
-.publish-form fieldset {
-  margin: 20px 0;
-  padding: 14px 18px;
-  min-width: 0;
-}
-.publish-form fieldset label {
-  display: block;
-  margin: 12px 0;
-}
-.publish-form fieldset legend {
-  overflow-wrap: anywhere;
-  max-width: 100%;
-}
-.publish-form details {
-  margin: 16px 0;
-}
 #comment-form textarea {
   display: block;
   width: 100%;
@@ -659,9 +606,4 @@ textarea {
 .publish-guide summary {
   cursor: pointer;
   text-decoration: underline;
-}
-.publish-manual {
-  margin-top: 26px;
-  border-top: 1px solid #ccc;
-  padding-top: 12px;
 }
