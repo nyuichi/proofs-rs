@@ -31,7 +31,10 @@ jobs:
       - run: cargo build --locked
       - name: Check crates.io package
         if: matrix.os == 'ubuntu-latest' && matrix.rust == 'stable'
-        run: cargo publish --dry-run --locked --registry crates-io
+        run: |
+          cargo publish --dry-run --locked --registry crates-io
+          cargo package --locked
+          python3 -c 'from pathlib import Path; assert any(p.stat().st_size for p in Path("target/package").glob("*.crate")), "Missing release archive"'
       - run: python3 tests/e2e.py target/debug/cargo-proofs
       - run: cargo clippy --locked --all-targets -- -D warnings
       - run: cargo run -- proofs --help
