@@ -704,7 +704,7 @@ async function toolsPage(id?: string) {
       root.querySelector("#items")!,
     );
   }
-  root.innerHTML = `<h1>Verification tools</h1><div id="tool-list">${loading}</div><p><a href="https://github.com/nyuichi/proofs-rs/issues/new">Request a tool or version</a></p>`;
+  root.innerHTML = `<h1>Verification tools</h1><p><a href="https://github.com/nyuichi/proofs-rs/blob/main/cli/README.md" target="_blank" rel="noopener noreferrer">CLI setup and usage instructions</a></p><div id="tool-list">${loading}</div><p><a href="https://github.com/nyuichi/proofs-rs/issues/new">Request a tool or version</a></p>`;
   const d = await request("/tools");
   root.querySelector("#tool-list")!.innerHTML =
     d.items
@@ -714,7 +714,48 @@ async function toolsPage(id?: string) {
       )
       .join("") || "<p>No tools have been registered yet.</p>";
 }
+function manualPublish() {
+  const p = current().searchParams;
+  return ["manual", "update", "api", "crate", "version"].some((key) =>
+    p.has(key),
+  );
+}
+function publishGuide() {
+  root.innerHTML = `<section class="publish-guide"><h1>Publish a report</h1>
+<p>Publish your verification reports with <code>cargo proofs</code>.</p>
+<h2>Getting started with Kani</h2>
+<h3>1. Install</h3>
+<pre><code>cargo install cargo-proofs --locked</code></pre>
+<p class="meta">Requires Rust 1.91 or newer and Git.</p>
+<h3>2. Set up your report</h3>
+<p>Run inside the crate you verified.</p>
+<pre><code>cargo proofs init --tool kani</code></pre>
+<p>Discovers <code>#[kani::proof_for_contract(...)]</code> harnesses and creates No UB and Panic contract claims.</p>
+<p>Edit <code>proofs.toml</code> to set the report title and check the tool version used for verification. You can also add an explanation, assumptions, limitations, and environment.</p>
+<details><summary>Example proofs.toml</summary><pre><code>[report]
+title = "Contract verification of my crate"
+# explanation = "What this report covers"
+# trusted_assumptions = "Assumptions used in verification"
+# limitations = "Scope restrictions"
+# environment = "Verification environment"
+
+[tool]
+name = "kani"
+version = "0.66.0" # Version used for verification</code></pre></details>
+<h3>3. Sign in</h3>
+<pre><code>cargo proofs login</code></pre>
+<p>Authorize the CLI in your browser with your GitHub account.</p>
+<h3>4. Preview and publish</h3>
+<p>Commit and push your verification source to GitHub first. Evidence links point to that exact commit.</p>
+<pre><code>cargo proofs publish --dry-run
+cargo proofs publish</code></pre>
+<p>The CLI prints a link to your published report. Run <code>cargo proofs publish</code> again to update the same report.</p>
+<p>Using another tool? See <a href="#/tools">Tools</a> for supported tools and instructions.</p>
+<p><a href="https://github.com/nyuichi/proofs-rs/blob/main/cli/README.md" target="_blank" rel="noopener noreferrer">CLI documentation →</a></p>
+<div class="publish-manual"><p>Prefer to enter a report manually? <a href="#/publish?manual=1">Publish in your browser →</a></p></div></section>`;
+}
 async function publish() {
+  if (!manualPublish()) return publishGuide();
   if (!me?.user) {
     root.innerHTML =
       '<h1>Publish</h1><p>Please <a href="/auth/github">sign in</a> to publish.</p>';
@@ -957,6 +998,7 @@ async function route() {
     pageShell(p, id);
     const publicPage =
       !p ||
+      (p === "publish" && !manualPublish()) ||
       [
         "crates",
         "crate",

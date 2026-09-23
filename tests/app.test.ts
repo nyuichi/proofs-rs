@@ -1104,6 +1104,14 @@ test("frontend publish preview, revision links and nested comment deletion", asy
     assert.equal(w.document.querySelector(".signin-notice"), null);
     w.location.hash = "/publish";
     await new Promise((resolve) => setTimeout(resolve, 10));
+    const manualLink = await until(
+      '.publish-guide a[href="#/publish?manual=1"]',
+    );
+    assert.match(
+      w.document.querySelector(".publish-guide")!.textContent!,
+      /cargo install cargo-proofs --locked/,
+    );
+    w.location.hash = manualLink.getAttribute("href")!;
     await until('#app a[href="/auth/github"]');
     assert.equal(
       w.document.querySelector("#app")!.textContent,
@@ -1323,6 +1331,15 @@ test("static page content renders before requests, remains usable, and survives 
     );
     assert.ok(pending.has("/api/v1/config"));
     assert.ok(pending.has("/api/v1/me"));
+    w.location.hash = "/publish";
+    await tick();
+    assert.ok(d.querySelector(".publish-guide"));
+    assert.match(
+      d.querySelector(".publish-guide")!.textContent!,
+      /Getting started with Kani/,
+    );
+    assert.ok(d.querySelector('.publish-guide a[href="#/tools"]'));
+    assert.equal(d.querySelector("[data-loading]"), null);
     w.location.hash = "/tools";
     await tick();
     assert.equal(d.querySelector("h1")!.textContent, "Verification tools");
