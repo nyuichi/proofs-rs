@@ -4,7 +4,7 @@ The `Release cargo-proofs` workflow publishes only `cli/` to crates.io. It does 
 
 ## One-time setup and initial 0.1.0 release
 
-1. Choose a license for the CLI and add `license`/`license-file` to `cli/Cargo.toml` and its license text under `cli/`. The release metadata check deliberately refuses unlicensed releases. This does not set the service's license.
+1. The CLI is licensed under `MIT OR Apache-2.0`; both license files are included in the package. This does not set the service's license.
 2. Log into crates.io and complete account/email verification. Create a short-lived API token with permission to publish `cargo-proofs` (including creation of the new crate). Do not paste it into an issue, chat, or commit.
 3. In `nyuichi/proofs-rs`, create the GitHub Actions environment `crates-io` and store that token as its `CARGO_REGISTRY_TOKEN` secret.
 4. Merge the release preparation into main after the CLI checks, including the package dry run, pass. Create and push `cargo-proofs-v0.1.0` at that commit. Before Trusted Publishing is configured, the automatic tag run will fail at authentication; no package is published by that failed run.
