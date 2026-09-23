@@ -62,6 +62,9 @@ jobs:
       - run: cargo build --manifest-path cli/Cargo.toml --locked
       - run: python3 cli/tests/e2e.py cli/target/debug/cargo-proofs
       - run: cargo publish --manifest-path cli/Cargo.toml --dry-run --locked --registry crates-io
+      - name: Create persistent release archive
+        working-directory: cli
+        run: cargo package --locked
       - uses: actions/upload-artifact@v4
         with:
           name: cargo-proofs-package
