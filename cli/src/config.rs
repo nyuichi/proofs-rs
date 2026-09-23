@@ -22,6 +22,48 @@ pub struct Report {
 pub struct Tool {
     pub name: String,
     pub version: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target: Option<CreusotTarget>,
+}
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, clap::ValueEnum, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum CreusotTarget {
+    Annotated,
+    All,
+}
+impl Tool {
+    pub fn is_creusot(&self) -> bool {
+        self.name.eq_ignore_ascii_case("creusot")
+    }
+    pub fn properties(&self) -> &'static [&'static str] {
+        if self.is_creusot() {
+            &["panic_contract"]
+        } else {
+            &["no_ub", "panic_contract"]
+        }
+    }
+    fn validate(&self) -> Result<()> {
+        ensure!(
+            self.is_creusot() || self.name.eq_ignore_ascii_case("kani"),
+            "Supported tools: kani, creusot"
+        );
+        ensure!(
+            !self.version.trim().is_empty(),
+            "[tool].version is required"
+        );
+        if self.is_creusot() {
+            ensure!(
+                self.target.is_some(),
+                "Creusot requires [tool].target = \"annotated\" or \"all\""
+            );
+        } else {
+            ensure!(
+                self.target.is_none(),
+                "[tool].target applies only to Creusot; Kani uses proof_for_contract harnesses"
+            );
+        }
+        Ok(())
+    }
 }
 #[derive(Default, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -135,7 +177,7 @@ impl Project {
             }
         }
         let mut rustc = Command::new("rustc");
-        rustc.args(["--print", "cfg", "--cfg", "kani"]);
+        rustc.args(["--print", "cfg"]);
         if let Some(t) = &args.target {
             rustc.args(["--target", t]);
         }
@@ -179,49 +221,54 @@ impl Project {
             !config.report.title.trim().is_empty(),
             "[report].title is required"
         );
-        ensure!(
-            config.tool.name.eq_ignore_ascii_case("kani"),
-            "Only Kani is supported in this version"
-        );
-        ensure!(
-            !config.tool.version.trim().is_empty(),
-            "[tool].version is required"
-        );
+        config.tool.validate()?;
         Ok(config)
     }
 }
-pub fn init(args: &ProjectArgs, title: Option<String>, version: Option<String>) -> Result<()> {
+pub fn init(
+    args: &ProjectArgs,
+    title: Option<String>,
+    version: Option<String>,
+    tool: String,
+    target: Option<CreusotTarget>,
+) -> Result<()> {
     let project = Project::load(args)?;
+    let label = if tool == "creusot" { "Creusot" } else { "Kani" };
     let version = match version {
         Some(v) => v,
         None => {
             let out = Command::new("cargo")
-                .args(["kani", "--version"])
+                .args([tool.as_str(), "--version"])
                 .output()
-                .context("Cannot detect Kani; pass --tool-version VERSION")?;
+                .with_context(|| format!("Cannot detect {label}; pass --tool-version VERSION"))?;
             if !out.status.success() {
-                bail!("Cannot detect Kani; pass --tool-version VERSION used for verification");
+                bail!("Cannot detect {label}; pass --tool-version VERSION used for verification");
             }
             String::from_utf8(out.stdout)?
                 .split_whitespace()
                 .find(|s| s.chars().next().is_some_and(|c| c.is_ascii_digit()))
-                .context("Cannot parse Kani version; use --tool-version")?
+                .context("Cannot parse tool version; use --tool-version")?
                 .to_owned()
         }
     };
     let config = Config {
         report: Report {
             title: title.unwrap_or_else(|| {
-                format!("Kani verification of {} {}", project.name, project.version)
+                format!(
+                    "{label} verification of {} {}",
+                    project.name, project.version
+                )
             }),
             ..Report::default()
         },
         tool: Tool {
-            name: "kani".into(),
+            name: tool,
             version,
+            target,
         },
         git: None,
     };
+    config.tool.validate()?;
     use std::io::Write;
     let mut file = fs::OpenOptions::new()
         .write(true)
@@ -230,8 +277,27 @@ pub fn init(args: &ProjectArgs, title: Option<String>, version: Option<String>) 
         .context("Create proofs.toml (existing files are never overwritten)")?;
     file.write_all(toml::to_string_pretty(&config)?.as_bytes())?;
     println!(
-        "Created {}. Review its title and the Kani version used for verification.",
+        "Created {}. Review its title and the tool version used for verification.",
         project.config_path().display()
     );
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn tool_targets_and_properties() {
+        let mut tool: Tool = toml::from_str("name='kani'\nversion='0.66.0'").unwrap();
+        assert!(tool.validate().is_ok());
+        assert_eq!(tool.properties(), ["no_ub", "panic_contract"]);
+        tool.target = Some(CreusotTarget::All);
+        assert!(tool.validate().is_err());
+        tool.name = "creusot".into();
+        assert!(tool.validate().is_ok());
+        assert_eq!(tool.properties(), ["panic_contract"]);
+        tool.target = None;
+        assert!(tool.validate().is_err());
+        assert!(toml::from_str::<Tool>("name='creusot'\nversion='x'\ntarget='typo'").is_err());
+    }
 }
