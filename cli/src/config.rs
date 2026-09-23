@@ -36,15 +36,31 @@ impl Tool {
         self.name.eq_ignore_ascii_case("creusot")
     }
     pub fn properties(&self) -> &'static [&'static str] {
-        if self.is_creusot() { &["panic_contract"] } else { &["no_ub", "panic_contract"] }
+        if self.is_creusot() {
+            &["panic_contract"]
+        } else {
+            &["no_ub", "panic_contract"]
+        }
     }
     fn validate(&self) -> Result<()> {
-        ensure!(self.is_creusot() || self.name.eq_ignore_ascii_case("kani"), "Supported tools: kani, creusot");
-        ensure!(!self.version.trim().is_empty(), "[tool].version is required");
+        ensure!(
+            self.is_creusot() || self.name.eq_ignore_ascii_case("kani"),
+            "Supported tools: kani, creusot"
+        );
+        ensure!(
+            !self.version.trim().is_empty(),
+            "[tool].version is required"
+        );
         if self.is_creusot() {
-            ensure!(self.target.is_some(), "Creusot requires [tool].target = \"annotated\" or \"all\"");
+            ensure!(
+                self.target.is_some(),
+                "Creusot requires [tool].target = \"annotated\" or \"all\""
+            );
         } else {
-            ensure!(self.target.is_none(), "[tool].target applies only to Creusot; Kani uses proof_for_contract harnesses");
+            ensure!(
+                self.target.is_none(),
+                "[tool].target applies only to Creusot; Kani uses proof_for_contract harnesses"
+            );
         }
         Ok(())
     }
@@ -209,7 +225,13 @@ impl Project {
         Ok(config)
     }
 }
-pub fn init(args: &ProjectArgs, title: Option<String>, version: Option<String>, tool: String, target: Option<CreusotTarget>) -> Result<()> {
+pub fn init(
+    args: &ProjectArgs,
+    title: Option<String>,
+    version: Option<String>,
+    tool: String,
+    target: Option<CreusotTarget>,
+) -> Result<()> {
     let project = Project::load(args)?;
     let label = if tool == "creusot" { "Creusot" } else { "Kani" };
     let version = match version {
@@ -232,7 +254,10 @@ pub fn init(args: &ProjectArgs, title: Option<String>, version: Option<String>, 
     let config = Config {
         report: Report {
             title: title.unwrap_or_else(|| {
-                format!("{label} verification of {} {}", project.name, project.version)
+                format!(
+                    "{label} verification of {} {}",
+                    project.name, project.version
+                )
             }),
             ..Report::default()
         },

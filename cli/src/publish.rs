@@ -286,7 +286,14 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
     }
     ensure!(saved.pending.is_none(), "An interrupted publication is saved. Run publish --resume before starting another publication");
     let config = project.config()?;
-    project.cfg.insert(if config.tool.is_creusot() { "creusot" } else { "kani" }.into());
+    project.cfg.insert(
+        if config.tool.is_creusot() {
+            "creusot"
+        } else {
+            "kani"
+        }
+        .into(),
+    );
     repo.clean(&project.config_path())?;
     let contracts = scan::discover_for_tool(&project, &config.tool)?;
     ensure!(contracts.len() * config.tool.properties().len() <= 100, "{} contracts generate more than the service limit of 100 claims; automatic report splitting is unsupported", contracts.len());
