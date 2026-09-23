@@ -158,6 +158,11 @@ with tempfile.TemporaryDirectory() as tmp:
     script.chmod(0o755)
     env = dict(os.environ, PATH=str(wrapper) + os.pathsep + os.environ['PATH'], TEST_REAL_GIT=real_git, PROOFS_CONFIG_DIR=str(root / 'credentials'))
     env['XDG_DATA_HOME'] = str(root / 'data')
+    # Exercise aliased temporary roots on every Unix runner, including Linux.
+    # macOS normally uses /var paths whose canonical form starts /private/var.
+    (root / 'real-tmp').mkdir()
+    (root / 'alias-tmp').symlink_to(root / 'real-tmp', target_is_directory=True)
+    env['TMPDIR'] = str(root / 'alias-tmp')
     tool = wrapper / 'cargo-kani'
     tool.write_text(r"""#!/usr/bin/env python3
 import sys,re,pathlib

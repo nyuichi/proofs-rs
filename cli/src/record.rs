@@ -122,7 +122,8 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
     let root = crate::git::run(&workspace, &["rev-parse", "--show-toplevel"])
         .ok()
         .map(PathBuf::from)
-        .unwrap_or(workspace.clone());
+        .unwrap_or(workspace.clone())
+        .canonicalize()?;
     let cwd = std::env::current_dir()?.canonicalize()?;
     let relative_cwd = cwd
         .strip_prefix(&root)
@@ -147,6 +148,8 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
     let stage = tempfile::tempdir()?;
     let source = stage.path().join("source");
     fs::create_dir(&source)?;
+    // macOS temporary paths can be aliases (/var -> /private/var).
+    let source = source.canonicalize()?;
     let hashes = snapshot::capture(&root, &source, &dir.join("source.tar.gz"))?;
     ensure!(
         source.join(&relative_manifest).exists()
