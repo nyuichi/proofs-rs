@@ -1,9 +1,9 @@
 [package]
 name = "cargo-proofs"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 rust-version = "1.91"
-description = "Publish Kani or Creusot verification reports to proofs.rs"
+description = "Publish Rust verification reports to proofs.rs"
 repository = "https://github.com/nyuichi/proofs-rs"
 homepage = "https://proofs.rs"
 readme = "README.md"

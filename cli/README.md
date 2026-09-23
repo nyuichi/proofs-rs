@@ -1,14 +1,14 @@
 # cargo-proofs
 
-A Rust CLI for publishing existing Kani or Creusot verification to [proofs.rs](https://proofs.rs). For Kani, it discovers `#[kani::proof_for_contract(...)]` harnesses and publishes two claims per API: `no_ub` and `panic_contract`, both under the target's `requires` conditions.
+A Rust CLI for publishing verification reports to [proofs.rs](https://proofs.rs). For Kani, it discovers `#[kani::proof_for_contract(...)]` harnesses and publishes two claims per API: `no_ub` and `panic_contract`, both under the target's `requires` conditions.
 
 Creusot publishes only `panic_contract`, not `no_ub` or functional correctness claims.
 
-Publishing does **not** run either verifier, inspect a previous run's success, or certify correctness. It records the author's claims and links to the verification source. A contract harness may constrain inputs, concrete types, stubs, or execution in ways that are not captured by the extracted `requires`. Review the preview and describe such restrictions in the report's assumptions/limitations. No verification logs or proofs-specific source comments are required.
+Publishing does **not** run verification tools, inspect a previous run's success, or certify correctness. It records the author's claims and links to the verification source. A contract harness may constrain inputs, concrete types, stubs, or execution in ways that are not captured by the extracted `requires`. Review the preview and describe such restrictions in the report's assumptions/limitations. No verification logs or proofs-specific source comments are required.
 
 ## Install
 
-Rust 1.91 or newer, Cargo, and Git must be installed. Once the initial release is published:
+Rust 1.91 or newer, Cargo, and Git must be installed:
 
 ```sh
 cargo install cargo-proofs --locked
