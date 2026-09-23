@@ -1,0 +1,20 @@
+{
+  "rust": "nightly-2026-02-27 / rustc 1.95.0-nightly (6a979b3e3 2026-02-26)",
+  "host": "aarch64-apple-darwin",
+  "why3": "1.8.2+git",
+  "why3find": "1.3.0+dev",
+  "configured_provers": [
+    "z3 4.15.4",
+    "cvc5 1.3.1"
+  ],
+  "creusot_library_version": "0.11.0-dev",
+  "binary_sha256": {
+    "/Users/yuichi/.cargo/bin/cargo-creusot": "e258e5278bf7950048ccb014e0294752faa82b943e37e519b14b3aa2b1467d7e",
+    "/Users/yuichi/Library/Application Support/creusot.creusot/toolchains/nightly-2026-02-27/bin/creusot-rustc": "ae2527f44c5525e1c0d4f4700632c1e8cc0720d6f9d89900be0a45fe2e3ef347"
+  },
+  "upstream_archive_sha256": "7f24254aa9a54b5c858eaee2f5bccdb46aaf0e486a595ed5fd8f86ba55232a70",
+  "proof_exit_code": 0,
+  "test_exit_code": 0,
+  "fresh_source": true,
+  "note": "Proof evidence is the final all-features output, with proof sessions accumulated across the four sequential configurations. verification.log records all four successes."
+}

@@ -1,0 +1,236 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling autocfg v1.5.1
+   Compiling quote v1.0.46
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.186
+   Compiling getrandom v0.4.3
+   Compiling cfg-if v1.0.4
+   Compiling num-traits v0.2.19
+   Compiling uuid v1.24.0
+    Checking num-integer v0.1.46
+   Compiling syn v2.0.119
+    Checking num-bigint v0.4.8
+    Checking num-rational v0.4.2
+   Compiling pearlite-syn v0.11.0-dev (/private/tmp/proofsr-hex-3ecf33dd-source/creusot-libs/pearlite-syn)
+   Compiling creusot-std-proc v0.11.0-dev (/private/tmp/proofsr-hex-3ecf33dd-source/creusot-libs/creusot-std-proc)
+    Checking creusot-std v0.11.0-dev (/private/tmp/proofsr-hex-3ecf33dd-source/creusot-libs/creusot-std)
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"std"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"compiler_builtins"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"libc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"miniz_oxide"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"adler2"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"hashbrown"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"std_detect"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_demangle"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"cfg_if"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"addr2line"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"gimli"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"object"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"memchr"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"panic_unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"creusot_std_proc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_rational"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_bigint"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_integer"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_traits"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+    Checking hex v0.4.3 (/private/tmp/proofsr-hex-3ecf33dd-source/hex/0.4.3)
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"std"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"compiler_builtins"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"libc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"miniz_oxide"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"adler2"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"hashbrown"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"std_detect"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"rustc_demangle"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"cfg_if"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"addr2line"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"gimli"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"object"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"memchr"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"panic_unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"creusot_std_proc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"num_rational"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"num_bigint"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"num_integer"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:44Z WARN  creusot::metadata] could not read metadata for crate `"num_traits"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 24.94s
+Proved (21 files) ✔
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"std"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"compiler_builtins"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"libc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"miniz_oxide"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"adler2"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"hashbrown"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"std_detect"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_demangle"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"cfg_if"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"addr2line"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"gimli"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"object"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"memchr"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"panic_unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"creusot_std_proc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_rational"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_bigint"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_integer"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_traits"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+    Checking hex v0.4.3 (/private/tmp/proofsr-hex-3ecf33dd-source/hex/0.4.3)
+[2026-09-23T15:10:50Z WARN  creusot::metadata] could not read metadata for crate `"core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"std"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"compiler_builtins"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"libc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"miniz_oxide"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"adler2"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"hashbrown"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"std_detect"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"rustc_demangle"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"cfg_if"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"addr2line"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"gimli"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"object"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"memchr"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"panic_unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"creusot_std_proc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"num_rational"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"num_bigint"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"num_integer"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:51Z WARN  creusot::metadata] could not read metadata for crate `"num_traits"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.28s
+Proved (26 files) ✔
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling syn v3.0.0
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"std"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"compiler_builtins"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"libc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"miniz_oxide"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"adler2"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"hashbrown"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"std_detect"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_demangle"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"cfg_if"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"addr2line"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"gimli"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"object"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"memchr"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"panic_unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"creusot_std_proc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_rational"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_bigint"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_integer"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_traits"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+   Compiling serde_derive v1.0.229
+    Checking hex v0.4.3 (/private/tmp/proofsr-hex-3ecf33dd-source/hex/0.4.3)
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"std"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"compiler_builtins"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"libc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"miniz_oxide"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"adler2"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"hashbrown"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"std_detect"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"rustc_demangle"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"cfg_if"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"addr2line"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"gimli"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"object"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"memchr"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"panic_unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"creusot_std_proc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"num_rational"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"num_bigint"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"num_integer"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"num_traits"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"serde"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"serde_derive"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:54Z WARN  creusot::metadata] could not read metadata for crate `"serde_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 2.52s
+Warning: found dangling files and directories:
+  verif/hex_rlib/encode
+  verif/hex_rlib/decode
+  verif/hex_rlib/encode_upper
+  verif/hex_rlib/impl_FromHex_for_Vec_u8_Global
+Run 'cargo creusot clean' to remove them
+Proved (21 files) ✔
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"std"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"compiler_builtins"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"libc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"miniz_oxide"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"adler2"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"hashbrown"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"std_detect"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"rustc_demangle"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"cfg_if"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"addr2line"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"gimli"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"object"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"memchr"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"panic_unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"creusot_std_proc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_rational"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_bigint"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_integer"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:43Z WARN  creusot::metadata] could not read metadata for crate `"num_traits"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+    Checking hex v0.4.3 (/private/tmp/proofsr-hex-3ecf33dd-source/hex/0.4.3)
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"std"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"compiler_builtins"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"libc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"miniz_oxide"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"adler2"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"hashbrown"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"rustc_std_workspace_alloc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"std_detect"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"rustc_demangle"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"cfg_if"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"addr2line"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"gimli"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"object"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"memchr"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"panic_unwind"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"creusot_std_proc"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"num_rational"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"num_bigint"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"num_integer"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"num_traits"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"serde"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"serde_derive"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+[2026-09-23T15:10:55Z WARN  creusot::metadata] could not read metadata for crate `"serde_core"`: Os { code: 2, kind: NotFound, message: "No such file or directory" }
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 0.18s
+Proved (26 files) ✔

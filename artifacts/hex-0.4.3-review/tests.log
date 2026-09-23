@@ -1,0 +1,173 @@
+   Compiling proc-macro2 v1.0.106
+   Compiling quote v1.0.46
+   Compiling unicode-ident v1.0.24
+   Compiling stable_deref_trait v1.2.1
+   Compiling serde_core v1.0.229
+   Compiling serde v1.0.229
+   Compiling writeable v0.6.3
+   Compiling litemap v0.8.2
+   Compiling utf8_iter v1.0.4
+   Compiling icu_normalizer_data v2.2.0
+   Compiling memchr v2.8.3
+   Compiling crossbeam-utils v0.8.22
+   Compiling icu_properties_data v2.2.0
+   Compiling crossbeam-epoch v0.9.20
+   Compiling crossbeam-deque v0.8.7
+   Compiling smallvec v1.15.2
+   Compiling autocfg v1.5.1
+   Compiling zmij v1.0.23
+   Compiling num-traits v0.2.19
+   Compiling syn v2.0.119
+   Compiling syn v3.0.0
+   Compiling regex-syntax v0.8.11
+   Compiling itoa v1.0.18
+   Compiling either v1.16.0
+   Compiling rayon-core v1.13.0
+   Compiling libc v0.2.186
+   Compiling serde_json v1.0.150
+   Compiling equivalent v1.0.2
+   Compiling hashbrown v0.17.1
+   Compiling indexmap v2.14.0
+   Compiling regex-automata v0.4.16
+   Compiling plotters-backend v0.3.7
+   Compiling serde_derive v1.0.229
+   Compiling winnow v0.5.40
+   Compiling unicode-width v0.1.14
+   Compiling percent-encoding v2.3.2
+   Compiling pulldown-cmark v0.9.6
+   Compiling form_urlencoded v1.2.2
+   Compiling textwrap v0.11.0
+   Compiling synstructure v0.13.2
+   Compiling plotters-svg v0.3.7
+   Compiling regex v1.13.1
+   Compiling itertools v0.10.5
+   Compiling csv-core v0.1.13
+   Compiling ryu v1.0.23
+   Compiling half v1.8.3
+   Compiling cast v0.3.0
+   Compiling unicase v2.9.0
+   Compiling bitflags v1.3.2
+   Compiling bitflags v2.13.1
+   Compiling same-file v1.0.6
+   Compiling clap v2.34.0
+   Compiling walkdir v2.5.0
+   Compiling csv v1.4.0
+   Compiling atty v0.2.14
+   Compiling rayon v1.12.0
+   Compiling plotters v0.3.7
+   Compiling criterion-plot v0.4.5
+   Compiling difference v2.0.0
+   Compiling oorandom v11.1.5
+   Compiling semver v1.0.28
+   Compiling ansi_term v0.11.0
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling zerovec-derive v0.11.3
+   Compiling displaydoc v0.2.6
+   Compiling creusot-std-proc v0.11.0-dev (/private/tmp/proofsr-hex-3ecf33dd-source/creusot-libs/creusot-std-proc)
+   Compiling serde_spanned v0.6.9
+   Compiling toml_datetime v0.6.11
+   Compiling serde_cbor v0.11.2
+   Compiling toml_edit v0.19.15
+   Compiling creusot-std v0.11.0-dev (/private/tmp/proofsr-hex-3ecf33dd-source/creusot-libs/creusot-std)
+   Compiling tinytemplate v1.2.1
+   Compiling lazy_static v1.5.0
+   Compiling pretty_assertions v0.6.1
+   Compiling faster-hex v0.5.0
+   Compiling zerofrom v0.1.8
+   Compiling rustc-hex v2.1.0
+   Compiling criterion v0.3.6
+   Compiling yoke v0.8.3
+   Compiling hex v0.4.3 (/private/tmp/proofsr-hex-3ecf33dd-source/hex/0.4.3)
+warning: `auto` traits are unstable
+   --> /private/tmp/proofsr-hex-3ecf33dd-source/creusot-libs/creusot-std/src/ghost.rs:260:5
+    |
+260 | pub auto trait Objective {}
+    |     ^^^^
+    |
+    = note: see issue #13231 <https://github.com/rust-lang/rust/issues/13231> for more information
+    = help: add `#![feature(auto_traits)]` to the crate attributes to enable
+    = note: this compiler was built on 2026-02-26; consider upgrading it if it is out of date
+    = warning: unstable syntax can change at any point in the future, causing a hard error!
+    = note: for more information, see issue #65860 <https://github.com/rust-lang/rust/issues/65860>
+
+warning: `creusot-std` (lib) generated 1 warning
+   Compiling toml v0.7.8
+   Compiling zerovec v0.11.6
+   Compiling zerotrie v0.2.4
+   Compiling tinystr v0.8.3
+   Compiling potential_utf v0.1.5
+   Compiling icu_collections v2.2.0
+   Compiling icu_locale_core v2.2.0
+   Compiling icu_provider v2.2.0
+   Compiling icu_normalizer v2.2.0
+   Compiling icu_properties v2.2.0
+   Compiling idna_adapter v1.2.2
+   Compiling idna v1.1.0
+   Compiling url v2.5.8
+   Compiling version-sync v0.9.5
+warning: lint `non_fmt_panic` has been renamed to `non_fmt_panics`
+ --> tests/version-number.rs:1:10
+  |
+1 | #![allow(non_fmt_panic)]
+  |          ^^^^^^^^^^^^^ help: use the new name: `non_fmt_panics`
+  |
+  = note: `#[warn(renamed_and_removed_lints)]` on by default
+
+warning: `hex` (test "version-number") generated 1 warning (run `cargo fix --test "version-number" -p hex` to apply 1 suggestion)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 12.23s
+     Running unittests src/lib.rs (target/debug/deps/hex-732bdd67082743e4)
+
+running 14 tests
+test test::test_decode ... ok
+test error::tests::test_display ... ok
+test test::test_encode_to_slice ... ok
+test test::test_from_hex_array ... ok
+test test::test_empty ... ok
+test test::test_decode_to_slice ... ok
+test test::test_from_hex_okay_bytes ... ok
+test test::test_encode ... ok
+test test::test_from_hex_okay_str ... ok
+test test::test_from_hex_whitespace ... ok
+test test::test_gen_iter ... ok
+test test::test_invalid_char ... ok
+test test::test_invalid_length ... ok
+test test::test_to_hex ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/serde.rs (target/debug/deps/serde-af8a4b449b54921c)
+
+running 4 tests
+test deserialize_upper ... ok
+test deserialize ... ok
+test serialize ... ok
+test serialize_upper ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/version-number.rs (target/debug/deps/version_number-fb9ef3f0e88771e9)
+
+running 2 tests
+test test_readme_deps ... ok
+test test_html_root_url ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+   Doc-tests hex
+
+running 11 tests
+test src/lib.rs - encode_upper (line 695) ... ok
+test src/lib.rs - (line 17) ... ok
+test src/lib.rs - encode_slice_impl (line 814) ... ok
+test src/lib.rs - decode_slice_impl (line 735) ... ok
+test src/lib.rs - ToHex (line 296) ... ok
+test src/lib.rs - decode (line 713) ... ok
+test src/lib.rs - encode (line 678) ... ok
+test src/lib.rs - FromHex (line 458) ... ok
+test src/serde.rs - serde (line 6) ... ok
+test src/serde.rs - serde::Error (line 6) ... ok
+test src/serde.rs - serde::Visitor (line 6) ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.35s
+

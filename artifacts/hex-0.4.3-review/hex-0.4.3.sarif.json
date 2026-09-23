@@ -1,0 +1,614 @@
+{
+  "version": "2.1.0",
+  "$schema": "https://json.schemastore.org/sarif-2.1.0.json",
+  "runs": [
+    {
+      "automationDetails": {
+        "id": "hex-0.4.3/no-default-features"
+      },
+      "tool": {
+        "driver": {
+          "name": "Creusot",
+          "rules": [
+            {
+              "id": "hex.slice-encoding",
+              "shortDescription": {
+                "text": "Exact lowercase slice encoding"
+              },
+              "fullDescription": {
+                "text": "The annotated encode_slice_impl body and encode_to_slice wrapper establish exact lowercase output and unchanged output on length error, conditional on the trusted AsRef bridge."
+              }
+            },
+            {
+              "id": "hex.slice-decoding",
+              "shortDescription": {
+                "text": "Exact mixed-case slice decoding"
+              },
+              "fullDescription": {
+                "text": "The annotated decode_slice_impl body and decode_to_slice wrapper establish exact decoding and error precedence, conditional on the trusted AsRef bridge."
+              }
+            },
+            {
+              "id": "hex.decode-error-footprint",
+              "shortDescription": {
+                "text": "Precise decoding failure footprint"
+              },
+              "fullDescription": {
+                "text": "The first invalid character and index are reported; complete preceding pairs are decoded and the remaining output suffix is unchanged. Length errors leave the entire output unchanged."
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "exitCode": 0,
+          "commandLine": "cargo creusot prove -- --no-default-features"
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "hex.slice-encoding",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The annotated encode_slice_impl body and encode_to_slice wrapper establish exact lowercase output and unchanged output on length error, conditional on the trusted AsRef bridge."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::encode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 856
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        },
+        {
+          "ruleId": "hex.slice-decoding",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The annotated decode_slice_impl body and decode_to_slice wrapper establish exact decoding and error precedence, conditional on the trusted AsRef bridge."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::decode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 791
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        },
+        {
+          "ruleId": "hex.decode-error-footprint",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The first invalid character and index are reported; complete preceding pairs are decoded and the remaining output suffix is unchanged. Length errors leave the entire output unchanged."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::decode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 791
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        }
+      ],
+      "properties": {
+        "configuration": "--no-default-features",
+        "proved_files": 21,
+        "verification_commit": "3ecf33ddab79f30b840c4e3fe108b75101f92a36",
+        "report_origin": "Manually curated SARIF from successful fresh-source integrated runs and source contract review; not native Creusot SARIF output.",
+        "trusted_boundary": "Generic AsRef<[u8]> bridge and Creusot library specifications. No claim that all crate implementations are proved.",
+        "warnings": "Creusot emitted missing-metadata warnings for dependencies; integrated proofs completed successfully.",
+        "limitations": [
+          "The claim covers the annotated encode_to_slice and decode_to_slice implementation and wrappers at the pinned verification commit. The upstream slice loops have been rewritten; equivalence to the unmodified crates.io implementation is not itself mechanically proved.",
+          "Public generic inputs rely on the trusted AsRef<[u8]> byte-sequence bridge. Creusot library specifications, the verifier, Why3 and SMT solvers are part of the trusted computing base.",
+          "The generic iterator-based encoding behind encode/encode_upper/ToHex, serde protocols, formatting and arbitrary downstream trait implementations are outside this publication claim. Four passing feature configurations do not prove all feature implementations.",
+          "The retained proof archive contains the final all-features output and sessions accumulated across four sequential runs, not four independently archived proof trees. File counts are not proof-obligation counts.",
+          "The run emitted missing dependency-metadata warnings. All four proof commands reported success; this evidence does not establish the bodies of the missing dependencies.",
+          "SARIF is a curated summary of source contracts and execution logs, not native Creusot output or an independently checked proof certificate. Tests are supplementary evidence, not a proof of equivalence."
+        ],
+        "scope": "Annotated hex 0.4.3 encode_to_slice/decode_to_slice bodies and wrappers only; conditional on the trusted AsRef bridge and Creusot library specifications. Upstream equivalence, generic iterator encoding, serde and formatting are not established."
+      }
+    },
+    {
+      "automationDetails": {
+        "id": "hex-0.4.3/alloc"
+      },
+      "tool": {
+        "driver": {
+          "name": "Creusot",
+          "rules": [
+            {
+              "id": "hex.slice-encoding",
+              "shortDescription": {
+                "text": "Exact lowercase slice encoding"
+              },
+              "fullDescription": {
+                "text": "The annotated encode_slice_impl body and encode_to_slice wrapper establish exact lowercase output and unchanged output on length error, conditional on the trusted AsRef bridge."
+              }
+            },
+            {
+              "id": "hex.slice-decoding",
+              "shortDescription": {
+                "text": "Exact mixed-case slice decoding"
+              },
+              "fullDescription": {
+                "text": "The annotated decode_slice_impl body and decode_to_slice wrapper establish exact decoding and error precedence, conditional on the trusted AsRef bridge."
+              }
+            },
+            {
+              "id": "hex.decode-error-footprint",
+              "shortDescription": {
+                "text": "Precise decoding failure footprint"
+              },
+              "fullDescription": {
+                "text": "The first invalid character and index are reported; complete preceding pairs are decoded and the remaining output suffix is unchanged. Length errors leave the entire output unchanged."
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "exitCode": 0,
+          "commandLine": "cargo creusot prove -- --no-default-features --features alloc"
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "hex.slice-encoding",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The annotated encode_slice_impl body and encode_to_slice wrapper establish exact lowercase output and unchanged output on length error, conditional on the trusted AsRef bridge."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::encode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 856
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        },
+        {
+          "ruleId": "hex.slice-decoding",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The annotated decode_slice_impl body and decode_to_slice wrapper establish exact decoding and error precedence, conditional on the trusted AsRef bridge."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::decode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 791
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        },
+        {
+          "ruleId": "hex.decode-error-footprint",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The first invalid character and index are reported; complete preceding pairs are decoded and the remaining output suffix is unchanged. Length errors leave the entire output unchanged."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::decode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 791
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        }
+      ],
+      "properties": {
+        "configuration": "--no-default-features --features alloc",
+        "proved_files": 26,
+        "verification_commit": "3ecf33ddab79f30b840c4e3fe108b75101f92a36",
+        "report_origin": "Manually curated SARIF from successful fresh-source integrated runs and source contract review; not native Creusot SARIF output.",
+        "trusted_boundary": "Generic AsRef<[u8]> bridge and Creusot library specifications. No claim that all crate implementations are proved.",
+        "warnings": "Creusot emitted missing-metadata warnings for dependencies; integrated proofs completed successfully.",
+        "limitations": [
+          "The claim covers the annotated encode_to_slice and decode_to_slice implementation and wrappers at the pinned verification commit. The upstream slice loops have been rewritten; equivalence to the unmodified crates.io implementation is not itself mechanically proved.",
+          "Public generic inputs rely on the trusted AsRef<[u8]> byte-sequence bridge. Creusot library specifications, the verifier, Why3 and SMT solvers are part of the trusted computing base.",
+          "The generic iterator-based encoding behind encode/encode_upper/ToHex, serde protocols, formatting and arbitrary downstream trait implementations are outside this publication claim. Four passing feature configurations do not prove all feature implementations.",
+          "The retained proof archive contains the final all-features output and sessions accumulated across four sequential runs, not four independently archived proof trees. File counts are not proof-obligation counts.",
+          "The run emitted missing dependency-metadata warnings. All four proof commands reported success; this evidence does not establish the bodies of the missing dependencies.",
+          "SARIF is a curated summary of source contracts and execution logs, not native Creusot output or an independently checked proof certificate. Tests are supplementary evidence, not a proof of equivalence."
+        ],
+        "scope": "Annotated hex 0.4.3 encode_to_slice/decode_to_slice bodies and wrappers only; conditional on the trusted AsRef bridge and Creusot library specifications. Upstream equivalence, generic iterator encoding, serde and formatting are not established."
+      }
+    },
+    {
+      "automationDetails": {
+        "id": "hex-0.4.3/serde"
+      },
+      "tool": {
+        "driver": {
+          "name": "Creusot",
+          "rules": [
+            {
+              "id": "hex.slice-encoding",
+              "shortDescription": {
+                "text": "Exact lowercase slice encoding"
+              },
+              "fullDescription": {
+                "text": "The annotated encode_slice_impl body and encode_to_slice wrapper establish exact lowercase output and unchanged output on length error, conditional on the trusted AsRef bridge."
+              }
+            },
+            {
+              "id": "hex.slice-decoding",
+              "shortDescription": {
+                "text": "Exact mixed-case slice decoding"
+              },
+              "fullDescription": {
+                "text": "The annotated decode_slice_impl body and decode_to_slice wrapper establish exact decoding and error precedence, conditional on the trusted AsRef bridge."
+              }
+            },
+            {
+              "id": "hex.decode-error-footprint",
+              "shortDescription": {
+                "text": "Precise decoding failure footprint"
+              },
+              "fullDescription": {
+                "text": "The first invalid character and index are reported; complete preceding pairs are decoded and the remaining output suffix is unchanged. Length errors leave the entire output unchanged."
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "exitCode": 0,
+          "commandLine": "cargo creusot prove -- --no-default-features --features serde"
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "hex.slice-encoding",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The annotated encode_slice_impl body and encode_to_slice wrapper establish exact lowercase output and unchanged output on length error, conditional on the trusted AsRef bridge."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::encode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 856
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        },
+        {
+          "ruleId": "hex.slice-decoding",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The annotated decode_slice_impl body and decode_to_slice wrapper establish exact decoding and error precedence, conditional on the trusted AsRef bridge."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::decode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 791
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        },
+        {
+          "ruleId": "hex.decode-error-footprint",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The first invalid character and index are reported; complete preceding pairs are decoded and the remaining output suffix is unchanged. Length errors leave the entire output unchanged."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::decode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 791
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        }
+      ],
+      "properties": {
+        "configuration": "--no-default-features --features serde",
+        "proved_files": 21,
+        "verification_commit": "3ecf33ddab79f30b840c4e3fe108b75101f92a36",
+        "report_origin": "Manually curated SARIF from successful fresh-source integrated runs and source contract review; not native Creusot SARIF output.",
+        "trusted_boundary": "Generic AsRef<[u8]> bridge and Creusot library specifications. No claim that all crate implementations are proved.",
+        "warnings": "Creusot emitted missing-metadata warnings for dependencies; integrated proofs completed successfully.",
+        "limitations": [
+          "The claim covers the annotated encode_to_slice and decode_to_slice implementation and wrappers at the pinned verification commit. The upstream slice loops have been rewritten; equivalence to the unmodified crates.io implementation is not itself mechanically proved.",
+          "Public generic inputs rely on the trusted AsRef<[u8]> byte-sequence bridge. Creusot library specifications, the verifier, Why3 and SMT solvers are part of the trusted computing base.",
+          "The generic iterator-based encoding behind encode/encode_upper/ToHex, serde protocols, formatting and arbitrary downstream trait implementations are outside this publication claim. Four passing feature configurations do not prove all feature implementations.",
+          "The retained proof archive contains the final all-features output and sessions accumulated across four sequential runs, not four independently archived proof trees. File counts are not proof-obligation counts.",
+          "The run emitted missing dependency-metadata warnings. All four proof commands reported success; this evidence does not establish the bodies of the missing dependencies.",
+          "SARIF is a curated summary of source contracts and execution logs, not native Creusot output or an independently checked proof certificate. Tests are supplementary evidence, not a proof of equivalence."
+        ],
+        "scope": "Annotated hex 0.4.3 encode_to_slice/decode_to_slice bodies and wrappers only; conditional on the trusted AsRef bridge and Creusot library specifications. Upstream equivalence, generic iterator encoding, serde and formatting are not established."
+      }
+    },
+    {
+      "automationDetails": {
+        "id": "hex-0.4.3/all-features"
+      },
+      "tool": {
+        "driver": {
+          "name": "Creusot",
+          "rules": [
+            {
+              "id": "hex.slice-encoding",
+              "shortDescription": {
+                "text": "Exact lowercase slice encoding"
+              },
+              "fullDescription": {
+                "text": "The annotated encode_slice_impl body and encode_to_slice wrapper establish exact lowercase output and unchanged output on length error, conditional on the trusted AsRef bridge."
+              }
+            },
+            {
+              "id": "hex.slice-decoding",
+              "shortDescription": {
+                "text": "Exact mixed-case slice decoding"
+              },
+              "fullDescription": {
+                "text": "The annotated decode_slice_impl body and decode_to_slice wrapper establish exact decoding and error precedence, conditional on the trusted AsRef bridge."
+              }
+            },
+            {
+              "id": "hex.decode-error-footprint",
+              "shortDescription": {
+                "text": "Precise decoding failure footprint"
+              },
+              "fullDescription": {
+                "text": "The first invalid character and index are reported; complete preceding pairs are decoded and the remaining output suffix is unchanged. Length errors leave the entire output unchanged."
+              }
+            }
+          ]
+        }
+      },
+      "invocations": [
+        {
+          "executionSuccessful": true,
+          "exitCode": 0,
+          "commandLine": "cargo creusot prove -- --all-features"
+        }
+      ],
+      "results": [
+        {
+          "ruleId": "hex.slice-encoding",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The annotated encode_slice_impl body and encode_to_slice wrapper establish exact lowercase output and unchanged output on length error, conditional on the trusted AsRef bridge."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::encode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 856
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        },
+        {
+          "ruleId": "hex.slice-decoding",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The annotated decode_slice_impl body and decode_to_slice wrapper establish exact decoding and error precedence, conditional on the trusted AsRef bridge."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::decode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 791
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        },
+        {
+          "ruleId": "hex.decode-error-footprint",
+          "kind": "pass",
+          "level": "note",
+          "message": {
+            "text": "The first invalid character and index are reported; complete preceding pairs are decoded and the remaining output suffix is unchanged. Length errors leave the entire output unchanged."
+          },
+          "locations": [
+            {
+              "logicalLocations": [
+                {
+                  "fullyQualifiedName": "hex::decode_to_slice",
+                  "kind": "function"
+                }
+              ],
+              "physicalLocation": {
+                "artifactLocation": {
+                  "uri": "src/lib.rs"
+                },
+                "region": {
+                  "startLine": 791
+                }
+              }
+            }
+          ],
+          "properties": {
+            "claim_scope": "annotated verification source; conditional on documented trusted boundaries"
+          }
+        }
+      ],
+      "properties": {
+        "configuration": "--all-features",
+        "proved_files": 26,
+        "verification_commit": "3ecf33ddab79f30b840c4e3fe108b75101f92a36",
+        "report_origin": "Manually curated SARIF from successful fresh-source integrated runs and source contract review; not native Creusot SARIF output.",
+        "trusted_boundary": "Generic AsRef<[u8]> bridge and Creusot library specifications. No claim that all crate implementations are proved.",
+        "warnings": "Creusot emitted missing-metadata warnings for dependencies; integrated proofs completed successfully.",
+        "limitations": [
+          "The claim covers the annotated encode_to_slice and decode_to_slice implementation and wrappers at the pinned verification commit. The upstream slice loops have been rewritten; equivalence to the unmodified crates.io implementation is not itself mechanically proved.",
+          "Public generic inputs rely on the trusted AsRef<[u8]> byte-sequence bridge. Creusot library specifications, the verifier, Why3 and SMT solvers are part of the trusted computing base.",
+          "The generic iterator-based encoding behind encode/encode_upper/ToHex, serde protocols, formatting and arbitrary downstream trait implementations are outside this publication claim. Four passing feature configurations do not prove all feature implementations.",
+          "The retained proof archive contains the final all-features output and sessions accumulated across four sequential runs, not four independently archived proof trees. File counts are not proof-obligation counts.",
+          "The run emitted missing dependency-metadata warnings. All four proof commands reported success; this evidence does not establish the bodies of the missing dependencies.",
+          "SARIF is a curated summary of source contracts and execution logs, not native Creusot output or an independently checked proof certificate. Tests are supplementary evidence, not a proof of equivalence."
+        ],
+        "scope": "Annotated hex 0.4.3 encode_to_slice/decode_to_slice bodies and wrappers only; conditional on the trusted AsRef bridge and Creusot library specifications. Upstream equivalence, generic iterator encoding, serde and formatting are not established."
+      }
+    }
+  ]
+}
