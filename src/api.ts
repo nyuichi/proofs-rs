@@ -29,7 +29,9 @@ import {
   verifyToken,
   listing,
 } from "./core";
+import { runs, validateReportRuns } from "./runs";
 const api = new Hono<App>();
+api.route("/runs", runs);
 const visible = (db: D1Database, id: number) =>
   one(db, "SELECT * FROM reports WHERE id=? AND visibility=?", id, "public");
 async function report(c: Ctx) {
@@ -300,6 +302,14 @@ async function reportDetail(c: Ctx, revision?: number) {
   const mine = new Set(myStars.map((x) => x.claim_id));
   return c.json({
     ...r,
+    run_ids: (
+      await rows(
+        c.env.DB,
+        "SELECT run_id FROM report_runs WHERE report_id=? AND revision_no=? ORDER BY position",
+        p.id,
+        r.revision_no,
+      )
+    ).map((x) => x.run_id),
     my_star: !!(await one(
       c.env.DB,
       "SELECT 1 FROM report_stars WHERE report_id=? AND user_id=?",
@@ -446,6 +456,7 @@ async function validate(c: Ctx, b: any, existing?: any) {
     retained: v.claims.filter((x: any) => !!x.id).map((x: any) => x.id),
     removed: previous.filter((x) => !ids.has(x.id)).map((x) => x.id),
   };
+  await validateReportRuns(c, b, v);
   return v;
 }
 function revisionStatements(
@@ -504,6 +515,18 @@ function revisionStatements(
       ),
     );
   });
+  v.run_ids.forEach((run: string, position: number) =>
+    ss.push(
+      stmt(
+        db,
+        `INSERT INTO report_runs VALUES(${select},?,?,?)`,
+        reportID,
+        n,
+        run,
+        position,
+      ),
+    ),
+  );
   return ss;
 }
 api.post("/reports/validate", async (c) => {

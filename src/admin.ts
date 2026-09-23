@@ -170,6 +170,12 @@ admin.post("/action", async (c) => {
           target,
           Number(b.revision_no),
         ),
+        stmt(
+          db,
+          "DELETE FROM report_runs WHERE report_id=? AND revision_no=?",
+          target,
+          Number(b.revision_no),
+        ),
         stmt(db, "DELETE FROM maintenance"),
       );
       break;

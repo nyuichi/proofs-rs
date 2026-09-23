@@ -51,7 +51,7 @@ function database() {
     } as unknown as D1Database,
   };
 }
-async function fixture(seedTools = true) {
+export async function fixture(seedTools = true) {
   const { db, binding } = database();
   if (seedTools)
     db.exec(
@@ -79,6 +79,26 @@ async function fixture(seedTools = true) {
   db.exec(
     `INSERT INTO crates(id,name) VALUES(1,'sample');INSERT INTO releases VALUES(1,1,'1.0.0','checksum',0,'${time}');INSERT INTO doc_snapshots VALUES(1,'test','{}',61,NULL,'https://docs.rs','hash','key','${time}');INSERT INTO api_items VALUES('safe',1,'sample::safe','sample::safe','function',0,'pub fn safe()','https://docs.rs');INSERT INTO api_items VALUES('unsafe',1,'sample::unsafe','sample::unsafe','function',1,'pub unsafe fn unsafe()','https://docs.rs');`,
   );
+  if (seedTools) {
+    db.prepare("INSERT INTO verification_runs VALUES(?,?,?,?,?,?,?)").run(
+      "11111111-1111-4111-8111-111111111111",
+      "alice",
+      "sample",
+      "1.0.0",
+      "kani-0.68.0",
+      JSON.stringify({
+        artifacts: { source: "source-hash" },
+        contracts: [
+          {
+            api_paths: ["sample::safe"],
+            precondition: "",
+            properties: ["no_ub"],
+          },
+        ],
+      }),
+      time,
+    );
+  }
   const env = {
     DB: binding,
     ENVIRONMENT: "staging",
@@ -115,7 +135,8 @@ async function fixture(seedTools = true) {
   }
   return { db, env, request };
 }
-const reportInput = {
+export const reportInput = {
+  run_ids: ["11111111-1111-4111-8111-111111111111"],
   crate: "sample",
   version: "1.0.0",
   title: "A verification report",
@@ -136,6 +157,180 @@ const reportInput = {
     },
   ],
 };
+
+test("recorded runs: immutable artifacts, ownership, publication gating and visibility", async () => {
+  const { db, env, request } = await fixture();
+  const objects = new Map<string, Uint8Array>();
+  env.ARCHIVE = {
+    put: async (k: string, b: ArrayBuffer) => {
+      objects.set(k, new Uint8Array(b));
+    },
+    get: async (k: string) => {
+      const b = objects.get(k);
+      return b
+        ? {
+            json: async () => JSON.parse(new TextDecoder().decode(b)),
+            body: new Response(new Uint8Array(b)).body,
+          }
+        : null;
+    },
+  } as any;
+  const rid = "22222222-2222-4222-8222-222222222222";
+  const sarif = {
+    version: "2.1.0",
+    runs: [
+      {
+        tool: { driver: { name: "Kani", version: "0.68.0" } },
+        invocations: [
+          { arguments: ["kani"], executionSuccessful: true, exitCode: 0 },
+        ],
+        results: [
+          {
+            kind: "pass",
+            message: { text: "bounds" },
+            properties: { harness: "sample::check_safe" },
+          },
+        ],
+      },
+    ],
+  };
+  const upload = async (kind: string, bytes: Uint8Array, user = "alice") => {
+    const r = await app.request(
+      `https://example.test/api/v1/runs/${rid}/artifacts/${kind}`,
+      {
+        method: "POST",
+        headers: {
+          Origin: env.APP_ORIGIN,
+          Cookie: "__Host-proofsr_session=" + user,
+          "X-CSRF-Token": "csrf",
+          "Content-Type": "application/octet-stream",
+        },
+        body: new Uint8Array(bytes),
+      },
+      env,
+    );
+    return { status: r.status, body: (await r.json()) as any };
+  };
+  const artifacts: Record<string, string> = {};
+  for (const [kind, bytes] of [
+    ["source", new Uint8Array([31, 139, 8, 0])],
+    ["sarif", new TextEncoder().encode(JSON.stringify(sarif))],
+    ["logs", new TextEncoder().encode("SUCCESS")],
+  ] as const) {
+    const r = await upload(kind, bytes);
+    assert.equal(r.status, 201, JSON.stringify(r));
+    artifacts[kind] = r.body.sha256;
+    assert.equal((await upload(kind, bytes)).status, 200);
+  }
+  assert.equal(
+    (await upload("logs", new TextEncoder().encode("changed"))).status,
+    409,
+  );
+  assert.equal(
+    (await upload("logs", new TextEncoder().encode("SUCCESS"), "bob")).status,
+    409,
+  );
+  const metadata = {
+    crate: "sample",
+    version: "1.0.0",
+    tool_version_id: "kani-0.68.0",
+    command: ["cargo", "kani"],
+    working_directory: ".",
+    started_at: "2026-09-23T00:00:00Z",
+    finished_at: "2026-09-23T00:00:01Z",
+    duration_ms: 1000,
+    exit_code: 0,
+    execution_successful: true,
+    artifacts,
+    contracts: [
+      {
+        harness: "sample::check_safe",
+        api_paths: ["sample::safe"],
+        properties: ["no_ub"],
+        precondition: "",
+        file: "src/lib.rs",
+        first_line: 1,
+        last_line: 2,
+      },
+    ],
+  };
+  assert.equal(
+    (
+      await request("/runs/" + rid, "POST", {
+        ...metadata,
+        working_directory: "../escape",
+      })
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request("/runs/" + rid, "POST", {
+        ...metadata,
+        contracts: [{ ...metadata.contracts[0], harness: "unexecuted" }],
+      })
+    ).status,
+    400,
+  );
+  assert.equal((await request("/runs/" + rid, "POST", metadata)).status, 201);
+  assert.equal((await request("/runs/" + rid, "POST", metadata)).status, 200);
+  assert.equal(
+    (await request("/runs/" + rid, "GET", undefined, "bob")).status,
+    404,
+  );
+  assert.equal(
+    (await request("/reports", "POST", { ...reportInput, run_ids: [] })).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request(
+        "/reports",
+        "POST",
+        { ...reportInput, run_ids: [rid] },
+        "bob",
+      )
+    ).status,
+    400,
+  );
+  assert.equal(
+    (
+      await request("/reports", "POST", {
+        ...reportInput,
+        run_ids: [rid],
+        claims: [{ ...reportInput.claims[0], precondition: "unrecorded" }],
+      })
+    ).status,
+    400,
+  );
+  const made = await request("/reports", "POST", {
+    ...reportInput,
+    run_ids: [rid],
+  });
+  assert.equal(made.status, 201, JSON.stringify(made));
+  assert.deepEqual((await request("/reports/" + made.body.id)).body.run_ids, [
+    rid,
+  ]);
+  assert.equal(
+    (await request("/runs/" + rid, "GET", undefined, "")).status,
+    200,
+  );
+  const downloaded = await app.request(
+    "https://example.test/api/v1/runs/" + rid + "/logs",
+    {},
+    env,
+  );
+  assert.equal(downloaded.status, 200);
+  assert.equal(await downloaded.text(), "SUCCESS");
+  assert.match(downloaded.headers.get("Content-Disposition")!, /attachment/);
+  db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(
+    made.body.id,
+  );
+  assert.equal(
+    (await request("/runs/" + rid, "GET", undefined, "bob")).status,
+    404,
+  );
+});
 test("atomic reports, stable claims, immutable targets, revision conflicts and permanent stars", async () => {
   const { request, db } = await fixture();
   let v = await request("/reports/validate", "POST", reportInput);
@@ -844,10 +1039,17 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     new URL("../web/legal.ts", import.meta.url),
     "utf8",
   ).replace("export const legal", "const legal");
-  const main = readFileSync(
-    new URL("../web/main.ts", import.meta.url),
-    "utf8",
-  ).replace(/import \{ legal \} from "\.\/legal";/, "");
+  const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
+    .replace(/import \{ legal \} from "\.\/legal";/, "")
+    .replace(
+      /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
+      "const {reproduceSection,bindReproduce}=(()=>{" +
+        readFileSync(
+          new URL("../web/reproduce.ts", import.meta.url),
+          "utf8",
+        ).replaceAll("export function", "function") +
+        ";return {reproduceSection,bindReproduce};})();",
+    );
   w.eval(
     transpileModule(legal + "\n" + main, {
       compilerOptions: { module: ModuleKind.None, target: ScriptTarget.ES2022 },
@@ -1279,10 +1481,17 @@ test("static page content renders before requests, remains usable, and survives 
     new URL("../web/legal.ts", import.meta.url),
     "utf8",
   ).replace("export const legal", "const legal");
-  const main = readFileSync(
-    new URL("../web/main.ts", import.meta.url),
-    "utf8",
-  ).replace(/import \{ legal \} from "\.\/legal";/, "");
+  const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
+    .replace(/import \{ legal \} from "\.\/legal";/, "")
+    .replace(
+      /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
+      "const {reproduceSection,bindReproduce}=(()=>{" +
+        readFileSync(
+          new URL("../web/reproduce.ts", import.meta.url),
+          "utf8",
+        ).replaceAll("export function", "function") +
+        ";return {reproduceSection,bindReproduce};})();",
+    );
   try {
     w.eval(
       transpileModule(legal + "\n" + main, {

@@ -2,7 +2,9 @@ mod api;
 mod config;
 mod git;
 mod publish;
+mod record;
 mod scan;
+mod snapshot;
 mod state;
 
 use anyhow::Result;
@@ -70,24 +72,34 @@ enum Commands {
     },
     /// Revoke and remove this server's saved token.
     Logout,
-    /// Detect contracts, check Git, and publish one complete report.
+    /// Verify a frozen source snapshot and record results for publication.
+    Run {
+        #[command(flatten)]
+        project: ProjectArgs,
+        #[arg(last=true, required=true, num_args=2..)]
+        command: Vec<String>,
+    },
+    /// Publish a recorded verification run and its source snapshot.
     Publish {
         #[command(flatten)]
         project: ProjectArgs,
-        /// Validate and preview without publishing; may prepare the API catalogue.
+        /// Preview recorded evidence without uploading; may prepare the API catalogue.
         #[arg(long)]
         dry_run: bool,
+        /// Select a recorded run (defaults to the latest run).
+        #[arg(long)]
+        run: Option<String>,
         /// Attach to an existing report (e.g. from another machine).
         #[arg(long)]
         report: Option<u64>,
         /// Overwrite conflicting web edits after displaying the differences.
         #[arg(long)]
         force: bool,
-        /// Explicitly approve removal of claims; does not bypass conflicts or Git checks.
+        /// Explicitly approve removal of claims; does not bypass conflicts or recorded-run checks.
         #[arg(long)]
         yes: bool,
         /// Retry an interrupted publication using its exact saved request.
-        #[arg(long, conflicts_with_all = ["dry_run", "report", "force", "yes"])]
+        #[arg(long, conflicts_with_all = ["dry_run", "run", "report", "force", "yes"])]
         resume: bool,
     },
 }
@@ -108,9 +120,11 @@ fn run() -> Result<()> {
         } => config::init(&project, title, tool_version, tool, tool_target),
         Commands::Login { no_browser } => api::login(&server, no_browser),
         Commands::Logout => api::logout(&server),
+        Commands::Run { project, command } => record::run(&project, command),
         Commands::Publish {
             project,
             dry_run,
+            run,
             report,
             force,
             yes,
@@ -120,6 +134,7 @@ fn run() -> Result<()> {
             &project,
             publish::Options {
                 dry_run,
+                run,
                 report,
                 force,
                 yes,

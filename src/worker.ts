@@ -24,12 +24,15 @@ app.use("*", async (c, next) => {
   if (c.req.path.startsWith("/api/") || c.req.path.startsWith("/auth/"))
     c.header("Cache-Control", "no-store");
 });
-app.use(
-  "*",
+app.use("*", async (c, next) =>
   bodyLimit({
-    maxSize: 131072,
+    maxSize: /^\/api\/v1\/runs\/[^/]+\/artifacts\/(source|sarif|logs)$/.test(
+      c.req.path,
+    )
+      ? 32 * 1024 * 1024
+      : 131072,
     onError: (c) => c.json({ error: "payload_too_large" }, 413),
-  }),
+  })(c, next),
 );
 app.use("/api/*", async (c, next) => {
   await authenticate(c);
@@ -48,7 +51,7 @@ app.use("*", async (c, next) => {
       c.req.method === "GET" &&
       (path === "/api/v1/me" ||
         path === "/api/v1/me/reports" ||
-        /^\/api\/v1\/(crates|apis|claims|reports|tools|resolve-api|imports|health|config|terms)(\/|$)/.test(
+        /^\/api\/v1\/(runs|crates|apis|claims|reports|tools|resolve-api|imports|health|config|terms)(\/|$)/.test(
           path,
         ));
     const writable =
@@ -59,7 +62,10 @@ app.use("*", async (c, next) => {
         "/api/v1/reports/validate",
         "/api/v1/tokens/revoke",
       ].includes(path) ||
-        /^\/api\/v1\/reports\/[^/]+\/revisions$/.test(path));
+        /^\/api\/v1\/reports\/[^/]+\/revisions$/.test(path) ||
+        /^\/api\/v1\/runs\/[^/]+(\/artifacts\/(source|sarif|logs))?$/.test(
+          path,
+        ));
     if (!readable && !writable) throw new Fault(403, "insufficient_scope");
   }
   if (write && !publicDevicePaths.has(path)) {

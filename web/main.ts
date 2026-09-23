@@ -1,3 +1,4 @@
+import { reproduceSection, bindReproduce } from "./reproduce";
 import { legal } from "./legal";
 const root = document.querySelector<HTMLElement>("#app")!;
 let me: any = null,
@@ -398,7 +399,8 @@ async function reportPage(id: number) {
     cursor = page.next_cursor;
   } while (cursor);
   commentReply = null;
-  root.innerHTML = `<p class="breadcrumbs"><a href="#/crates">crates</a> / <a href="#/crate/${enc(c.crate)}">${esc(c.crate)}</a> / <a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.version)}</a> / Report #${id}</p>${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div><h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `<p class="breadcrumbs"><a href="#/crates">crates</a> / <a href="#/crate/${enc(c.crate)}">${esc(c.crate)}</a> / <a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.version)}</a> / Report #${id}</p>${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reproduceSection(c.run_ids)}<h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  bindReproduce(root, c);
   bindStars();
   bind("#withdraw", async () => {
     if (
@@ -714,7 +716,7 @@ function publishGuide() {
 <h2>Getting started with Kani</h2>
 <h3>1. Install</h3>
 <pre><code>cargo install cargo-proofs --locked</code></pre>
-<p class="meta">Requires Rust 1.91 or newer and Git.</p>
+<p class="meta">Requires Rust 1.91 or newer.</p>
 <h3>2. Set up your report</h3>
 <p>Run inside the crate you verified.</p>
 <pre><code>cargo proofs init --tool kani</code></pre>
@@ -734,7 +736,9 @@ version = "0.66.0" # Version used for verification</code></pre></details>
 <pre><code>cargo proofs login</code></pre>
 <p>Authorize the CLI in your browser with your GitHub account.</p>
 <h3>4. Preview and publish</h3>
-<p>Commit and push your verification source to GitHub first. Evidence links point to that exact commit.</p>
+<p>Record verification on a source snapshot. No commit or push is required.</p>
+<pre><code>cargo proofs run -- cargo kani</code></pre>
+<p>The source snapshot, SARIF results and logs will be uploaded with your report.</p>
 <pre><code>cargo proofs publish --dry-run
 cargo proofs publish</code></pre>
 <p>The CLI prints a link to your published report. Run <code>cargo proofs publish</code> again to update the same report.</p>

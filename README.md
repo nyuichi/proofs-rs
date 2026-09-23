@@ -65,3 +65,5 @@ It does not deploy, publish a crate, or send reports to a running proofs.rs inst
 
 Regenerate the checked-in API specification with `python3 scripts/openapi.py`.
 The test suite checks coverage against every non-administrative API/auth route.
+
+Recorded verification requires CLI 0.2.0: `cargo proofs run -- cargo kani ...`, then `cargo proofs publish`. The service retains the frozen source, SARIF 2.1.0 results, and logs; reports expose them in a collapsed Reproduce section. Git push is not required. See [recording and reproduction](cli/README.md#recording-and-reproduction).
