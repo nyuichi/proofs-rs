@@ -57,7 +57,7 @@ enum Commands {
         #[arg(long, default_value = "kani", value_parser = ["kani", "creusot"])]
         tool: String,
         /// Creusot API selection (required for Creusot). Not the compilation --target.
-        #[arg(long, value_enum)]
+        #[arg(long, value_enum, required_if_eq("tool", "creusot"))]
         tool_target: Option<config::CreusotTarget>,
         /// Tool version used for the existing verification (detected if omitted).
         #[arg(long)]

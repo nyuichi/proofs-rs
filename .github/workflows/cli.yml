@@ -28,7 +28,7 @@ jobs:
           toolchain: ${{ matrix.rust }}
       - run: |
           cargo fmt
-          git diff -- cli
+          git diff
           cargo fmt --check
       - run: cargo test --locked
       - run: cargo build --locked

@@ -275,7 +275,7 @@ impl Scanner<'_> {
         let source = fs::read_to_string(&file)?;
         // Pearlite bodies need not be valid Rust. Only declarations are relevant.
         let parsed = if self.creusot {
-            syn::parse2(declarations(source.parse()?))
+            syn::parse2(declarations(syn::parse_str(&source)?))
         } else {
             syn::parse_file(&source)
         }
