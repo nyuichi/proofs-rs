@@ -218,12 +218,6 @@ runs.post("/:run", async (c) => {
       throw new Fault(400, "invalid_run_contract");
   }
   const source = validateSource(b.source);
-  if (
-    b.artifacts !== undefined ||
-    b.git_commit !== undefined ||
-    b.git_dirty !== undefined
-  )
-    throw new Fault(400, "obsolete_run_metadata");
   const artifact = await one(
     c.env.DB,
     "SELECT * FROM run_sarif WHERE run_id=? AND author_id=?",

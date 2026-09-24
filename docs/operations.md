@@ -143,19 +143,17 @@ they are for browsing, comments and voting, not publishing new reports or testin
 docs.rs import. Use a real release for publication tests. No proof was run.
 The generator and original sample data are retained in scripts/fixtures.
 
-## Recorded verification evidence (CLI 0.2.0)
+## Recorded verification evidence (CLI 0.3.0)
 
-Deploy migration `0005_verification_runs.sql` and the service before releasing CLI 0.2.0. New reports/revisions require `run_ids`; old clients cannot publish. Existing reports remain readable without a Reproduce section.
+The schema and application support SARIF-only verification runs. New databases use the current migration baseline.
 
 SARIF with embedded logs is the only uploaded verification file, stored privately in R2 under `runs/<author>/<run>/sarif/<sha256>`. D1 `run_sarif` has one row per run, without artifact kinds. Run metadata has a GitHub repository and immutable commit reference. Source archives and separate log objects are unsupported. Limits: 8 MiB including logs, 90 uploads per author per UTC day. Ownership, immutable retries, per-revision associations and report visibility govern access. The service checks consistency, but does not independently verify execution.
 
-### Migration from archive-based runs
+### Deployment prerequisite
 
-Deployments first switch to the new Worker to disable archive uploads, then run `node scripts/migrate-sarif-only.mjs TARGET prepare`, apply D1 migrations, then run the script with `cleanup`. Preparation blocks legacy writes, verifies old SARIF/log hashes, embeds the logs, writes and reads back the new SARIF, updates metadata and all historical source evidence URLs. Only the independently checked public hex commit has a built-in source mapping; unknown runs stop the migration rather than inventing source provenance. No source archive is downloaded. Migration 0006 refuses unmigrated runs, replaces `run_artifacts` with `run_sarif`, and queues obsolete R2 keys. Cleanup deletes those objects idempotently. Run uploads/downloads may be briefly unavailable during the schema transition. Report IDs, claims, revisions, results, comments and stars are preserved. If interrupted, rerun the same deployment; never skip preparation or force the guard. Old CLI 0.2 clients must upgrade to 0.3.
+Existing installations must be converted in a separate, one-time operator operation before deploying this version. Data-specific transformations and object deletion are not part of the application, schema baseline, or normal deployment workflows. Preserve report/claim identities and verify the converted SARIF and external source reference before deleting obsolete storage. Do not deploy against an unconverted database. Restored databases must also satisfy the current schema before serving traffic.
 
-Old DB backups may contain obsolete metadata but never contain R2 source bytes. Before serving a restored pre-0006 database, run the migration; do not restore the deleted source objects. The external Git commit remains the source of truth.
-
-Published evidence is retained with report history. Unattached or interrupted uploads currently remain private until operator cleanup; include this R2 prefix in storage monitoring and backup/restore procedures. Do not expire it with a blanket lifecycle rule. Source/log files may contain author-supplied data; removing an account anonymizes ownership but does not remove published evidence, consistent with retained reports. When responding to an erasure request for evidence contents, hide every referencing report, remove the affected R2 objects, and retain the existing audited restore marker process so backups cannot republish removed content.
+Published evidence is retained with report history. Unattached or interrupted uploads currently remain private until operator cleanup; include this R2 prefix in storage monitoring and backup/restore procedures. Do not expire it with a blanket lifecycle rule. Embedded logs may contain author-supplied data; removing an account anonymizes ownership but does not remove published evidence, consistent with retained reports. When responding to an erasure request for evidence contents, hide every referencing report, remove the affected R2 objects, and retain the existing audited restore marker process so backups cannot republish removed content.
 
 ### Verification run commands
 

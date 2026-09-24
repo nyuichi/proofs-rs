@@ -50,7 +50,7 @@ pub fn load(project: &Project, selected: Option<&str>) -> Result<(PathBuf, Recor
         "This run did not produce publishable verification results"
     );
     ensure!(record.metadata["source"]["commit"].is_string(),
-        "This recording uses obsolete source archives; record a new run with cargo-proofs 0.3 or later");
+        "Recorded run is missing its source commit");
     ensure!(
         snapshot::sha(&fs::read(dir.join("run.sarif.json"))?)
             == record.metadata["sarif_sha256"].as_str().unwrap_or(""),

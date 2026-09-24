@@ -7,15 +7,13 @@ CREATE TABLE verification_runs (
   metadata_json TEXT NOT NULL,
   created_at TEXT NOT NULL
 );
-CREATE TABLE run_artifacts (
-  run_id TEXT NOT NULL,
+CREATE TABLE run_sarif (
+  run_id TEXT PRIMARY KEY,
   author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-  kind TEXT NOT NULL CHECK(kind IN ('source','sarif','logs')),
   sha256 TEXT NOT NULL,
-  size INTEGER NOT NULL,
+  size INTEGER NOT NULL CHECK(size > 0 AND size <= 8388608),
   r2_key TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  PRIMARY KEY(run_id,kind)
+  created_at TEXT NOT NULL
 );
 CREATE TABLE report_runs (
   report_id INTEGER NOT NULL,
