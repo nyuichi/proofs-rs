@@ -14,11 +14,11 @@
     "/api/v1/runs/{run}/sarif": {
       "post": {
         "operationId": "post_api_v1_runs_run_sarif",
-        "summary": "Upload immutable SARIF with embedded logs",
+        "summary": "Register an immutable verification run with one SARIF upload",
         "tags": [
           "Registry"
         ],
-        "description": "Upload SARIF 2.1.0 (max 8 MiB including embedded stdout/stderr) as the raw request body. Source files are not accepted. Exact retries succeed; changing an artifact is rejected. 90 new artifacts per user per UTC day.",
+        "description": "Upload SARIF 2.1.0 (max 8 MiB including embedded stdout/stderr) as the raw request body. See the SARIF profile in docs/sarif.md. The service validates the complete record before storage; no separate finalization request exists. Source files are not accepted. Exact retries succeed; changing an artifact is rejected. 90 new runs per user per UTC day.",
         "security": [
           {
             "session": [],
@@ -57,18 +57,19 @@
                 "schema": {
                   "type": "object",
                   "properties": {
+                    "id": {
+                      "type": "string",
+                      "maxLength": 10000,
+                      "format": "uuid"
+                    },
                     "sha256": {
                       "type": "string",
                       "maxLength": 10000
-                    },
-                    "size": {
-                      "type": "integer",
-                      "minimum": 1
                     }
                   },
                   "required": [
-                    "sha256",
-                    "size"
+                    "id",
+                    "sha256"
                   ]
                 }
               }
@@ -196,110 +197,6 @@
       }
     },
     "/api/v1/runs/{run}": {
-      "post": {
-        "operationId": "post_api_v1_runs_run",
-        "summary": "Finalize an immutable recorded run",
-        "tags": [
-          "Registry"
-        ],
-        "description": "",
-        "security": [
-          {
-            "session": [],
-            "csrf": []
-          },
-          {
-            "bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "run",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "Origin",
-            "in": "header",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            },
-            "description": "Required for browser-session writes; must equal this service origin."
-          }
-        ],
-        "responses": {
-          "201": {
-            "description": "Success",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "id": {
-                      "type": "string",
-                      "maxLength": 10000,
-                      "format": "uuid"
-                    }
-                  },
-                  "required": [
-                    "id"
-                  ]
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error400"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error409"
-          },
-          "413": {
-            "$ref": "#/components/responses/Error413"
-          },
-          "415": {
-            "$ref": "#/components/responses/Error415"
-          },
-          "428": {
-            "$ref": "#/components/responses/Error428"
-          },
-          "429": {
-            "$ref": "#/components/responses/Error429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "description": "Run metadata: crate, version, tool_version_id, command (argv), working_directory, started_at, finished_at, duration_ms, exit_code, execution_successful, contracts, sarif_sha256, source (repository HTTPS GitHub URL and full commit SHA), platform, rustc and environment. SARIF must already exist. Contracts must map to successful SARIF results."
-              }
-            }
-          }
-        }
-      },
       "get": {
         "operationId": "get_api_v1_runs_run",
         "summary": "Get recorded run metadata",

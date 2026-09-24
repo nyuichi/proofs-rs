@@ -4,7 +4,6 @@ mod git;
 mod publish;
 mod record;
 mod scan;
-mod snapshot;
 mod state;
 
 use anyhow::Result;
@@ -72,7 +71,7 @@ enum Commands {
     },
     /// Revoke and remove this server's saved token.
     Logout,
-    /// Verify a frozen source snapshot and record results for publication.
+    /// Verify a detached Git worktree and record results for publication.
     Run {
         #[command(flatten)]
         project: ProjectArgs,

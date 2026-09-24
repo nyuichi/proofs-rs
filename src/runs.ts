@@ -2,13 +2,13 @@ import { Hono } from "hono";
 import {
   App,
   Ctx,
+  Env,
   Fault,
   requireUser,
   one,
   stmt,
   batch,
   quota,
-  jsonBody,
   text,
   now,
 } from "./core";
@@ -51,58 +51,6 @@ async function visibleRun(c: Ctx) {
     throw new Fault(404, "run_not_found");
   return run;
 }
-runs.post("/:run/sarif", async (c) => {
-  const user = requireUser(c),
-    run = id(c.req.param("run") || "");
-  const bytes = await c.req.arrayBuffer();
-  if (!bytes.byteLength || bytes.byteLength > SARIF_LIMIT)
-    throw new Fault(413, "artifact_too_large");
-  const sha = await digest(bytes);
-  const old = await one(
-    c.env.DB,
-    "SELECT * FROM run_sarif WHERE run_id=?",
-    run,
-  );
-  if (old) {
-    if (old.author_id !== user.id || old.sha256 !== sha)
-      throw new Fault(409, "immutable_artifact");
-    return c.json({ sha256: sha, size: old.size });
-  }
-  if (await one(c.env.DB, "SELECT 1 FROM verification_runs WHERE id=?", run))
-    throw new Fault(409, "immutable_run");
-  {
-    let sarif;
-    try {
-      sarif = JSON.parse(new TextDecoder().decode(bytes));
-    } catch {
-      throw new Fault(400, "invalid_sarif");
-    }
-    validateSarif(sarif);
-  }
-  await batch(c.env.DB, [quota(c.env.DB, user.id, "run_artifact", 90)]);
-  const key = `runs/${user.id}/${run}/sarif/${sha}`;
-  await c.env.ARCHIVE.put(key, bytes, {
-    httpMetadata: { contentType: "application/sarif+json" },
-  });
-  await stmt(
-    c.env.DB,
-    "INSERT OR IGNORE INTO run_sarif VALUES(?,?,?,?,?,?)",
-    run,
-    user.id,
-    sha,
-    bytes.byteLength,
-    key,
-    now(),
-  ).run();
-  const saved = await one(
-    c.env.DB,
-    "SELECT * FROM run_sarif WHERE run_id=?",
-    run,
-  );
-  if (saved.author_id !== user.id || saved.sha256 !== sha)
-    throw new Fault(409, "immutable_artifact");
-  return c.json({ sha256: sha, size: bytes.byteLength }, 201);
-});
 export function validateSarif(s: any) {
   if (s?.version !== "2.1.0" || !Array.isArray(s.runs) || s.runs.length !== 1)
     throw new Fault(400, "invalid_sarif");
@@ -158,16 +106,41 @@ export function validateSarif(s: any) {
     )
       throw new Fault(400, "invalid_sarif_result");
 }
-runs.post("/:run", async (c) => {
-  const u = requireUser(c),
-    run = id(c.req.param("run") || ""),
-    b = await jsonBody(c);
-  const tv = await one(
-    c.env.DB,
-    "SELECT v.*,t.name tool FROM tool_versions v JOIN tools t ON t.id=v.tool_id WHERE v.id=? AND v.selectable=1 AND t.active=1",
-    text(b.tool_version_id, "Tool", 200, true),
-  );
-  if (!tv) throw new Fault(400, "tool_version_unavailable");
+export function readRecord(sarif: any) {
+  validateSarif(sarif);
+  const s = sarif.runs[0],
+    inv = s.invocations[0],
+    p = s.properties?.proofs;
+  if (
+    p?.schemaVersion !== 1 ||
+    !Array.isArray(s.versionControlProvenance) ||
+    s.versionControlProvenance.length !== 1
+  )
+    throw new Fault(400, "invalid_proofs_sarif");
+  const provenance = s.versionControlProvenance[0];
+  const b = {
+    id: id(s.automationDetails?.guid),
+    crate: text(p.crate, "Crate", 100, true),
+    version: text(p.version, "Version", 100, true),
+    source: validateSource({
+      repository: provenance?.repositoryUri,
+      commit: provenance?.revisionId,
+    }),
+    command: [
+      inv.executableLocation?.uri,
+      ...(Array.isArray(inv.arguments) ? inv.arguments : []),
+    ],
+    working_directory:
+      typeof inv.workingDirectory?.uri === "string"
+        ? inv.workingDirectory.uri.replace(/\/$/, "")
+        : undefined,
+    started_at: inv.startTimeUtc,
+    finished_at: inv.endTimeUtc,
+    exit_code: inv.exitCode,
+    execution_successful: inv.executionSuccessful,
+    contracts: p.contracts,
+  };
+  if (!Array.isArray(inv.arguments)) throw new Fault(400, "invalid_command");
   if (
     !relative(b.working_directory) ||
     !Array.isArray(b.command) ||
@@ -184,8 +157,6 @@ runs.post("/:run", async (c) => {
     !Number.isFinite(Date.parse(b.started_at)) ||
     !Number.isFinite(Date.parse(b.finished_at)) ||
     Date.parse(b.finished_at) < Date.parse(b.started_at) ||
-    !Number.isFinite(b.duration_ms) ||
-    b.duration_ms < 0 ||
     (b.exit_code !== null && !Number.isInteger(b.exit_code)) ||
     typeof b.execution_successful !== "boolean"
   )
@@ -217,29 +188,6 @@ runs.post("/:run", async (c) => {
     )
       throw new Fault(400, "invalid_run_contract");
   }
-  const source = validateSource(b.source);
-  const artifact = await one(
-    c.env.DB,
-    "SELECT * FROM run_sarif WHERE run_id=? AND author_id=?",
-    run,
-    u.id,
-  );
-  if (!artifact || b.sarif_sha256 !== artifact.sha256)
-    throw new Fault(400, "incomplete_run_sarif");
-  const object = await c.env.ARCHIVE.get(artifact.r2_key);
-  if (!object) throw new Fault(409, "artifact_unavailable");
-  const sarif = await object.json<any>();
-  validateSarif(sarif);
-  const s = sarif.runs[0],
-    inv = s.invocations[0];
-  if (
-    s.tool.driver.name.toLowerCase() !== tv.tool.toLowerCase() ||
-    s.tool.driver.version !== tv.version ||
-    inv.executionSuccessful !== b.execution_successful ||
-    inv.exitCode !== b.exit_code ||
-    JSON.stringify(inv.arguments) !== JSON.stringify(b.command.slice(1))
-  )
-    throw new Fault(400, "run_sarif_mismatch");
   for (const contract of b.contracts) {
     const matches = s.results.filter(
       (r: any) => r.properties?.harness === contract.harness,
@@ -255,69 +203,99 @@ runs.post("/:run", async (c) => {
   }
   if (!b.execution_successful || b.exit_code !== 0)
     throw new Fault(400, "unsuccessful_run");
-  const normalized = {
-    id: run,
-    tool_version_id: tv.id,
-    source,
-    sarif_sha256: artifact.sha256,
-    command: b.command,
-    working_directory: b.working_directory,
-    started_at: b.started_at,
-    finished_at: b.finished_at,
-    duration_ms: b.duration_ms,
-    exit_code: b.exit_code,
-    execution_successful: b.execution_successful,
-    contracts: b.contracts,
-    platform: text(b.platform, "Platform", 1000),
-    rustc: text(b.rustc, "Rust compiler", 4000),
-    environment: b.environment || {},
-    crate: text(b.crate, "Crate", 100, true),
-    version: text(b.version, "Version", 100, true),
-  };
-  const encoded = JSON.stringify(normalized);
+  return b;
+}
+async function readStored(c: Ctx, run: any) {
+  const object = await c.env.ARCHIVE.get(run.r2_key);
+  if (!object) throw new Fault(503, "sarif_unavailable");
+  return object;
+}
+runs.post("/:run/sarif", async (c) => {
+  const u = requireUser(c),
+    run = id(c.req.param("run") || "");
+  const bytes = await c.req.arrayBuffer();
+  if (!bytes.byteLength || bytes.byteLength > SARIF_LIMIT)
+    throw new Fault(413, "artifact_too_large");
+  const sha = await digest(bytes);
   const existing = await one(
     c.env.DB,
     "SELECT * FROM verification_runs WHERE id=?",
     run,
   );
   if (existing) {
-    if (existing.author_id !== u.id || existing.metadata_json !== encoded)
+    if (existing.author_id !== u.id || existing.sha256 !== sha)
       throw new Fault(409, "immutable_run");
-    return c.json({ id: run });
+    return c.json({ id: run, sha256: sha }, 200);
   }
-  await stmt(
+  let sarif;
+  try {
+    sarif = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    throw new Fault(400, "invalid_sarif");
+  }
+  const record = readRecord(sarif);
+  if (record.id !== run) throw new Fault(400, "run_id_mismatch");
+  const driver = sarif.runs[0].tool.driver;
+  const tv = await one(
     c.env.DB,
-    "INSERT OR IGNORE INTO verification_runs VALUES(?,?,?,?,?,?,?)",
-    run,
-    u.id,
-    normalized.crate,
-    normalized.version,
-    tv.id,
-    encoded,
-    now(),
-  ).run();
-  const saved = await one(
-    c.env.DB,
-    "SELECT * FROM verification_runs WHERE id=?",
-    run,
+    "SELECT v.id FROM tool_versions v JOIN tools t ON t.id=v.tool_id WHERE lower(t.name)=lower(?) AND v.version=? AND v.selectable=1 AND t.active=1",
+    driver.name,
+    driver.version,
   );
-  if (saved.author_id !== u.id || saved.metadata_json !== encoded)
-    throw new Fault(409, "immutable_run");
-  return c.json({ id: run }, 201);
+  if (!tv) throw new Fault(400, "tool_version_unavailable");
+  // Each attempt owns its object, so compensation cannot delete a concurrent winner.
+  const key = `runs/${u.id}/${run}/${crypto.randomUUID()}.sarif.json`;
+  await c.env.ARCHIVE.put(key, bytes, {
+    httpMetadata: { contentType: "application/sarif+json" },
+  });
+  try {
+    await batch(c.env.DB, [
+      quota(c.env.DB, u.id, "verification_run", 90),
+      stmt(
+        c.env.DB,
+        "INSERT INTO verification_runs VALUES(?,?,?,?,?,?,?,?,?)",
+        run,
+        u.id,
+        record.crate,
+        record.version,
+        tv.id,
+        sha,
+        bytes.byteLength,
+        key,
+        now(),
+      ),
+    ]);
+  } catch (error) {
+    // A lost DB response may still have committed. Never delete that live object.
+    const saved = await one(
+      c.env.DB,
+      "SELECT * FROM verification_runs WHERE id=?",
+      run,
+    );
+    if (saved?.r2_key !== key) await c.env.ARCHIVE.delete(key);
+    if (saved?.author_id === u.id && saved.sha256 === sha)
+      return c.json({ id: run, sha256: sha });
+    if (saved) throw new Fault(409, "immutable_run");
+    throw error;
+  }
+  return c.json({ id: run, sha256: sha }, 201);
 });
 runs.get("/:run", async (c) => {
   const r = await visibleRun(c);
-  return c.json(JSON.parse(r.metadata_json));
+  return c.json({
+    id: r.id,
+    author_id: r.author_id,
+    crate: r.crate,
+    version: r.version,
+    tool_version_id: r.tool_version_id,
+    sha256: r.sha256,
+    size: r.size,
+    created_at: r.created_at,
+  });
 });
 runs.get("/:run/sarif", async (c) => {
-  const run = await visibleRun(c);
-  const a = await one(
-    c.env.DB,
-    "SELECT * FROM run_sarif WHERE run_id=?",
-    run.id,
-  );
-  const object = a && (await c.env.ARCHIVE.get(a.r2_key));
-  if (!object) throw new Fault(404, "artifact_not_found");
+  const run = await visibleRun(c),
+    object = await readStored(c, run);
   c.header("Content-Type", "application/sarif+json");
   c.header(
     "Content-Disposition",
@@ -326,6 +304,29 @@ runs.get("/:run/sarif", async (c) => {
   c.header("Content-Security-Policy", "default-src 'none'; sandbox");
   return c.body(object.body);
 });
+// Reclaim crash leftovers only. Completed but unpublished runs remain valid records.
+export async function cleanupRunUploads(env: Env) {
+  let cursor: string | undefined;
+  do {
+    const page = await env.ARCHIVE.list({
+      prefix: "runs/",
+      cursor,
+      limit: 1000,
+    });
+    for (const object of page.objects) {
+      if (object.uploaded.getTime() > Date.now() - 86400000) continue;
+      if (
+        !(await one(
+          env.DB,
+          "SELECT 1 FROM verification_runs WHERE r2_key=?",
+          object.key,
+        ))
+      )
+        await env.ARCHIVE.delete(object.key);
+    }
+    cursor = page.truncated ? page.cursor : undefined;
+  } while (cursor);
+}
 export function validateSource(source: any) {
   // Immutable external Git source; no source content is accepted or retained.
   if (
@@ -368,7 +369,7 @@ export async function validateReportRuns(c: Ctx, b: any, v: any) {
       r.tool_version_id !== v.tool_version_id
     )
       throw new Fault(400, "run_report_mismatch");
-    const m = JSON.parse(r.metadata_json);
+    const m = readRecord(await (await readStored(c, r)).json());
     if (source && source !== JSON.stringify(m.source))
       throw new Fault(400, "inconsistent_run_sources");
     source = JSON.stringify(m.source);

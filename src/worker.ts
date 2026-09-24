@@ -4,6 +4,7 @@ import { App, Env, Fault, uid, requireUser } from "./core";
 import { authenticate, authRoutes } from "./auth";
 import api from "./api";
 import { importRoutes } from "./imports";
+import { cleanupRunUploads } from "./runs";
 import { queue, dispatch, backup } from "./jobs";
 import { admin } from "./admin";
 import { deviceRoutes, tokenRoutes, publicDevicePaths } from "./device";
@@ -148,7 +149,10 @@ export default {
         .bind(new Date(Date.now() - 86400000).toISOString())
         .run(),
     );
-    if (controller.cron === "17 2 * * *") ctx.waitUntil(backup(env));
+    if (controller.cron === "17 2 * * *") {
+      ctx.waitUntil(backup(env));
+      ctx.waitUntil(cleanupRunUploads(env));
+    }
   },
 };
 export { app };

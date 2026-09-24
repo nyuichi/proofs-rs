@@ -62,3 +62,49 @@ pub fn published_source(root: &Path, remote: &str) -> Result<serde_json::Value> 
     );
     Ok(serde_json::json!({"repository":url,"commit":commit}))
 }
+
+/// A detached, disposable checkout. Drop always removes the Git worktree registration.
+pub struct Worktree {
+    root: std::path::PathBuf,
+    pub path: std::path::PathBuf,
+    _temp: tempfile::TempDir,
+}
+impl Worktree {
+    pub fn create(root: &Path, commit: &str) -> Result<Self> {
+        let temp = tempfile::tempdir()?;
+        let path = temp.path().canonicalize()?.join("source");
+        run(
+            root,
+            &[
+                "worktree",
+                "add",
+                "--detach",
+                path.to_str().context("Non-UTF8 worktree path")?,
+                commit,
+            ],
+        )?;
+        Ok(Self {
+            root: root.to_owned(),
+            path,
+            _temp: temp,
+        })
+    }
+    pub fn unchanged(&self) -> Result<()> {
+        ensure!(
+            run(
+                &self.path,
+                &["status", "--porcelain", "--untracked-files=no"]
+            )?
+            .is_empty(),
+            "Tracked inputs changed during verification; run again"
+        );
+        Ok(())
+    }
+}
+impl Drop for Worktree {
+    fn drop(&mut self) {
+        if let Some(path) = self.path.to_str() {
+            let _ = run(&self.root, &["worktree", "remove", "--force", path]);
+        }
+    }
+}

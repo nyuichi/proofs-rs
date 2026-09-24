@@ -26,10 +26,28 @@ export function bindReproduce(root: HTMLElement, report: any) {
       const rendered = await Promise.all(
         report.run_ids.map(async (id: string, index: number) => {
           const base = "/api/v1/runs/" + encodeURIComponent(id);
-          const [run, sarif] = await Promise.all([
-            getJSON(base),
-            getJSON(base + "/sarif"),
-          ]);
+          const sarif = await getJSON(base + "/sarif");
+          const entry = sarif.runs[0],
+            inv = entry.invocations[0],
+            proofs = entry.properties.proofs;
+          const source = entry.versionControlProvenance[0];
+          // View-only projection of the one canonical SARIF record.
+          const run = {
+            ...proofs,
+            command: [inv.executableLocation.uri, ...inv.arguments],
+            source: {
+              repository: source.repositoryUri,
+              commit: source.revisionId,
+            },
+            working_directory: inv.workingDirectory.uri.replace(/\/$/, ""),
+            execution_successful: inv.executionSuccessful,
+            exit_code: inv.exitCode,
+            started_at: inv.startTimeUtc,
+            finished_at: inv.endTimeUtc,
+            duration_ms:
+              Date.parse(inv.endTimeUtc) - Date.parse(inv.startTimeUtc),
+            environment: inv.environmentVariables,
+          };
           const results = sarif.runs.flatMap((r: any) => r.results || []);
           const passed = results.filter((r: any) => r.kind === "pass").length;
           const failed = results.filter((r: any) => r.kind === "fail").length;

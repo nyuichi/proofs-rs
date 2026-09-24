@@ -67,7 +67,7 @@ You may set `PROOFS_SERVER` instead. The default is `https://proofs.rs`. Tokens 
 - Multiple contract harnesses for one API, ambiguous targets/reexports, trait methods, and `include!` source trees stop publication. Glob imports are not used to guess targets. Macro-generated functions/harnesses are not expanded or discovered; this is a source parser, not a Rust compiler frontend.
 - Conditional compilation is evaluated with `kani`, the selected Cargo features, and `rustc --print cfg` for the host or `--target`. Pass `--features foo,bar`, `--all-features`, `--no-default-features`, and `--target` to match verification. Build-script/custom cfgs are not inferred; encountered unsupported cfgs stop discovery. Integration-test targets are not scanned. Target-dependent dependency feature unification and RUSTFLAGS are not used to infer library features.
 - The service's imported public API catalogue is authoritative. Missing APIs or multiple public API matches stop publication; no silent skipping.
-- The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact source snapshot.
+- The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact source commit.
 
 ## Creusot
 
@@ -103,15 +103,15 @@ target = "annotated" # required: "annotated" or "all"
 
 ## Recording and reproduction
 
-`run` checks the installed tool version against `proofs.toml` and resolves Cargo dependencies. Commit and push all inputs, including Cargo.lock, before recording; a changed lockfile requires committing before retrying. `[git].remote` selects the remote (default `origin`). A clean working tree and a commit reachable on that remote are required. Source URLs use GitHub and a full immutable commit SHA.
+`run` checks the installed tool version against `proofs.toml`. Commit and push the verification inputs, including Cargo.lock, before recording. `[git].remote` selects the remote (default `origin`). A clean working tree and a commit reachable on that remote are required. Source URLs use GitHub and the full commit SHA.
 
-Verification executes in a temporary local copy, which is deleted afterwards. No source archive is created or uploaded. The copy respects ignore files, includes Cargo.lock, excludes build/credential directories and rejects symlinks. Every input must be tracked and match the recorded commit. Local copies are limited to 32 MiB and 10,000 files.
+Verification runs in a detached temporary Git worktree at that commit, with a separate build directory and locked dependency resolution. Git determines the checkout contents; there is no custom source collector, archive, file-count limit, or source upload size limit. The worktree registration and files are removed on success and errors. Tracked input changes during verification prevent publication.
 
-The persistent run directory contains `record.json` and `run.sarif.json`. Source paths and hashes are in SARIF; source file contents are not. Standard output and error are embedded in `artifacts[].contents.text` and referenced by `invocations[].stdout` / `stderr`. Review these logs before publishing. The complete SARIF has an 8 MiB limit. Old archive-based CLI recordings must be rerun with 0.3.0.
+Each run directory contains only `run.sarif.json`. SARIF is the canonical record for source provenance, command, timing, contracts, results and embedded stdout/stderr. The latest-run pointer and report publication state are local navigation/retry state, not duplicate execution records. Review the logs before publishing. The complete SARIF has an 8 MiB limit. `publish` sends it in one request; there is no separate metadata registration.
 
 - Kani: regular serial check output is supported. Checks are associated with the exact observed contract harness. Quiet/terse output, parallel jobs, options disabling safety checks, and unknown result formats are rejected. Unexecuted harnesses do not generate claims; unreachable checks remain labeled unreachable.
 - Creusot: a prover run must create fresh `proof.json` sessions that map unambiguously to selected APIs. Compilation alone, unchanged stale sessions, unresolved proof goals, and unsupported proof layouts do not certify an API. The usual free-function layout is supported; generated method layouts may require an adapter extension.
-- A failed process, changed snapshot, or run without verified contracts cannot be published. Failed recordings remain local for inspection.
+- A failed process, changed worktree, or run without verified contracts cannot be published. Failed recordings remain local for inspection.
 - Pass compilation flags **after** `--`, as part of the actual verifier command, for example `cargo proofs run -- cargo kani --features foo`. The same flags drive contract discovery. Select the workspace package with `-p NAME` as appropriate.
 - One run per CLI publication is supported. `publish` selects the latest recording, or use `publish --run UUID` for an explicit recording. Changes to tool configuration or crate/version require a new run.
 
@@ -124,12 +124,12 @@ Publication state is stored in the OS local data directory under `cargo-proofs/`
 - Repeat `publish` revises the same report and preserves existing claim IDs. An unchanged report produces no revision.
 - A changed crate version starts a new report (the service makes report crate/version immutable).
 - On another machine, or after losing local state, use `publish --report ID` to attach explicitly. The CLI matches claims by API/property and refuses duplicate matches.
-- Titles/explanations and other individual editorial fields from the server are preserved. The report title is controlled by TOML; shared optional fields are preserved when absent, or cleared when explicitly `""`. Contracts and evidence are controlled by the selected recorded snapshot.
+- Titles/explanations and other individual editorial fields from the server are preserved. The report title is controlled by TOML; shared optional fields are preserved when absent, or cleared when explicitly `""`. Contracts and evidence are controlled by the selected SARIF record.
 - If the server revision changed since the last publication, show the differences and stop. `publish --dry-run` previews the prospective update. `publish --force` applies the local/config-owned fields over the latest server state, preserving unspecified editorial fields. It still sends `expected_revision` so a concurrent edit after fetching is rejected.
 - Missing contracts remove claims only after a yes/no prompt. Noninteractive approval requires `--yes`. `--force` does not approve deletions or bypass recorded-run checks. Removed claims retain their history/permanent links on the service. Locally known removed claim IDs are reused if their contracts are later restored; recovering removed IDs on a different machine is not automatic.
 - Before a write, the CLI saves the exact request and idempotency key atomically. If publication is interrupted, `publish --resume` retries that saved request rather than generating another report. It prints the saved payload and uses its original recorded evidence. Definite rejected requests are cleared so they can be corrected; ambiguous/network failures retain the journal.
 
-`--dry-run` never publishes a report or updates its local baseline, but authenticates, verifies local artifact hashes, and may ask the service to import the API catalogue. It does not upload artifacts or perform the final server-side run validation. Imports can take several minutes. The report limit is 100 claims (50 Kani APIs or 100 Creusot APIs) and 128 KiB; automatic splitting is deliberately unsupported.
+`--dry-run` never publishes a report or updates its local baseline, but authenticates, reads the selected SARIF, and may ask the service to import the API catalogue. It does not upload artifacts or perform the final server-side run validation. Imports can take several minutes. The report limit is 100 claims (50 Kani APIs or 100 Creusot APIs) and 128 KiB; automatic splitting is deliberately unsupported.
 
 ## Development
 

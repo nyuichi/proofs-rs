@@ -294,30 +294,25 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
     let config = project.config()?;
     let (run_dir, recorded) = record::load(&project, options.run.as_deref())?;
     let contracts = &recorded.contracts;
-    let run_id = recorded.metadata["id"].as_str().context("Missing run ID")?;
+    let entry = &recorded.sarif["runs"][0];
+    let run_id = entry["automationDetails"]["guid"]
+        .as_str()
+        .context("Missing run ID")?;
+    let source = &entry["versionControlProvenance"][0];
     ensure!(
         contracts.len() * config.tool.properties().len() <= 100,
         "Too many claims"
     );
     let tool = api.tool_version(&config.tool.name, &config.tool.version)?;
-    let mut run_metadata = recorded.metadata.clone();
-    run_metadata["tool_version_id"] = json!(tool);
     if options.dry_run {
         println!(
-            "Recorded run (will upload on publish):\n{}",
-            serde_json::to_string_pretty(&run_metadata)?
+            "Recorded SARIF (will upload on publish): {}",
+            run_dir.join("run.sarif.json").display()
         );
-        println!("Artifacts: {}", run_dir.display());
     } else {
         api.upload(
             &format!("/api/v1/runs/{run_id}/sarif"),
             &fs::read(run_dir.join("run.sarif.json"))?,
-        )?;
-        api.request(
-            "POST",
-            &format!("/api/v1/runs/{run_id}"),
-            Some(&run_metadata),
-            None,
         )?;
     }
     api.prepare(&project.name, &project.version)?;
@@ -332,10 +327,10 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
         );
         let evidence = format!(
             "{}/blob/{}/{}#L{}-L{}",
-            recorded.metadata["source"]["repository"]
+            source["repositoryUri"]
                 .as_str()
                 .context("Missing source repository")?,
-            recorded.metadata["source"]["commit"]
+            source["revisionId"]
                 .as_str()
                 .context("Missing source commit")?,
             contract.file,
@@ -382,7 +377,7 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
             bail!("Web revision conflict. Inspect publish --dry-run; use --force to publish local changes over the latest revision");
         }
     }
-    let generated = json!({"crate":project.name,"version":project.version,"tool_version_id":tool,"evidence_url":format!("{}/tree/{}", recorded.metadata["source"]["repository"].as_str().unwrap(), recorded.metadata["source"]["commit"].as_str().unwrap()),"run_ids":[run_id],"claims":claims});
+    let generated = json!({"crate":project.name,"version":project.version,"tool_version_id":tool,"evidence_url":format!("{}/tree/{}", source["repositoryUri"].as_str().unwrap(), source["revisionId"].as_str().unwrap()),"run_ids":[run_id],"claims":claims});
     // Unspecified editorial fields are preserved. Force changes only fields owned by this CLI/config.
     let mut baseline = remote.clone();
     if saved.report_id == selected {
