@@ -54,7 +54,7 @@ The approved planning estimate is approximately USD 5/month at small scale with 
 
 ## Known integration limits
 
-The parser allowlists rustdoc format 61 and rejects unsupported syntax or unresolved external reexports instead of fabricating API data. crates.io/docs.rs calls happen only on explicit user preparation. This implementation deliberately has no live import/email test in CI. Staging includes explicitly synthetic examples without shared demo logins.
+The parser allowlists rustdoc formats 60 and 61 and rejects unsupported syntax or unresolved external reexports instead of fabricating API data. crates.io/docs.rs calls happen only on explicit user preparation. This implementation deliberately has no live import/email test in CI. Staging includes explicitly synthetic examples without shared demo logins.
 
 ## Report schema reset (2026-09-21)
 
@@ -150,3 +150,15 @@ Deploy migration `0005_verification_runs.sql` and the service before releasing C
 Source, SARIF, and logs are private R2 objects under `runs/<author>/<run>/<kind>/<sha256>`. D1 stores immutable metadata and per-revision associations. All three hashes must match before finalization; the service checks result-to-contract consistency but does not execute verification or authenticate an author's local machine. Limits: 32 MiB source, 8 MiB each SARIF/log, 90 new artifact uploads per author per UTC day. Exact retries are free and immutable. Unattached runs are readable only by the author. Any public report revision referencing a run makes it public; hiding the report removes anonymous access unless another public report references it. Exceptional revision redaction also removes that revision's run associations.
 
 Published evidence is retained with report history. Unattached or interrupted uploads currently remain private until operator cleanup; include this R2 prefix in storage monitoring and backup/restore procedures. Do not expire it with a blanket lifecycle rule. Source/log files may contain author-supplied data; removing an account anonymizes ownership but does not remove published evidence, consistent with retained reports. When responding to an erasure request for evidence contents, hide every referencing report, remove the affected R2 objects, and retain the existing audited restore marker process so backups cannot republish removed content.
+
+### Verification run commands
+
+A run may use any nonempty executable name and zero or more arguments, including
+`python3 verify-core.py` or `./verify-core`. The server stores this command; it
+does not execute it. The registered verifier name/version must match the SARIF
+tool, and arguments, exit status, artifact hashes and per-contract results remain
+validated. The command executable is not required to match the verifier name.
+
+After deploying rustdoc format 60 support, retry a failed import by calling
+`POST /api/v1/publish/prepare` for the same crate/version. Failed jobs do not block
+a new preparation job; no database migration or manual job edit is required.

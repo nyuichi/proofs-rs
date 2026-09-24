@@ -159,179 +159,210 @@ export const reportInput = {
   ],
 };
 
-test("recorded runs: immutable artifacts, ownership, publication gating and visibility", async () => {
-  const { db, env, request } = await fixture();
-  const objects = new Map<string, Uint8Array>();
-  env.ARCHIVE = {
-    put: async (k: string, b: ArrayBuffer) => {
-      objects.set(k, new Uint8Array(b));
-    },
-    get: async (k: string) => {
-      const b = objects.get(k);
-      return b
-        ? {
-            json: async () => JSON.parse(new TextDecoder().decode(b)),
-            body: new Response(new Uint8Array(b)).body,
-          }
-        : null;
-    },
-  } as any;
-  const rid = "22222222-2222-4222-8222-222222222222";
-  const sarif = {
-    version: "2.1.0",
-    runs: [
-      {
-        tool: { driver: { name: "Kani", version: "0.68.0" } },
-        invocations: [
-          { arguments: ["kani"], executionSuccessful: true, exitCode: 0 },
-        ],
-        results: [
-          {
-            kind: "pass",
-            message: { text: "bounds" },
-            properties: { harness: "sample::check_safe" },
-          },
-        ],
+for (const command of [
+  ["cargo", "kani"],
+  ["python3", "verify-core.py"],
+  ["./verify-core"],
+]) {
+  test(`recorded runs (${command.join(" ")}): immutable artifacts, ownership, publication gating and visibility`, async () => {
+    const { db, env, request } = await fixture();
+    const objects = new Map<string, Uint8Array>();
+    env.ARCHIVE = {
+      put: async (k: string, b: ArrayBuffer) => {
+        objects.set(k, new Uint8Array(b));
       },
-    ],
-  };
-  const upload = async (kind: string, bytes: Uint8Array, user = "alice") => {
-    const r = await app.request(
-      `https://example.test/api/v1/runs/${rid}/artifacts/${kind}`,
-      {
-        method: "POST",
-        headers: {
-          Origin: env.APP_ORIGIN,
-          Cookie: "__Host-proofsr_session=" + user,
-          "X-CSRF-Token": "csrf",
-          "Content-Type": "application/octet-stream",
+      get: async (k: string) => {
+        const b = objects.get(k);
+        return b
+          ? {
+              json: async () => JSON.parse(new TextDecoder().decode(b)),
+              body: new Response(new Uint8Array(b)).body,
+            }
+          : null;
+      },
+    } as any;
+    const rid = "22222222-2222-4222-8222-222222222222";
+    const sarif = {
+      version: "2.1.0",
+      runs: [
+        {
+          tool: { driver: { name: "Kani", version: "0.68.0" } },
+          invocations: [
+            {
+              arguments: command.slice(1),
+              executionSuccessful: true,
+              exitCode: 0,
+            },
+          ],
+          results: [
+            {
+              kind: "pass",
+              message: { text: "bounds" },
+              properties: { harness: "sample::check_safe" },
+            },
+          ],
         },
-        body: new Uint8Array(bytes),
-      },
+      ],
+    };
+    const upload = async (kind: string, bytes: Uint8Array, user = "alice") => {
+      const r = await app.request(
+        `https://example.test/api/v1/runs/${rid}/artifacts/${kind}`,
+        {
+          method: "POST",
+          headers: {
+            Origin: env.APP_ORIGIN,
+            Cookie: "__Host-proofsr_session=" + user,
+            "X-CSRF-Token": "csrf",
+            "Content-Type": "application/octet-stream",
+          },
+          body: new Uint8Array(bytes),
+        },
+        env,
+      );
+      return { status: r.status, body: (await r.json()) as any };
+    };
+    const artifacts: Record<string, string> = {};
+    for (const [kind, bytes] of [
+      ["source", new Uint8Array([31, 139, 8, 0])],
+      ["sarif", new TextEncoder().encode(JSON.stringify(sarif))],
+      ["logs", new TextEncoder().encode("SUCCESS")],
+    ] as const) {
+      const r = await upload(kind, bytes);
+      assert.equal(r.status, 201, JSON.stringify(r));
+      artifacts[kind] = r.body.sha256;
+      assert.equal((await upload(kind, bytes)).status, 200);
+    }
+    assert.equal(
+      (await upload("logs", new TextEncoder().encode("changed"))).status,
+      409,
+    );
+    assert.equal(
+      (await upload("logs", new TextEncoder().encode("SUCCESS"), "bob")).status,
+      409,
+    );
+    const metadata = {
+      crate: "sample",
+      version: "1.0.0",
+      tool_version_id: "kani-0.68.0",
+      command,
+      working_directory: ".",
+      started_at: "2026-09-23T00:00:00Z",
+      finished_at: "2026-09-23T00:00:01Z",
+      duration_ms: 1000,
+      exit_code: 0,
+      execution_successful: true,
+      artifacts,
+      contracts: [
+        {
+          harness: "sample::check_safe",
+          api_paths: ["sample::safe"],
+          properties: ["no_ub"],
+          precondition: "",
+          file: "src/lib.rs",
+          first_line: 1,
+          last_line: 2,
+        },
+      ],
+    };
+    assert.equal(
+      (
+        await request("/runs/" + rid, "POST", {
+          ...metadata,
+          working_directory: "../escape",
+        })
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request("/runs/" + rid, "POST", {
+          ...metadata,
+          contracts: [{ ...metadata.contracts[0], harness: "unexecuted" }],
+        })
+      ).status,
+      400,
+    );
+    for (const invalid of [[], [""], ["   "], [null], ["python3", "\0"]]) {
+      const response = await request("/runs/" + rid, "POST", {
+        ...metadata,
+        command: invalid,
+      });
+      assert.equal(response.status, 400);
+      assert.equal(response.body.error, "invalid_command");
+    }
+    for (const mismatch of [
+      { command: [...command, "unrecorded-argument"] },
+      { execution_successful: false },
+      { exit_code: 1 },
+    ]) {
+      const response = await request("/runs/" + rid, "POST", {
+        ...metadata,
+        ...mismatch,
+      });
+      assert.equal(response.status, 400);
+      assert.equal(response.body.error, "run_sarif_mismatch");
+    }
+    assert.equal((await request("/runs/" + rid, "POST", metadata)).status, 201);
+    assert.equal((await request("/runs/" + rid, "POST", metadata)).status, 200);
+    assert.equal(
+      (await request("/runs/" + rid, "GET", undefined, "bob")).status,
+      404,
+    );
+    assert.equal(
+      (await request("/reports", "POST", { ...reportInput, run_ids: [] }))
+        .status,
+      400,
+    );
+    assert.equal(
+      (
+        await request(
+          "/reports",
+          "POST",
+          { ...reportInput, run_ids: [rid] },
+          "bob",
+        )
+      ).status,
+      400,
+    );
+    assert.equal(
+      (
+        await request("/reports", "POST", {
+          ...reportInput,
+          run_ids: [rid],
+          claims: [{ ...reportInput.claims[0], precondition: "unrecorded" }],
+        })
+      ).status,
+      400,
+    );
+    const made = await request("/reports", "POST", {
+      ...reportInput,
+      run_ids: [rid],
+    });
+    assert.equal(made.status, 201, JSON.stringify(made));
+    assert.deepEqual((await request("/reports/" + made.body.id)).body.run_ids, [
+      rid,
+    ]);
+    assert.equal(
+      (await request("/runs/" + rid, "GET", undefined, "")).status,
+      200,
+    );
+    const downloaded = await app.request(
+      "https://example.test/api/v1/runs/" + rid + "/logs",
+      {},
       env,
     );
-    return { status: r.status, body: (await r.json()) as any };
-  };
-  const artifacts: Record<string, string> = {};
-  for (const [kind, bytes] of [
-    ["source", new Uint8Array([31, 139, 8, 0])],
-    ["sarif", new TextEncoder().encode(JSON.stringify(sarif))],
-    ["logs", new TextEncoder().encode("SUCCESS")],
-  ] as const) {
-    const r = await upload(kind, bytes);
-    assert.equal(r.status, 201, JSON.stringify(r));
-    artifacts[kind] = r.body.sha256;
-    assert.equal((await upload(kind, bytes)).status, 200);
-  }
-  assert.equal(
-    (await upload("logs", new TextEncoder().encode("changed"))).status,
-    409,
-  );
-  assert.equal(
-    (await upload("logs", new TextEncoder().encode("SUCCESS"), "bob")).status,
-    409,
-  );
-  const metadata = {
-    crate: "sample",
-    version: "1.0.0",
-    tool_version_id: "kani-0.68.0",
-    command: ["cargo", "kani"],
-    working_directory: ".",
-    started_at: "2026-09-23T00:00:00Z",
-    finished_at: "2026-09-23T00:00:01Z",
-    duration_ms: 1000,
-    exit_code: 0,
-    execution_successful: true,
-    artifacts,
-    contracts: [
-      {
-        harness: "sample::check_safe",
-        api_paths: ["sample::safe"],
-        properties: ["no_ub"],
-        precondition: "",
-        file: "src/lib.rs",
-        first_line: 1,
-        last_line: 2,
-      },
-    ],
-  };
-  assert.equal(
-    (
-      await request("/runs/" + rid, "POST", {
-        ...metadata,
-        working_directory: "../escape",
-      })
-    ).status,
-    400,
-  );
-  assert.equal(
-    (
-      await request("/runs/" + rid, "POST", {
-        ...metadata,
-        contracts: [{ ...metadata.contracts[0], harness: "unexecuted" }],
-      })
-    ).status,
-    400,
-  );
-  assert.equal((await request("/runs/" + rid, "POST", metadata)).status, 201);
-  assert.equal((await request("/runs/" + rid, "POST", metadata)).status, 200);
-  assert.equal(
-    (await request("/runs/" + rid, "GET", undefined, "bob")).status,
-    404,
-  );
-  assert.equal(
-    (await request("/reports", "POST", { ...reportInput, run_ids: [] })).status,
-    400,
-  );
-  assert.equal(
-    (
-      await request(
-        "/reports",
-        "POST",
-        { ...reportInput, run_ids: [rid] },
-        "bob",
-      )
-    ).status,
-    400,
-  );
-  assert.equal(
-    (
-      await request("/reports", "POST", {
-        ...reportInput,
-        run_ids: [rid],
-        claims: [{ ...reportInput.claims[0], precondition: "unrecorded" }],
-      })
-    ).status,
-    400,
-  );
-  const made = await request("/reports", "POST", {
-    ...reportInput,
-    run_ids: [rid],
+    assert.equal(downloaded.status, 200);
+    assert.equal(await downloaded.text(), "SUCCESS");
+    assert.match(downloaded.headers.get("Content-Disposition")!, /attachment/);
+    db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(
+      made.body.id,
+    );
+    assert.equal(
+      (await request("/runs/" + rid, "GET", undefined, "bob")).status,
+      404,
+    );
   });
-  assert.equal(made.status, 201, JSON.stringify(made));
-  assert.deepEqual((await request("/reports/" + made.body.id)).body.run_ids, [
-    rid,
-  ]);
-  assert.equal(
-    (await request("/runs/" + rid, "GET", undefined, "")).status,
-    200,
-  );
-  const downloaded = await app.request(
-    "https://example.test/api/v1/runs/" + rid + "/logs",
-    {},
-    env,
-  );
-  assert.equal(downloaded.status, 200);
-  assert.equal(await downloaded.text(), "SUCCESS");
-  assert.match(downloaded.headers.get("Content-Disposition")!, /attachment/);
-  db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(
-    made.body.id,
-  );
-  assert.equal(
-    (await request("/runs/" + rid, "GET", undefined, "bob")).status,
-    404,
-  );
-});
+}
 test("atomic reports, stable claims, immutable targets, revision conflicts and permanent stars", async () => {
   const { request, db } = await fixture();
   let v = await request("/reports/validate", "POST", reportInput);
@@ -654,6 +685,45 @@ test("rustdoc fixture: public free functions, inherent methods, reexports, no tr
   assert.equal(apis[1].is_unsafe, 1);
   assert.throws(() =>
     extractAPIs({ ...doc, format_version: 999 }, "sample", "1.0.0"),
+  );
+});
+
+test("docs.rs hex 0.4.3 format 60 imports codec APIs and associated types", () => {
+  const doc = JSON.parse(
+    readFileSync(
+      new URL("../fixtures/hex-0.4.3-rustdoc-60.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const apis = extractAPIs(doc, "hex", "0.4.3");
+  assert.equal(apis.length, 11);
+  const encode = apis.find((a) => a.canonical_key === "hex::encode_to_slice")!;
+  const decode = apis.find((a) => a.canonical_key === "hex::decode_to_slice")!;
+  assert.equal(
+    encode.signature,
+    "pub fn encode_to_slice<T: AsRef<[u8]>>(input: T, output: &mut [u8]) -> Result<(), FromHexError>",
+  );
+  assert.equal(
+    decode.signature,
+    "pub fn decode_to_slice<T: AsRef<[u8]>>(data: T, out: &mut [u8]) -> Result<(), FromHexError>",
+  );
+  assert.equal(encode.is_unsafe, 0);
+  assert.equal(decode.is_unsafe, 0);
+  assert.equal(
+    encode.upstream_url,
+    "https://docs.rs/hex/0.4.3/hex/fn.encode_to_slice.html",
+  );
+  assert.match(
+    apis.find((a) => a.canonical_key === "hex::serialize")!.signature,
+    /<S as serde_core::ser::Serializer>::Ok/,
+  );
+  assert.throws(
+    () => extractAPIs({ ...doc, paths: {} }, "hex", "0.4.3"),
+    /unresolved_rustdoc_path/,
+  );
+  assert.throws(
+    () => extractAPIs({ ...doc, format_version: 999 }, "hex", "0.4.3"),
+    /unsupported_rustdoc_format/,
   );
 });
 

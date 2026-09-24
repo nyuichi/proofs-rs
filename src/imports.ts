@@ -17,7 +17,8 @@ import {
   text,
   hash,
 } from "./core";
-export const FORMATS = [61];
+// Format 60 is still served by docs.rs for releases such as hex 0.4.3.
+export const FORMATS = [60, 61];
 function typ(t: any): string {
   if (t === null) return "()";
   if (typeof t === "string") return t === "infer" ? "_" : t;
@@ -217,6 +218,28 @@ function signature(s: any) {
     (s.output ? " -> " + typ(s.output) : "")
   );
 }
+// rustdoc can omit a written trait path in associated-type projections
+// (e.g. S::Ok), while retaining its ID. Resolve that ID before rendering.
+function resolveEmptyPaths(value: any, paths: any): any {
+  if (Array.isArray(value))
+    return value.map((v) => resolveEmptyPaths(v, paths));
+  if (!value || typeof value !== "object") return value;
+  const result = Object.fromEntries(
+    Object.entries(value).map(([key, v]) => [key, resolveEmptyPaths(v, paths)]),
+  );
+  if (result.path === "" && result.id !== undefined) {
+    const path = paths?.[String(result.id)]?.path;
+    if (
+      !Array.isArray(path) ||
+      !path.length ||
+      path.some((p) => typeof p !== "string" || !p)
+    )
+      throw new Fault(422, "unresolved_rustdoc_path");
+    result.path = path.join("::");
+  }
+  return result;
+}
+
 export function extractAPIs(doc: any, crate: string, version: string) {
   if (!FORMATS.includes(doc.format_version))
     throw new Fault(422, "unsupported_rustdoc_format");
@@ -233,7 +256,7 @@ export function extractAPIs(doc: any, crate: string, version: string) {
     path: string[],
     owner?: { kind: string; path: string[]; impl: any },
   ) {
-    const fn = item.inner.function;
+    const fn = resolveEmptyPaths(item.inner.function, doc.paths);
     if (!fn || typeof fn.header?.is_unsafe !== "boolean")
       throw new Fault(422, "invalid_rustdoc_function");
     const name = path.join("::");
@@ -320,7 +343,7 @@ export function extractAPIs(doc: any, crate: string, version: string) {
               add(method, [...current, method.name], {
                 kind,
                 path: current,
-                impl: imp,
+                impl: resolveEmptyPaths(imp, doc.paths),
               });
           }
         }
