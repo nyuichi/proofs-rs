@@ -26,6 +26,7 @@ Run inside the crate to verify:
 ```sh
 cargo proofs init --tool-version 0.66.0 --title 'Contract verification of my crate'
 cargo proofs login
+# Commit and push all verification inputs, including Cargo.lock, before run.
 cargo proofs run -- cargo kani
 cargo proofs publish --dry-run
 cargo proofs publish

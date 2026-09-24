@@ -137,7 +137,9 @@ export function validateSarif(s: any) {
       !artifact ||
       typeof artifact !== "object" ||
       (artifact.contents !== undefined &&
-        (!streams.has(i) ||
+        (!artifact.contents ||
+          typeof artifact.contents !== "object" ||
+          !streams.has(i) ||
           Object.keys(artifact.contents).some((k) => k !== "text")))
     )
       throw new Fault(400, "embedded_source_not_allowed");

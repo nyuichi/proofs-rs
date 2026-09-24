@@ -36,7 +36,7 @@ test("migration preserves results and both log streams without embedding source"
     },
     source,
   );
-  const s = JSON.parse(converted.bytes);
+  const s = JSON.parse(converted.bytes.toString());
   assert.deepEqual(s.runs[0].results, original.runs[0].results);
   assert.equal(
     s.runs[0].artifacts[s.runs[0].invocations[0].stdout.index].contents.text,
@@ -75,12 +75,12 @@ test("hex combined log is preserved byte-for-byte as stdoutStderr", () => {
     { id: "a0167c89-42c9-463c-b1d9-553ceabb6433", git_dirty: false },
     source,
   );
-  const r = JSON.parse(c.bytes).runs[0];
+  const r = JSON.parse(c.bytes.toString()).runs[0];
   assert.equal(
     r.artifacts[r.invocations[0].stdoutStderr.index].contents.text,
     log,
   );
-  validateSarif(JSON.parse(c.bytes));
+  validateSarif(JSON.parse(c.bytes.toString()));
 });
 test("schema migration guards unmigrated data, preserves links and removes generic artifact storage", () => {
   const db = new DatabaseSync(":memory:");

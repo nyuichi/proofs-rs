@@ -39,12 +39,13 @@ jobs:
           EMAIL_ALLOWLIST: ${{ vars.STAGING_EMAIL_ALLOWLIST }}
           EMAIL_DOMAIN: ${{ vars.STAGING_EMAIL_DOMAIN }}
           EMAIL_EVENT_SUBSCRIPTION: ${{ vars.STAGING_EMAIL_EVENT_SUBSCRIPTION }}
+      - name: Disable legacy archive endpoints before migration
+        run: npx wrangler deploy --config wrangler.staging.json
       - name: Embed legacy logs and move source references to GitHub
         run: node scripts/migrate-sarif-only.mjs staging prepare
       - run: npx wrangler d1 migrations apply DB --remote --config wrangler.staging.json
       - name: Delete obsolete source and log objects
         run: node scripts/migrate-sarif-only.mjs staging cleanup
-      - run: npx wrangler deploy --config wrangler.staging.json
       - name: Configure secrets without logging values
         run: node scripts/secrets.mjs
         env:
