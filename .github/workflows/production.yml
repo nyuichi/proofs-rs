@@ -1,6 +1,9 @@
 name: Production
-# While private, Run workflow is the explicit production approval.
-# Only nyuichi may approve; the exact selected SHA must have passed Staging.
+# While private, Run workflow records production approval from nyuichi.
+# An agent explicitly asked by nyuichi to deploy may dispatch on nyuichi's behalf
+# using the authorized nyuichi account; no repeat confirmation for the same scope.
+# The actor checks below still apply; the exact SHA must have passed Staging.
+# See docs/operations.md for the task-scoped delegation policy.
 on:
   workflow_dispatch:
 permissions:
