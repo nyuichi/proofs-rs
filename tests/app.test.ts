@@ -87,7 +87,10 @@ export async function fixture(seedTools = true) {
       "1.0.0",
       "kani-0.68.0",
       JSON.stringify({
-        artifacts: { source: "source-hash" },
+        source: {
+          repository: "https://github.com/test/source",
+          commit: "a".repeat(40),
+        },
         contracts: [
           {
             api_paths: ["sample::safe"],
@@ -192,7 +195,13 @@ for (const command of [
               arguments: command.slice(1),
               executionSuccessful: true,
               exitCode: 0,
+              stdout: { index: 0 },
+              stderr: { index: 1 },
             },
+          ],
+          artifacts: [
+            { contents: { text: "SUCCESS" } },
+            { contents: { text: "" } },
           ],
           results: [
             {
@@ -206,7 +215,7 @@ for (const command of [
     };
     const upload = async (kind: string, bytes: Uint8Array, user = "alice") => {
       const r = await app.request(
-        `https://example.test/api/v1/runs/${rid}/artifacts/${kind}`,
+        `https://example.test/api/v1/runs/${rid}/${kind}`,
         {
           method: "POST",
           headers: {
@@ -223,9 +232,7 @@ for (const command of [
     };
     const artifacts: Record<string, string> = {};
     for (const [kind, bytes] of [
-      ["source", new Uint8Array([31, 139, 8, 0])],
       ["sarif", new TextEncoder().encode(JSON.stringify(sarif))],
-      ["logs", new TextEncoder().encode("SUCCESS")],
     ] as const) {
       const r = await upload(kind, bytes);
       assert.equal(r.status, 201, JSON.stringify(r));
@@ -233,12 +240,40 @@ for (const command of [
       assert.equal((await upload(kind, bytes)).status, 200);
     }
     assert.equal(
-      (await upload("logs", new TextEncoder().encode("changed"))).status,
+      (await upload("sarif", new TextEncoder().encode("changed"))).status,
       409,
     );
     assert.equal(
-      (await upload("logs", new TextEncoder().encode("SUCCESS"), "bob")).status,
+      (
+        await upload(
+          "sarif",
+          new TextEncoder().encode(JSON.stringify(sarif)),
+          "bob",
+        )
+      ).status,
       409,
+    );
+    for (const removed of [
+      "source",
+      "logs",
+      "artifacts/source",
+      "artifacts/logs",
+      "artifacts/sarif",
+    ]) {
+      assert.equal(
+        (await upload(removed, new TextEncoder().encode("unused"))).status,
+        404,
+      );
+      assert.equal(
+        (await request(`/runs/${rid}/${removed}`, "GET")).status,
+        404,
+      );
+    }
+    assert.equal(
+      db
+        .prepare("SELECT name FROM sqlite_master WHERE name='run_artifacts'")
+        .get(),
+      undefined,
     );
     const metadata = {
       crate: "sample",
@@ -251,7 +286,11 @@ for (const command of [
       duration_ms: 1000,
       exit_code: 0,
       execution_successful: true,
-      artifacts,
+      sarif_sha256: artifacts.sarif,
+      source: {
+        repository: "https://github.com/test/source",
+        commit: "a".repeat(40),
+      },
       contracts: [
         {
           harness: "sample::check_safe",
@@ -347,12 +386,15 @@ for (const command of [
       200,
     );
     const downloaded = await app.request(
-      "https://example.test/api/v1/runs/" + rid + "/logs",
+      "https://example.test/api/v1/runs/" + rid + "/sarif",
       {},
       env,
     );
     assert.equal(downloaded.status, 200);
-    assert.equal(await downloaded.text(), "SUCCESS");
+    assert.equal(
+      ((await downloaded.json()) as any).runs[0].artifacts[0].contents.text,
+      "SUCCESS",
+    );
     assert.match(downloaded.headers.get("Content-Disposition")!, /attachment/);
     db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(
       made.body.id,

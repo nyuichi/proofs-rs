@@ -26,10 +26,8 @@ app.use("*", async (c, next) => {
 });
 app.use("*", async (c, next) =>
   bodyLimit({
-    maxSize: /^\/api\/v1\/runs\/[^/]+\/artifacts\/(source|sarif|logs)$/.test(
-      c.req.path,
-    )
-      ? 32 * 1024 * 1024
+    maxSize: /^\/api\/v1\/runs\/[^/]+\/sarif$/.test(c.req.path)
+      ? 8 * 1024 * 1024
       : 131072,
     onError: (c) => c.json({ error: "payload_too_large" }, 413),
   })(c, next),
@@ -63,9 +61,7 @@ app.use("*", async (c, next) => {
         "/api/v1/tokens/revoke",
       ].includes(path) ||
         /^\/api\/v1\/reports\/[^/]+\/revisions$/.test(path) ||
-        /^\/api\/v1\/runs\/[^/]+(\/artifacts\/(source|sarif|logs))?$/.test(
-          path,
-        ));
+        /^\/api\/v1\/runs\/[^/]+(\/sarif)?$/.test(path));
     // The admin router checks the owner's current ADMIN_GITHUB_IDS membership.
     const administrative =
       path.startsWith("/api/v1/admin/") &&

@@ -5,7 +5,6 @@ import {
   Fault,
   requireUser,
   one,
-  rows,
   stmt,
   batch,
   quota,
@@ -15,16 +14,7 @@ import {
 } from "./core";
 
 export const runs = new Hono<App>();
-const kinds = {
-  source: "application/gzip",
-  sarif: "application/sarif+json",
-  logs: "text/plain; charset=utf-8",
-};
-const limits = {
-  source: 32 * 1024 * 1024,
-  sarif: 8 * 1024 * 1024,
-  logs: 8 * 1024 * 1024,
-};
+const SARIF_LIMIT = 8 * 1024 * 1024;
 const id = (s: string) => {
   if (
     typeof s !== "string" ||
@@ -61,26 +51,17 @@ async function visibleRun(c: Ctx) {
     throw new Fault(404, "run_not_found");
   return run;
 }
-runs.post("/:run/artifacts/:kind", async (c) => {
+runs.post("/:run/sarif", async (c) => {
   const user = requireUser(c),
-    run = id(c.req.param("run") || ""),
-    kind = c.req.param("kind") as keyof typeof kinds;
-  if (!Object.hasOwn(kinds, kind))
-    throw new Fault(400, "invalid_artifact_kind");
+    run = id(c.req.param("run") || "");
   const bytes = await c.req.arrayBuffer();
-  if (!bytes.byteLength || bytes.byteLength > limits[kind])
+  if (!bytes.byteLength || bytes.byteLength > SARIF_LIMIT)
     throw new Fault(413, "artifact_too_large");
-  if (
-    kind === "source" &&
-    (new Uint8Array(bytes)[0] !== 31 || new Uint8Array(bytes)[1] !== 139)
-  )
-    throw new Fault(400, "expected_gzip");
   const sha = await digest(bytes);
   const old = await one(
     c.env.DB,
-    "SELECT * FROM run_artifacts WHERE run_id=? AND kind=?",
+    "SELECT * FROM run_sarif WHERE run_id=?",
     run,
-    kind,
   );
   if (old) {
     if (old.author_id !== user.id || old.sha256 !== sha)
@@ -89,7 +70,7 @@ runs.post("/:run/artifacts/:kind", async (c) => {
   }
   if (await one(c.env.DB, "SELECT 1 FROM verification_runs WHERE id=?", run))
     throw new Fault(409, "immutable_run");
-  if (kind === "sarif") {
+  {
     let sarif;
     try {
       sarif = JSON.parse(new TextDecoder().decode(bytes));
@@ -99,16 +80,15 @@ runs.post("/:run/artifacts/:kind", async (c) => {
     validateSarif(sarif);
   }
   await batch(c.env.DB, [quota(c.env.DB, user.id, "run_artifact", 90)]);
-  const key = `runs/${user.id}/${run}/${kind}/${sha}`;
+  const key = `runs/${user.id}/${run}/sarif/${sha}`;
   await c.env.ARCHIVE.put(key, bytes, {
-    httpMetadata: { contentType: kinds[kind] },
+    httpMetadata: { contentType: "application/sarif+json" },
   });
   await stmt(
     c.env.DB,
-    "INSERT OR IGNORE INTO run_artifacts VALUES(?,?,?,?,?,?,?)",
+    "INSERT OR IGNORE INTO run_sarif VALUES(?,?,?,?,?,?)",
     run,
     user.id,
-    kind,
     sha,
     bytes.byteLength,
     key,
@@ -116,9 +96,8 @@ runs.post("/:run/artifacts/:kind", async (c) => {
   ).run();
   const saved = await one(
     c.env.DB,
-    "SELECT * FROM run_artifacts WHERE run_id=? AND kind=?",
+    "SELECT * FROM run_sarif WHERE run_id=?",
     run,
-    kind,
   );
   if (saved.author_id !== user.id || saved.sha256 !== sha)
     throw new Fault(409, "immutable_artifact");
@@ -138,6 +117,31 @@ export function validateSarif(s: any) {
     r.results.length > 50000
   )
     throw new Fault(400, "invalid_sarif");
+  const artifacts = r.artifacts || [];
+  if (!Array.isArray(artifacts)) throw new Fault(400, "invalid_sarif");
+  const streams = new Set<number>();
+  for (const name of ["stdout", "stderr", "stdoutStderr"]) {
+    const loc = r.invocations[0][name];
+    if (loc === undefined) continue;
+    if (
+      !Number.isInteger(loc?.index) ||
+      loc.index < 0 ||
+      typeof artifacts[loc.index]?.contents?.text !== "string"
+    )
+      throw new Fault(400, "embedded_log_required");
+    streams.add(loc.index);
+  }
+  if (!streams.size) throw new Fault(400, "embedded_log_required");
+  for (const [i, artifact] of artifacts.entries()) {
+    if (
+      !artifact ||
+      typeof artifact !== "object" ||
+      (artifact.contents !== undefined &&
+        (!streams.has(i) ||
+          Object.keys(artifact.contents).some((k) => k !== "text")))
+    )
+      throw new Fault(400, "embedded_source_not_allowed");
+  }
   for (const result of r.results)
     if (
       typeof result?.message?.text !== "string" ||
@@ -211,18 +215,21 @@ runs.post("/:run", async (c) => {
     )
       throw new Fault(400, "invalid_run_contract");
   }
-  const artifacts = await rows(
+  const source = validateSource(b.source);
+  if (
+    b.artifacts !== undefined ||
+    b.git_commit !== undefined ||
+    b.git_dirty !== undefined
+  )
+    throw new Fault(400, "obsolete_run_metadata");
+  const artifact = await one(
     c.env.DB,
-    "SELECT * FROM run_artifacts WHERE run_id=? AND author_id=?",
+    "SELECT * FROM run_sarif WHERE run_id=? AND author_id=?",
     run,
     u.id,
   );
-  if (
-    artifacts.length !== 3 ||
-    artifacts.some((a) => b.artifacts?.[a.kind] !== a.sha256)
-  )
-    throw new Fault(400, "incomplete_run_artifacts");
-  const artifact = artifacts.find((a) => a.kind === "sarif")!;
+  if (!artifact || b.sarif_sha256 !== artifact.sha256)
+    throw new Fault(400, "incomplete_run_sarif");
   const object = await c.env.ARCHIVE.get(artifact.r2_key);
   if (!object) throw new Fault(409, "artifact_unavailable");
   const sarif = await object.json<any>();
@@ -253,8 +260,21 @@ runs.post("/:run", async (c) => {
   if (!b.execution_successful || b.exit_code !== 0)
     throw new Fault(400, "unsuccessful_run");
   const normalized = {
-    ...b,
     id: run,
+    tool_version_id: tv.id,
+    source,
+    sarif_sha256: artifact.sha256,
+    command: b.command,
+    working_directory: b.working_directory,
+    started_at: b.started_at,
+    finished_at: b.finished_at,
+    duration_ms: b.duration_ms,
+    exit_code: b.exit_code,
+    execution_successful: b.execution_successful,
+    contracts: b.contracts,
+    platform: text(b.platform, "Platform", 1000),
+    rustc: text(b.rustc, "Rust compiler", 4000),
+    environment: b.environment || {},
     crate: text(b.crate, "Crate", 100, true),
     version: text(b.version, "Version", 100, true),
   };
@@ -293,26 +313,37 @@ runs.get("/:run", async (c) => {
   const r = await visibleRun(c);
   return c.json(JSON.parse(r.metadata_json));
 });
-runs.get("/:run/:kind", async (c) => {
-  const run = await visibleRun(c),
-    kind = c.req.param("kind") as keyof typeof kinds;
-  if (!Object.hasOwn(kinds, kind)) throw new Fault(404, "artifact_not_found");
+runs.get("/:run/sarif", async (c) => {
+  const run = await visibleRun(c);
   const a = await one(
     c.env.DB,
-    "SELECT * FROM run_artifacts WHERE run_id=? AND kind=?",
+    "SELECT * FROM run_sarif WHERE run_id=?",
     run.id,
-    kind,
   );
   const object = a && (await c.env.ARCHIVE.get(a.r2_key));
   if (!object) throw new Fault(404, "artifact_not_found");
-  c.header("Content-Type", kinds[kind]);
+  c.header("Content-Type", "application/sarif+json");
   c.header(
     "Content-Disposition",
-    `attachment; filename="${run.id}.${kind === "source" ? "tar.gz" : kind === "sarif" ? "sarif.json" : "log"}"`,
+    `attachment; filename="${run.id}.sarif.json"`,
   );
   c.header("Content-Security-Policy", "default-src 'none'; sandbox");
   return c.body(object.body);
 });
+export function validateSource(source: any) {
+  // Immutable external Git source; no source content is accepted or retained.
+  if (
+    !source ||
+    typeof source.repository !== "string" ||
+    !/^https:\/\/github\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(
+      source.repository,
+    ) ||
+    typeof source.commit !== "string" ||
+    !/^[a-f0-9]{40}$/.test(source.commit)
+  )
+    throw new Fault(400, "invalid_source_reference");
+  return { repository: source.repository, commit: source.commit };
+}
 export async function validateReportRuns(c: Ctx, b: any, v: any) {
   if (
     !Array.isArray(b.run_ids) ||
@@ -342,9 +373,9 @@ export async function validateReportRuns(c: Ctx, b: any, v: any) {
     )
       throw new Fault(400, "run_report_mismatch");
     const m = JSON.parse(r.metadata_json);
-    if (source && source !== m.artifacts.source)
+    if (source && source !== JSON.stringify(m.source))
       throw new Fault(400, "inconsistent_run_sources");
-    source = m.artifacts.source;
+    source = JSON.stringify(m.source);
     contracts.push(...m.contracts);
   }
   for (const claim of v.claims)

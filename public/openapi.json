@@ -11,14 +11,14 @@
     }
   ],
   "paths": {
-    "/api/v1/runs/{run}/artifacts/{kind}": {
+    "/api/v1/runs/{run}/sarif": {
       "post": {
-        "operationId": "post_api_v1_runs_run_artifacts_kind",
-        "summary": "Upload immutable run artifact",
+        "operationId": "post_api_v1_runs_run_sarif",
+        "summary": "Upload immutable SARIF with embedded logs",
         "tags": [
           "Registry"
         ],
-        "description": "Upload source (gzip, max 32 MiB), sarif (JSON, max 8 MiB), or logs (text, max 8 MiB) as the raw request body. Exact retries succeed; changing an artifact is rejected. 90 new artifacts per user per UTC day.",
+        "description": "Upload SARIF 2.1.0 (max 8 MiB including embedded stdout/stderr) as the raw request body. Source files are not accepted. Exact retries succeed; changing an artifact is rejected. 90 new artifacts per user per UTC day.",
         "security": [
           {
             "session": [],
@@ -31,15 +31,6 @@
         "parameters": [
           {
             "name": "run",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "kind",
             "in": "path",
             "required": true,
             "schema": {
@@ -126,6 +117,80 @@
                 "format": "binary"
               }
             }
+          }
+        }
+      },
+      "get": {
+        "operationId": "get_api_v1_runs_run_sarif",
+        "summary": "Download SARIF with embedded execution logs",
+        "tags": [
+          "Registry"
+        ],
+        "description": "Returns a SARIF attachment; access follows report visibility.",
+        "security": [
+          {},
+          {
+            "session": []
+          },
+          {
+            "bearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "run",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "maxLength": 10000
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/octet-stream": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/Error400"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "403": {
+            "$ref": "#/components/responses/Error403"
+          },
+          "404": {
+            "$ref": "#/components/responses/Error404"
+          },
+          "409": {
+            "$ref": "#/components/responses/Error409"
+          },
+          "413": {
+            "$ref": "#/components/responses/Error413"
+          },
+          "415": {
+            "$ref": "#/components/responses/Error415"
+          },
+          "428": {
+            "$ref": "#/components/responses/Error428"
+          },
+          "429": {
+            "$ref": "#/components/responses/Error429"
+          },
+          "500": {
+            "$ref": "#/components/responses/Error500"
+          },
+          "503": {
+            "$ref": "#/components/responses/Error503"
           }
         }
       }
@@ -229,7 +294,7 @@
             "application/json": {
               "schema": {
                 "type": "object",
-                "description": "Run metadata: crate, version, tool_version_id, command (argv), working_directory, started_at, finished_at, duration_ms, exit_code, execution_successful, contracts, artifacts (SHA-256 by kind), platform, rustc and environment. All three artifacts must already exist. Contracts must map to successful SARIF results."
+                "description": "Run metadata: crate, version, tool_version_id, command (argv), working_directory, started_at, finished_at, duration_ms, exit_code, execution_successful, contracts, sarif_sha256, source (repository HTTPS GitHub URL and full commit SHA), platform, rustc and environment. SARIF must already exist. Contracts must map to successful SARIF results."
               }
             }
           }
@@ -269,91 +334,6 @@
               "application/json": {
                 "schema": {
                   "type": "object"
-                }
-              }
-            }
-          },
-          "400": {
-            "$ref": "#/components/responses/Error400"
-          },
-          "401": {
-            "$ref": "#/components/responses/Error401"
-          },
-          "403": {
-            "$ref": "#/components/responses/Error403"
-          },
-          "404": {
-            "$ref": "#/components/responses/Error404"
-          },
-          "409": {
-            "$ref": "#/components/responses/Error409"
-          },
-          "413": {
-            "$ref": "#/components/responses/Error413"
-          },
-          "415": {
-            "$ref": "#/components/responses/Error415"
-          },
-          "428": {
-            "$ref": "#/components/responses/Error428"
-          },
-          "429": {
-            "$ref": "#/components/responses/Error429"
-          },
-          "500": {
-            "$ref": "#/components/responses/Error500"
-          },
-          "503": {
-            "$ref": "#/components/responses/Error503"
-          }
-        }
-      }
-    },
-    "/api/v1/runs/{run}/{kind}": {
-      "get": {
-        "operationId": "get_api_v1_runs_run_kind",
-        "summary": "Download recorded source, SARIF or logs",
-        "tags": [
-          "Registry"
-        ],
-        "description": "kind is source, sarif or logs. Returns an attachment; access follows report visibility.",
-        "security": [
-          {},
-          {
-            "session": []
-          },
-          {
-            "bearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "run",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          },
-          {
-            "name": "kind",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000
-            }
-          }
-        ],
-        "responses": {
-          "200": {
-            "description": "Success",
-            "content": {
-              "application/octet-stream": {
-                "schema": {
-                  "type": "string",
-                  "format": "binary"
                 }
               }
             }

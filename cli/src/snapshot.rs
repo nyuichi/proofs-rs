@@ -1,5 +1,4 @@
 use anyhow::{ensure, Context, Result};
-use flate2::{write::GzEncoder, Compression};
 use sha2::{Digest, Sha256};
 use std::{
     collections::BTreeMap,
@@ -103,12 +102,8 @@ fn walk_locks(root: &Path) -> Result<Vec<PathBuf>> {
     }
     Ok(found)
 }
-pub fn capture(root: &Path, dest: &Path, archive: &Path) -> Result<BTreeMap<String, String>> {
+pub fn capture(root: &Path, dest: &Path) -> Result<BTreeMap<String, String>> {
     let mut hashes = BTreeMap::new();
-    let mut tar = tar::Builder::new(GzEncoder::new(
-        fs::File::create(archive)?,
-        Compression::default(),
-    ));
     for (name, path) in files(root)? {
         let bytes = fs::read(&path)?;
         let to = dest.join(&name);
@@ -116,28 +111,9 @@ pub fn capture(root: &Path, dest: &Path, archive: &Path) -> Result<BTreeMap<Stri
         fs::write(&to, &bytes)?;
         let permissions = fs::metadata(&path)?.permissions();
         fs::set_permissions(&to, permissions)?;
-        let mut h = tar::Header::new_gnu();
-        h.set_size(bytes.len() as u64);
-        h.set_mode(if executable(&path)? { 0o755 } else { 0o644 });
-        h.set_mtime(0);
-        h.set_cksum();
-        tar.append_data(&mut h, &name, bytes.as_slice())?;
         hashes.insert(name, sha(&bytes));
     }
-    tar.into_inner()?.finish()?;
     Ok(hashes)
-}
-fn executable(path: &Path) -> Result<bool> {
-    #[cfg(unix)]
-    {
-        use std::os::unix::fs::PermissionsExt;
-        Ok(fs::metadata(path)?.permissions().mode() & 0o111 != 0)
-    }
-    #[cfg(not(unix))]
-    {
-        let _ = path;
-        Ok(false)
-    }
 }
 pub fn unchanged(root: &Path, hashes: &BTreeMap<String, String>) -> Result<()> {
     for (name, expected) in hashes {
@@ -168,8 +144,7 @@ mod tests {
             fs::write(src.join(name), value).unwrap();
         }
         let dest = d.path().join("copy");
-        let archive = d.path().join("source.tar.gz");
-        let hashes = capture(&src, &dest, &archive).unwrap();
+        let hashes = capture(&src, &dest).unwrap();
         assert!(hashes.contains_key("Cargo.lock"));
         assert!(!hashes.contains_key(".env"));
         fs::write(src.join("lib.rs"), "changed").unwrap();

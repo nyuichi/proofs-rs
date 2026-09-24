@@ -49,17 +49,13 @@ pub fn load(project: &Project, selected: Option<&str>) -> Result<(PathBuf, Recor
         record.metadata["execution_successful"] == true && !record.contracts.is_empty(),
         "This run did not produce publishable verification results"
     );
-    for (kind, name) in [
-        ("source", "source.tar.gz"),
-        ("sarif", "run.sarif.json"),
-        ("logs", "run.log"),
-    ] {
-        ensure!(
-            snapshot::sha(&fs::read(dir.join(name))?)
-                == record.metadata["artifacts"][kind].as_str().unwrap_or(""),
-            "Recorded {kind} artifact changed; run verification again"
-        );
-    }
+    ensure!(record.metadata["source"]["commit"].is_string(),
+        "This recording uses obsolete source archives; record a new run with cargo-proofs 0.3 or later");
+    ensure!(
+        snapshot::sha(&fs::read(dir.join("run.sarif.json"))?)
+            == record.metadata["sarif_sha256"].as_str().unwrap_or(""),
+        "Recorded SARIF changed; run verification again"
+    );
     let tool = serde_json::to_value(project.config()?.tool)?;
     ensure!(
         tool == record.config_tool,
@@ -141,6 +137,20 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
             .args(["metadata", "--format-version", "1", "--manifest-path"])
             .arg(&project.manifest),
     )?;
+    let source_ref = crate::git::published_source(
+        &root,
+        config
+            .git
+            .as_ref()
+            .and_then(|g| g.remote.as_deref())
+            .unwrap_or("origin"),
+    )?;
+    // Every verification input must be available at the external commit, including lockfiles.
+    for name in snapshot::files(&root)?.keys() {
+        crate::git::run(&root, &["ls-files", "--error-unmatch", "--", name]).with_context(
+            || format!("Commit and push {name} before recording (including Cargo.lock)"),
+        )?;
+    }
     let rid = uuid::Uuid::new_v4().to_string();
     let base = state_dir(&project)?;
     let dir = base.join("runs").join(&rid);
@@ -150,7 +160,28 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
     fs::create_dir(&source)?;
     // macOS temporary paths can be aliases (/var -> /private/var).
     let source = source.canonicalize()?;
-    let hashes = snapshot::capture(&root, &source, &dir.join("source.tar.gz"))?;
+    let hashes = snapshot::capture(&root, &source)?;
+    // Check the actual copied bytes against the fixed commit, closing checkout races.
+    let commit = source_ref["commit"]
+        .as_str()
+        .context("Missing source commit")?;
+    for name in hashes.keys() {
+        let expected = crate::git::run(&root, &["rev-parse", &format!("{commit}:{name}")])?;
+        let actual = crate::git::run(
+            &root,
+            &[
+                "hash-object",
+                "--no-filters",
+                "--",
+                source.join(name).to_str().context("Non-UTF8 path")?,
+            ],
+        )?;
+        ensure!(
+            expected == actual,
+            "Input {name} differs from the published commit; commit and push before recording"
+        );
+    }
+
     ensure!(
         source.join(&relative_manifest).exists()
             && source
@@ -260,10 +291,6 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
         String::from_utf8_lossy(&stdout).replace(&source.to_string_lossy().to_string(), ".");
     let stderr =
         String::from_utf8_lossy(&stderr).replace(&source.to_string_lossy().to_string(), ".");
-    fs::write(
-        dir.join("run.log"),
-        format!("=== stdout ===\n{stdout}\n=== stderr ===\n{stderr}"),
-    )?;
     let parsed = if config.tool.is_creusot() {
         creusot_results(&source, &before, &contracts)
     } else {
@@ -283,23 +310,22 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
     if let Some(d) = &diagnostic {
         invocation["toolExecutionNotifications"] = json!([{"level":"error","message":{"text":d}}]);
     }
-    let sarif = json!({"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":config.tool.name,"version":config.tool.version}},"invocations":[invocation],"results":results,"artifacts":hashes.iter().map(|(name,hash)|json!({"location":{"uri":name},"hashes":{"sha-256":hash}})).collect::<Vec<_>>(),"properties":{"sourceSnapshot":snapshot::sha(&fs::read(dir.join("source.tar.gz"))?),"recorderVersion":env!("CARGO_PKG_VERSION")}}]});
-    fs::write(
-        dir.join("run.sarif.json"),
-        serde_json::to_vec_pretty(&sarif)?,
-    )?;
-    for (name, limit) in [
-        ("source.tar.gz", snapshot::MAX_SOURCE),
-        ("run.sarif.json", 8 * 1024 * 1024),
-        ("run.log", 8 * 1024 * 1024),
-    ] {
-        ensure!(
-            fs::metadata(dir.join(name))?.len() <= limit,
-            "Recorded {name} exceeds upload size limit"
-        );
-    }
-    let artifact_hashes = json!({"source":snapshot::sha(&fs::read(dir.join("source.tar.gz"))?),"sarif":snapshot::sha(&fs::read(dir.join("run.sarif.json"))?),"logs":snapshot::sha(&fs::read(dir.join("run.log"))?)});
-    let metadata = json!({"id":rid,"crate":project.name,"version":project.version,"command":command,"working_directory":path_string(relative_cwd),"started_at":started.to_rfc3339(),"finished_at":finished.to_rfc3339(),"duration_ms":duration,"exit_code":status.code(),"execution_successful":successful,"platform":format!("{} {}",std::env::consts::OS,std::env::consts::ARCH),"rustc":output(Command::new("rustc").arg("-vV").current_dir(source.join(relative_cwd))).unwrap_or_default(),"environment":env,"artifacts":artifact_hashes,"contracts":verified,"diagnostic":diagnostic,"git_commit":crate::git::run(&root,&["rev-parse","HEAD"]).ok(),"git_dirty":crate::git::run(&root,&["status","--porcelain"]).ok().map(|s|!s.is_empty())});
+    let mut artifacts: Vec<Value> = hashes
+        .iter()
+        .map(|(name, hash)| json!({"location":{"uri":name},"hashes":{"sha-256":hash}}))
+        .collect();
+    invocation["stdout"] = json!({"index":artifacts.len()});
+    artifacts.push(json!({"contents":{"text":stdout}}));
+    invocation["stderr"] = json!({"index":artifacts.len()});
+    artifacts.push(json!({"contents":{"text":stderr}}));
+    let sarif = json!({"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":config.tool.name,"version":config.tool.version}},"invocations":[invocation],"results":results,"artifacts":artifacts,"versionControlProvenance":[{"repositoryUri":source_ref["repository"],"revisionId":source_ref["commit"]}],"properties":{"recorderVersion":env!("CARGO_PKG_VERSION")}}]});
+    let bytes = serde_json::to_vec_pretty(&sarif)?;
+    fs::write(dir.join("run.sarif.json"), &bytes)?;
+    ensure!(
+        bytes.len() <= 8 * 1024 * 1024,
+        "SARIF including logs exceeds 8 MiB"
+    );
+    let metadata = json!({"id":rid,"crate":project.name,"version":project.version,"command":command,"working_directory":path_string(relative_cwd),"started_at":started.to_rfc3339(),"finished_at":finished.to_rfc3339(),"duration_ms":duration,"exit_code":status.code(),"execution_successful":successful,"platform":format!("{} {}",std::env::consts::OS,std::env::consts::ARCH),"rustc":output(Command::new("rustc").arg("-vV").current_dir(source.join(relative_cwd))).unwrap_or_default(),"environment":env,"sarif_sha256":snapshot::sha(&bytes),"source":source_ref,"contracts":verified,"diagnostic":diagnostic});
     let record = Record {
         metadata,
         contracts: verified,
@@ -312,7 +338,7 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
     unchanged?;
     ensure!(
         successful,
-        "Verification did not produce publishable results. Logs and SARIF saved locally. {}",
+        "Verification did not produce publishable results. SARIF including logs saved locally. {}",
         diagnostic.unwrap_or_default()
     );
     Ok(())

@@ -79,7 +79,7 @@ enum Commands {
         #[arg(last=true, required=true, num_args=2..)]
         command: Vec<String>,
     },
-    /// Publish a recorded verification run and its source snapshot.
+    /// Publish recorded SARIF results with embedded execution logs.
     Publish {
         #[command(flatten)]
         project: ProjectArgs,

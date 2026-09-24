@@ -309,16 +309,10 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
         );
         println!("Artifacts: {}", run_dir.display());
     } else {
-        for (kind, file) in [
-            ("source", "source.tar.gz"),
-            ("sarif", "run.sarif.json"),
-            ("logs", "run.log"),
-        ] {
-            api.upload(
-                &format!("/api/v1/runs/{run_id}/artifacts/{kind}"),
-                &fs::read(run_dir.join(file))?,
-            )?;
-        }
+        api.upload(
+            &format!("/api/v1/runs/{run_id}/sarif"),
+            &fs::read(run_dir.join("run.sarif.json"))?,
+        )?;
         api.request(
             "POST",
             &format!("/api/v1/runs/{run_id}"),
@@ -336,7 +330,18 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
             seen.insert(api_id.clone()),
             "Multiple contracts resolve to the same public API {api_path}"
         );
-        let evidence = format!("{}/api/v1/runs/{run_id}/source", api.server);
+        let evidence = format!(
+            "{}/blob/{}/{}#L{}-L{}",
+            recorded.metadata["source"]["repository"]
+                .as_str()
+                .context("Missing source repository")?,
+            recorded.metadata["source"]["commit"]
+                .as_str()
+                .context("Missing source commit")?,
+            contract.file,
+            contract.first_line,
+            contract.last_line
+        );
         println!(
             "{} → {}\n  precondition: {}\n  evidence: {}",
             contract.harness, api_path, contract.precondition, evidence
@@ -377,7 +382,7 @@ pub fn run(server: &str, args: &ProjectArgs, options: Options) -> Result<()> {
             bail!("Web revision conflict. Inspect publish --dry-run; use --force to publish local changes over the latest revision");
         }
     }
-    let generated = json!({"crate":project.name,"version":project.version,"tool_version_id":tool,"evidence_url":format!("{}/api/v1/runs/{run_id}/source",api.server),"run_ids":[run_id],"claims":claims});
+    let generated = json!({"crate":project.name,"version":project.version,"tool_version_id":tool,"evidence_url":format!("{}/tree/{}", recorded.metadata["source"]["repository"].as_str().unwrap(), recorded.metadata["source"]["commit"].as_str().unwrap()),"run_ids":[run_id],"claims":claims});
     // Unspecified editorial fields are preserved. Force changes only fields owned by this CLI/config.
     let mut baseline = remote.clone();
     if saved.report_id == selected {

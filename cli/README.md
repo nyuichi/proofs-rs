@@ -4,7 +4,7 @@ A Rust CLI for publishing verification reports to [proofs.rs](https://proofs.rs)
 
 Creusot publishes only `panic_contract`, not `no_ub` or functional correctness claims.
 
-Run verification through `cargo proofs run` before publishing. The CLI executes the tool on a frozen source snapshot, records observed check results as SARIF 2.1.0, and saves stdout/stderr. `publish` uploads the snapshot, SARIF, and logs to proofs.rs. No Git commit, remote, or push is required.
+Commit and push the source and Cargo.lock to GitHub, then run verification through `cargo proofs run` before publishing. The CLI records observed results and embeds stdout/stderr in SARIF 2.1.0. `publish` uploads only that SARIF. Source remains on GitHub; no additional push is needed between run and publish.
 
 Reports remain author-submitted evidence, not independent service certification. A harness may constrain inputs, concrete types, stubs, or execution beyond the extracted `requires`; describe those restrictions in the report's assumptions/limitations.
 
@@ -102,9 +102,11 @@ target = "annotated" # required: "annotated" or "all"
 
 ## Recording and reproduction
 
-`run` checks the installed tool version against `proofs.toml`, resolves Cargo dependencies and updates Cargo.lock if necessary, then copies the source. The source root is the Git root when available, otherwise the Cargo workspace root. All local path dependencies must fit inside it. Verification runs in that copy with a separate build directory; changing the original checkout afterwards does not change the recorded evidence.
+`run` checks the installed tool version against `proofs.toml` and resolves Cargo dependencies. Commit and push all inputs, including Cargo.lock, before recording; a changed lockfile requires committing before retrying. `[git].remote` selects the remote (default `origin`). A clean working tree and a commit reachable on that remote are required. Source URLs use GitHub and a full immutable commit SHA.
 
-The snapshot respects ignore files and includes Cargo.lock even when ignored. It excludes `.git`, `target`, `node_modules`, `.proofs`, common credential directories, `.env*`, `*.pem`, and `*.key`; symlinks are rejected. This is not a general secret scanner: review the local source archive and logs before publishing. The CLI prints their location. Source contents are limited to 32 MiB and 10,000 files; uploaded SARIF and logs are each limited to 8 MiB.
+Verification executes in a temporary local copy, which is deleted afterwards. No source archive is created or uploaded. The copy respects ignore files, includes Cargo.lock, excludes build/credential directories and rejects symlinks. Every input must be tracked and match the recorded commit. Local copies are limited to 32 MiB and 10,000 files.
+
+The persistent run directory contains `record.json` and `run.sarif.json`. Source paths and hashes are in SARIF; source file contents are not. Standard output and error are embedded in `artifacts[].contents.text` and referenced by `invocations[].stdout` / `stderr`. Review these logs before publishing. The complete SARIF has an 8 MiB limit. Old archive-based CLI recordings must be rerun with 0.3.0.
 
 - Kani: regular serial check output is supported. Checks are associated with the exact observed contract harness. Quiet/terse output, parallel jobs, options disabling safety checks, and unknown result formats are rejected. Unexecuted harnesses do not generate claims; unreachable checks remain labeled unreachable.
 - Creusot: a prover run must create fresh `proof.json` sessions that map unambiguously to selected APIs. Compilation alone, unchanged stale sessions, unresolved proof goals, and unsupported proof layouts do not certify an API. The usual free-function layout is supported; generated method layouts may require an adapter extension.
@@ -112,7 +114,7 @@ The snapshot respects ignore files and includes Cargo.lock even when ignored. It
 - Pass compilation flags **after** `--`, as part of the actual verifier command, for example `cargo proofs run -- cargo kani --features foo`. The same flags drive contract discovery. Select the workspace package with `-p NAME` as appropriate.
 - One run per CLI publication is supported. `publish` selects the latest recording, or use `publish --run UUID` for an explicit recording. Changes to tool configuration or crate/version require a new run.
 
-The report's collapsed **Reproduce** section contains source download/extraction commands, the exact recorded command, check-to-claim links, execution metadata, and source/SARIF/log downloads. Install the report's tool version and recorded Rust toolchain first. Cargo.lock and recorded compiler flags help reproduce the build; external system dependencies and unrecorded environment inputs are not bundled. Only `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, and `RUSTDOCFLAGS` environment overrides are recorded; arbitrary environment variables and credentials are not uploaded.
+The report's collapsed **Reproduce** section contains Git clone/checkout commands for the external commit, the exact recorded command, check-to-claim links, execution metadata, the SARIF download, and embedded logs. Install the report's tool version and recorded Rust toolchain first. System dependencies are not bundled. Only `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, and `RUSTDOCFLAGS` environment overrides are recorded.
 
 ## Revisions, conflicts, and recovery
 
