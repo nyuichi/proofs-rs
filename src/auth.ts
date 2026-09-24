@@ -13,6 +13,7 @@ import {
   batch,
   quota,
   requireUser,
+  isAdmin,
   jsonBody,
 } from "./core";
 const expiry = (ms: number) => new Date(Date.now() + ms).toISOString();
@@ -78,9 +79,7 @@ async function finishLogin(
 ) {
   const db = c.env.DB;
   const id = existing?.id || uid();
-  const role = c.env.ADMIN_GITHUB_IDS.split(",").includes(String(user.id))
-    ? "admin"
-    : "user";
+  const role = isAdmin(c.env, user.id) ? "admin" : "user";
   const ss = consume ? [consume] : [];
   ss.push(
     stmt(

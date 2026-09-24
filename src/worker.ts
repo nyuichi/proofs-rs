@@ -66,7 +66,12 @@ app.use("*", async (c, next) => {
         /^\/api\/v1\/runs\/[^/]+(\/artifacts\/(source|sarif|logs))?$/.test(
           path,
         ));
-    if (!readable && !writable) throw new Fault(403, "insufficient_scope");
+    // The admin router checks the owner's current ADMIN_GITHUB_IDS membership.
+    const administrative =
+      path.startsWith("/api/v1/admin/") &&
+      ["GET", "POST"].includes(c.req.method);
+    if (!readable && !writable && !administrative)
+      throw new Fault(403, "insufficient_scope");
   }
   if (write && !publicDevicePaths.has(path)) {
     if (!bearer && c.req.header("origin") !== c.env.APP_ORIGIN)

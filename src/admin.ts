@@ -3,6 +3,7 @@ import {
   App,
   Fault,
   requireUser,
+  isAdmin,
   jsonBody,
   text,
   uid,
@@ -16,7 +17,7 @@ import {
 export const admin = new Hono<App>();
 admin.use("*", async (c, next) => {
   const u = requireUser(c);
-  if (u.role !== "admin") throw new Fault(403, "admin_required");
+  if (!isAdmin(c.env, u.github_id)) throw new Fault(403, "admin_required");
   await next();
 });
 admin.get("/audit", async (c) =>

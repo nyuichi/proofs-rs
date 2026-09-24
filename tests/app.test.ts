@@ -103,6 +103,7 @@ export async function fixture(seedTools = true) {
     DB: binding,
     ENVIRONMENT: "staging",
     APP_ORIGIN: "https://example.test",
+    ADMIN_GITHUB_IDS: "3",
     TERMS_VERSION: "test",
     EMAIL_ALLOWLIST: "",
     ARCHIVE: { put: async () => {} },
@@ -1902,4 +1903,153 @@ test("tool version limitations are operator-maintained, live on old reports, and
     "admin",
   );
   assert.equal((await request(version)).body.limitations, "");
+});
+
+test("existing bearer tokens use current admin IDs with audit and authentication guards", async () => {
+  const { env, db } = await fixture(false);
+  const token = "c".repeat(64);
+  db.prepare(
+    "INSERT INTO api_tokens(id,user_id,token_hash,scope,created_at,expires_at) VALUES('admin-token','admin',?,'publish',?,?)",
+  ).run(
+    await hash(token),
+    new Date().toISOString(),
+    new Date(Date.now() + 86400000).toISOString(),
+  );
+  const action = {
+    action: "tool",
+    target: "kani",
+    name: "kani",
+    description: "Verifier",
+    url: "https://model-checking.github.io/kani/",
+    active: true,
+    reason: "Register verifier",
+  };
+  // Deliberately omit cookies, Origin and CSRF, exactly as a curl client would.
+  const call = async (path: string, body?: unknown, credential = token) => {
+    const res = await app.request(
+      "https://example.test/api/v1" + path,
+      {
+        method: body === undefined ? "GET" : "POST",
+        headers: {
+          Authorization: "Bearer " + credential,
+          "Content-Type": "application/json",
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      },
+      env,
+    );
+    return { status: res.status, body: (await res.json()) as any };
+  };
+  // A stale stored role does not prevent access for a currently configured admin.
+  db.exec("UPDATE users SET role='user' WHERE id='admin'");
+  env.ADMIN_GITHUB_IDS = "99, 3 ";
+  assert.equal((await call("/admin/action", action)).status, 200);
+  assert.equal(
+    (
+      await call("/admin/action", {
+        action: "tool_version",
+        target: "kani-0.68.0",
+        tool_id: "kani",
+        version: "0.68.0",
+        selectable: true,
+        reason: "Register release",
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    (
+      await call("/admin/action", {
+        action: "tool_version_limitations",
+        target: "kani-0.68.0",
+        limitations: "Test limitations",
+        reason: "Document limitations",
+      })
+    ).status,
+    200,
+  );
+  assert.equal(
+    db.prepare("SELECT limitations FROM tool_versions").get()!.limitations,
+    "Test limitations",
+  );
+  const audit = await call("/admin/audit");
+  assert.equal(audit.status, 200);
+  assert.equal(audit.body.items.length, 3);
+  assert.ok(audit.body.items.every((item: any) => item.actor_id === "admin"));
+  assert.equal((await call("/admin/deliveries")).status, 200);
+  assert.equal((await call("/admin/comments/missing/history")).status, 200);
+  // The exception is limited to admin routes, not other browser-only endpoints.
+  assert.equal((await call("/me/tokens")).body.error, "insufficient_scope");
+  assert.equal(
+    (await call("/admin/action", { ...action, reason: "" })).status,
+    400,
+  );
+
+  db.exec("UPDATE users SET role='admin' WHERE id='admin'");
+  for (const ids of ["", "33", "1,2"]) {
+    env.ADMIN_GITHUB_IDS = ids;
+    assert.equal((await call("/admin/audit")).body.error, "admin_required");
+    assert.equal(
+      (await call("/admin/action", action)).body.error,
+      "admin_required",
+    );
+  }
+  env.ADMIN_GITHUB_IDS = "3";
+  db.exec("UPDATE api_tokens SET user_id='alice'");
+  assert.equal((await call("/admin/audit")).body.error, "admin_required");
+  assert.equal(
+    (await call("/admin/action", action)).body.error,
+    "admin_required",
+  );
+  db.exec("UPDATE api_tokens SET user_id='admin'");
+  db.exec("UPDATE users SET accepted_terms_version='old' WHERE id='admin'");
+  assert.equal((await call("/admin/action", action)).status, 428);
+  db.exec(
+    "UPDATE users SET accepted_terms_version='test',status='suspended' WHERE id='admin'",
+  );
+  assert.equal((await call("/admin/audit")).body.error, "account_suspended");
+  db.exec("UPDATE users SET status='active' WHERE id='admin'");
+  db.exec("UPDATE api_tokens SET revoked_at='2026-01-01'");
+  assert.equal(
+    (await call("/admin/action", action)).body.error,
+    "invalid_token",
+  );
+  db.exec("UPDATE api_tokens SET revoked_at=NULL,expires_at='2000-01-01'");
+  assert.equal((await call("/admin/audit")).body.error, "invalid_token");
+  assert.equal(
+    (await call("/admin/audit", undefined, "bad")).body.error,
+    "invalid_token",
+  );
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM audit_events").get()!.n, 4);
+});
+
+test("browser admin requests retain CSRF and origin checks and follow current admin IDs", async () => {
+  const { env, request } = await fixture();
+  const action = {
+    action: "pause",
+    target: "imports_paused",
+    value: true,
+    reason: "Test",
+  };
+  assert.equal(
+    (
+      await request("/admin/action", "POST", action, "admin", {
+        "X-CSRF-Token": "wrong",
+      })
+    ).body.error,
+    "invalid_csrf",
+  );
+  assert.equal(
+    (
+      await request("/admin/action", "POST", action, "admin", {
+        Origin: "https://other.test",
+      })
+    ).body.error,
+    "invalid_origin",
+  );
+  env.ADMIN_GITHUB_IDS = "";
+  assert.equal(
+    (await request("/admin/audit", "GET", undefined, "admin")).body.error,
+    "admin_required",
+  );
 });

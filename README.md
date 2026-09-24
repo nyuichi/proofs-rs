@@ -37,7 +37,7 @@ No GitHub tokens or client secrets are committed or included in the browser buil
 - Comments belong only to reports. Removed claims keep permanent links to their historical report revision.
 - Replies form an unbounded-depth tree; every reply level indents. Deleted comments retain a public tombstone and private history.
 - Notifications arise only from new comments, deduplicate recipients and skip the author. Unknown send outcomes are not automatically retried.
-- Admin APIs require the same session/CSRF/terms guards plus the admin role. Every moderation action and history read is audited. There is no public history endpoint.
+- Admin APIs require current `ADMIN_GITHUB_IDS` membership. Existing API tokens are accepted for listed owners; browser writes retain session/CSRF checks, and all writes retain terms checks. Every moderation action and history read is audited. There is no public history endpoint.
 
 ## Email disabled
 
@@ -53,7 +53,7 @@ Before production: configure OAuth, domain/DNS and contact mailbox, Email Servic
 Open `/docs/api` for the API reference and `/openapi.json` for OpenAPI 3.1.
 The fixed public client ID is `proofs-cli`. Start at `POST /auth/device/code`,
 show the returned user code, open the verification URL, and poll
-`POST /auth/device/token`. Tokens have publishing scope, expire after 90 days,
+`POST /auth/device/token`. Tokens have publishing scope (plus admin API access while the owner is listed in `ADMIN_GITHUB_IDS`), expire after 90 days,
 and can be revoked in Settings or through `POST /api/v1/tokens/revoke`.
 The Rust CLI lives in [`cli/`](cli/README.md) so API and client changes can be reviewed together.
 Install it from this repository with `cargo install --path cli --locked` (Rust 1.91+).
