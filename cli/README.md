@@ -4,7 +4,7 @@ A Rust CLI for publishing verification reports to [proofs.rs](https://proofs.rs)
 
 Creusot publishes only `panic_contract`, not `no_ub` or functional correctness claims.
 
-Run verification through `cargo proofs run` before publishing. The CLI executes the tool on a frozen source snapshot, records observed check results as SARIF 2.1.0, and saves stdout/stderr. `publish` uploads the snapshot, SARIF, and logs to proofs.rs. No Git commit, remote, or push is required.
+Commit and push the source and Cargo.lock to GitHub, then run verification through `cargo proofs run` before publishing. The CLI records observed results and embeds stdout/stderr in SARIF 2.1.0. `publish` uploads only that SARIF. Source remains on GitHub; no additional push is needed between run and publish.
 
 Reports remain author-submitted evidence, not independent service certification. A harness may constrain inputs, concrete types, stubs, or execution beyond the extracted `requires`; describe those restrictions in the report's assumptions/limitations.
 
@@ -26,6 +26,7 @@ Run inside the crate to verify:
 ```sh
 cargo proofs init --tool-version 0.66.0 --title 'Contract verification of my crate'
 cargo proofs login
+# Commit and push all verification inputs, including Cargo.lock, before run.
 cargo proofs run -- cargo kani
 cargo proofs publish --dry-run
 cargo proofs publish
@@ -66,7 +67,7 @@ You may set `PROOFS_SERVER` instead. The default is `https://proofs.rs`. Tokens 
 - Multiple contract harnesses for one API, ambiguous targets/reexports, trait methods, and `include!` source trees stop publication. Glob imports are not used to guess targets. Macro-generated functions/harnesses are not expanded or discovered; this is a source parser, not a Rust compiler frontend.
 - Conditional compilation is evaluated with `kani`, the selected Cargo features, and `rustc --print cfg` for the host or `--target`. Pass `--features foo,bar`, `--all-features`, `--no-default-features`, and `--target` to match verification. Build-script/custom cfgs are not inferred; encountered unsupported cfgs stop discovery. Integration-test targets are not scanned. Target-dependent dependency feature unification and RUSTFLAGS are not used to infer library features.
 - The service's imported public API catalogue is authoritative. Missing APIs or multiple public API matches stop publication; no silent skipping.
-- The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact source snapshot.
+- The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact source commit.
 
 ## Creusot
 
@@ -102,17 +103,19 @@ target = "annotated" # required: "annotated" or "all"
 
 ## Recording and reproduction
 
-`run` checks the installed tool version against `proofs.toml`, resolves Cargo dependencies and updates Cargo.lock if necessary, then copies the source. The source root is the Git root when available, otherwise the Cargo workspace root. All local path dependencies must fit inside it. Verification runs in that copy with a separate build directory; changing the original checkout afterwards does not change the recorded evidence.
+`run` checks the installed tool version against `proofs.toml`. Commit and push the verification inputs, including Cargo.lock, before recording. `[git].remote` selects the remote (default `origin`). A clean working tree and a commit reachable on that remote are required. Source URLs use GitHub and the full commit SHA.
 
-The snapshot respects ignore files and includes Cargo.lock even when ignored. It excludes `.git`, `target`, `node_modules`, `.proofs`, common credential directories, `.env*`, `*.pem`, and `*.key`; symlinks are rejected. This is not a general secret scanner: review the local source archive and logs before publishing. The CLI prints their location. Source contents are limited to 32 MiB and 10,000 files; uploaded SARIF and logs are each limited to 8 MiB.
+Verification runs in a detached temporary Git worktree at that commit, with a separate build directory and locked dependency resolution. Git determines the checkout contents; there is no custom source collector, archive, file-count limit, or source upload size limit. The worktree registration and files are removed on success and errors. Tracked input changes during verification prevent publication.
+
+Each run directory contains only `run.sarif.json`. SARIF is the canonical record for source provenance, command, timing, contracts, results and embedded stdout/stderr. The latest-run pointer and report publication state are local navigation/retry state, not duplicate execution records. Review the logs before publishing. The complete SARIF has an 8 MiB limit. `publish` sends it in one request; there is no separate metadata registration.
 
 - Kani: regular serial check output is supported. Checks are associated with the exact observed contract harness. Quiet/terse output, parallel jobs, options disabling safety checks, and unknown result formats are rejected. Unexecuted harnesses do not generate claims; unreachable checks remain labeled unreachable.
 - Creusot: a prover run must create fresh `proof.json` sessions that map unambiguously to selected APIs. Compilation alone, unchanged stale sessions, unresolved proof goals, and unsupported proof layouts do not certify an API. The usual free-function layout is supported; generated method layouts may require an adapter extension.
-- A failed process, changed snapshot, or run without verified contracts cannot be published. Failed recordings remain local for inspection.
+- A failed process, changed worktree, or run without verified contracts cannot be published. Failed recordings remain local for inspection.
 - Pass compilation flags **after** `--`, as part of the actual verifier command, for example `cargo proofs run -- cargo kani --features foo`. The same flags drive contract discovery. Select the workspace package with `-p NAME` as appropriate.
 - One run per CLI publication is supported. `publish` selects the latest recording, or use `publish --run UUID` for an explicit recording. Changes to tool configuration or crate/version require a new run.
 
-The report's collapsed **Reproduce** section contains source download/extraction commands, the exact recorded command, check-to-claim links, execution metadata, and source/SARIF/log downloads. Install the report's tool version and recorded Rust toolchain first. Cargo.lock and recorded compiler flags help reproduce the build; external system dependencies and unrecorded environment inputs are not bundled. Only `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, and `RUSTDOCFLAGS` environment overrides are recorded; arbitrary environment variables and credentials are not uploaded.
+The report's collapsed **Reproduce** section contains Git clone/checkout commands for the external commit, the exact recorded command, check-to-claim links, execution metadata, the SARIF download, and embedded logs. Install the report's tool version and recorded Rust toolchain first. System dependencies are not bundled. Only `RUSTFLAGS`, `CARGO_ENCODED_RUSTFLAGS`, and `RUSTDOCFLAGS` environment overrides are recorded.
 
 ## Revisions, conflicts, and recovery
 
@@ -121,12 +124,12 @@ Publication state is stored in the OS local data directory under `cargo-proofs/`
 - Repeat `publish` revises the same report and preserves existing claim IDs. An unchanged report produces no revision.
 - A changed crate version starts a new report (the service makes report crate/version immutable).
 - On another machine, or after losing local state, use `publish --report ID` to attach explicitly. The CLI matches claims by API/property and refuses duplicate matches.
-- Titles/explanations and other individual editorial fields from the server are preserved. The report title is controlled by TOML; shared optional fields are preserved when absent, or cleared when explicitly `""`. Contracts and evidence are controlled by the selected recorded snapshot.
+- Titles/explanations and other individual editorial fields from the server are preserved. The report title is controlled by TOML; shared optional fields are preserved when absent, or cleared when explicitly `""`. Contracts and evidence are controlled by the selected SARIF record.
 - If the server revision changed since the last publication, show the differences and stop. `publish --dry-run` previews the prospective update. `publish --force` applies the local/config-owned fields over the latest server state, preserving unspecified editorial fields. It still sends `expected_revision` so a concurrent edit after fetching is rejected.
 - Missing contracts remove claims only after a yes/no prompt. Noninteractive approval requires `--yes`. `--force` does not approve deletions or bypass recorded-run checks. Removed claims retain their history/permanent links on the service. Locally known removed claim IDs are reused if their contracts are later restored; recovering removed IDs on a different machine is not automatic.
 - Before a write, the CLI saves the exact request and idempotency key atomically. If publication is interrupted, `publish --resume` retries that saved request rather than generating another report. It prints the saved payload and uses its original recorded evidence. Definite rejected requests are cleared so they can be corrected; ambiguous/network failures retain the journal.
 
-`--dry-run` never publishes a report or updates its local baseline, but authenticates, verifies local artifact hashes, and may ask the service to import the API catalogue. It does not upload artifacts or perform the final server-side run validation. Imports can take several minutes. The report limit is 100 claims (50 Kani APIs or 100 Creusot APIs) and 128 KiB; automatic splitting is deliberately unsupported.
+`--dry-run` never publishes a report or updates its local baseline, but authenticates, reads the selected SARIF, and may ask the service to import the API catalogue. It does not upload artifacts or perform the final server-side run validation. Imports can take several minutes. The report limit is 100 claims (50 Kani APIs or 100 Creusot APIs) and 128 KiB; automatic splitting is deliberately unsupported.
 
 ## Development
 

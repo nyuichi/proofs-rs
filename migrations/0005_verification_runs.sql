@@ -4,18 +4,10 @@ CREATE TABLE verification_runs (
   crate TEXT NOT NULL,
   version TEXT NOT NULL,
   tool_version_id TEXT NOT NULL REFERENCES tool_versions(id),
-  metadata_json TEXT NOT NULL,
-  created_at TEXT NOT NULL
-);
-CREATE TABLE run_artifacts (
-  run_id TEXT NOT NULL,
-  author_id TEXT REFERENCES users(id) ON DELETE SET NULL,
-  kind TEXT NOT NULL CHECK(kind IN ('source','sarif','logs')),
   sha256 TEXT NOT NULL,
-  size INTEGER NOT NULL,
-  r2_key TEXT NOT NULL,
-  created_at TEXT NOT NULL,
-  PRIMARY KEY(run_id,kind)
+  size INTEGER NOT NULL CHECK(size > 0 AND size <= 8388608),
+  r2_key TEXT NOT NULL UNIQUE,
+  created_at TEXT NOT NULL
 );
 CREATE TABLE report_runs (
   report_id INTEGER NOT NULL,

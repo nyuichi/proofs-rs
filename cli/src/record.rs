@@ -1,4 +1,4 @@
-use crate::{config::Project, scan, snapshot, state, ProjectArgs};
+use crate::{config::Project, scan, state, ProjectArgs};
 use anyhow::{bail, ensure, Context, Result};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -8,7 +8,6 @@ use std::{
     io::{Read, Write},
     path::{Path, PathBuf},
     process::{Command, Stdio},
-    time::Instant,
 };
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -21,12 +20,9 @@ pub struct Contract {
     pub harness: String,
     pub properties: Vec<String>,
 }
-#[derive(Serialize, Deserialize)]
 pub struct Record {
-    pub metadata: Value,
+    pub sarif: Value,
     pub contracts: Vec<Contract>,
-    pub files: BTreeMap<String, String>,
-    pub config_tool: Value,
 }
 pub fn state_dir(project: &Project) -> Result<PathBuf> {
     let base = dirs::data_local_dir()
@@ -43,32 +39,31 @@ pub fn load(project: &Project, selected: Option<&str>) -> Result<(PathBuf, Recor
     };
     ensure!(uuid::Uuid::parse_str(&run).is_ok(), "Invalid run ID");
     let dir = base.join("runs").join(run);
-    let record: Record =
-        state::read(&dir.join("record.json"))?.context("Recorded run not found")?;
+    let sarif: Value =
+        state::read(&dir.join("run.sarif.json"))?.context("Recorded run not found")?;
+    let entry = &sarif["runs"][0];
+    let proof = &entry["properties"]["proofs"];
+    let contracts: Vec<Contract> = serde_json::from_value(proof["contracts"].clone())?;
     ensure!(
-        record.metadata["execution_successful"] == true && !record.contracts.is_empty(),
+        entry["automationDetails"]["guid"].as_str() == dir.file_name().and_then(|s| s.to_str()),
+        "Recorded run ID mismatch"
+    );
+    ensure!(
+        entry["invocations"][0]["executionSuccessful"] == true && !contracts.is_empty(),
         "This run did not produce publishable verification results"
     );
-    for (kind, name) in [
-        ("source", "source.tar.gz"),
-        ("sarif", "run.sarif.json"),
-        ("logs", "run.log"),
-    ] {
-        ensure!(
-            snapshot::sha(&fs::read(dir.join(name))?)
-                == record.metadata["artifacts"][kind].as_str().unwrap_or(""),
-            "Recorded {kind} artifact changed; run verification again"
-        );
-    }
-    let tool = serde_json::to_value(project.config()?.tool)?;
+    let tool = project.config()?.tool;
     ensure!(
-        tool == record.config_tool,
+        entry["tool"]["driver"]["name"] == tool.name
+            && entry["tool"]["driver"]["version"] == tool.version
+            && proof["target"] == serde_json::to_value(tool.target)?,
         "Tool configuration changed; run verification again"
     );
     ensure!(
-        record.metadata["crate"] == project.name && record.metadata["version"] == project.version,
+        proof["crate"] == project.name && proof["version"] == project.version,
         "Recorded run targets a different crate/version"
     );
+    let record = Record { sarif, contracts };
     Ok((dir, record))
 }
 fn output(cmd: &mut Command) -> Result<String> {
@@ -134,23 +129,24 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
         version.split_whitespace().any(|s| s == config.tool.version),
         "Installed tool differs from proofs.toml: {version}"
     );
-    // Resolve before freezing the source, preserving existing locked versions while
-    // updating stale workspace/package entries exactly as Cargo normally does.
-    output(
-        Command::new("cargo")
-            .args(["metadata", "--format-version", "1", "--manifest-path"])
-            .arg(&project.manifest),
+    let source_ref = crate::git::published_source(
+        &root,
+        config
+            .git
+            .as_ref()
+            .and_then(|g| g.remote.as_deref())
+            .unwrap_or("origin"),
     )?;
     let rid = uuid::Uuid::new_v4().to_string();
     let base = state_dir(&project)?;
     let dir = base.join("runs").join(&rid);
     fs::create_dir_all(&dir)?;
     let stage = tempfile::tempdir()?;
-    let source = stage.path().join("source");
-    fs::create_dir(&source)?;
-    // macOS temporary paths can be aliases (/var -> /private/var).
-    let source = source.canonicalize()?;
-    let hashes = snapshot::capture(&root, &source, &dir.join("source.tar.gz"))?;
+    let checkout = crate::git::Worktree::create(
+        &root,
+        source_ref["commit"].as_str().context("Missing commit")?,
+    )?;
+    let source = checkout.path.clone();
     ensure!(
         source.join(&relative_manifest).exists()
             && source
@@ -224,11 +220,7 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
     // Existing proof sessions may be useful inputs; only newly written proof files count as results.
     let before = proof_files(&source)?;
     let started = chrono::Utc::now();
-    let clock = Instant::now();
-    println!(
-        "Recording run {rid}; source snapshot contains {} files",
-        hashes.len()
-    );
+    println!("Recording run {rid} at {}", source_ref["commit"]);
     let env: BTreeMap<String, String> = ["RUSTFLAGS", "CARGO_ENCODED_RUSTFLAGS", "RUSTDOCFLAGS"]
         .iter()
         .filter_map(|k| std::env::var(k).ok().map(|v| (k.to_string(), v)))
@@ -254,16 +246,11 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
     let stderr = err
         .join()
         .map_err(|_| anyhow::anyhow!("stderr capture failed"))??;
-    let duration = clock.elapsed().as_millis() as u64;
     let finished = chrono::Utc::now();
     let stdout =
         String::from_utf8_lossy(&stdout).replace(&source.to_string_lossy().to_string(), ".");
     let stderr =
         String::from_utf8_lossy(&stderr).replace(&source.to_string_lossy().to_string(), ".");
-    fs::write(
-        dir.join("run.log"),
-        format!("=== stdout ===\n{stdout}\n=== stderr ===\n{stderr}"),
-    )?;
     let parsed = if config.tool.is_creusot() {
         creusot_results(&source, &before, &contracts)
     } else {
@@ -273,46 +260,34 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
         Ok((r, c)) => (r, c, None),
         Err(e) => (vec![], vec![], Some(format!("{e:#}"))),
     };
-    let unchanged = snapshot::unchanged(&source, &hashes);
+    let unchanged = checkout.unchanged();
     let successful =
         status.success() && diagnostic.is_none() && unchanged.is_ok() && !verified.is_empty();
-    let mut invocation = json!({"arguments":&command[1..],"commandLine":shell_command(&command),"workingDirectory":{"uri":format!("{}/",path_string(relative_cwd))},"startTimeUtc":started.to_rfc3339(),"endTimeUtc":finished.to_rfc3339(),"executionSuccessful":status.success(),"environmentVariables":env});
+    let mut invocation = json!({"arguments":&command[1..],"workingDirectory":{"uri":format!("{}/",path_string(relative_cwd))},"startTimeUtc":started.to_rfc3339(),"endTimeUtc":finished.to_rfc3339(),"executionSuccessful":successful,"executableLocation":{"uri":command[0]},"environmentVariables":env});
     if let Some(code) = status.code() {
         invocation["exitCode"] = json!(code);
     }
     if let Some(d) = &diagnostic {
         invocation["toolExecutionNotifications"] = json!([{"level":"error","message":{"text":d}}]);
     }
-    let sarif = json!({"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":config.tool.name,"version":config.tool.version}},"invocations":[invocation],"results":results,"artifacts":hashes.iter().map(|(name,hash)|json!({"location":{"uri":name},"hashes":{"sha-256":hash}})).collect::<Vec<_>>(),"properties":{"sourceSnapshot":snapshot::sha(&fs::read(dir.join("source.tar.gz"))?),"recorderVersion":env!("CARGO_PKG_VERSION")}}]});
-    fs::write(
-        dir.join("run.sarif.json"),
-        serde_json::to_vec_pretty(&sarif)?,
-    )?;
-    for (name, limit) in [
-        ("source.tar.gz", snapshot::MAX_SOURCE),
-        ("run.sarif.json", 8 * 1024 * 1024),
-        ("run.log", 8 * 1024 * 1024),
-    ] {
-        ensure!(
-            fs::metadata(dir.join(name))?.len() <= limit,
-            "Recorded {name} exceeds upload size limit"
-        );
-    }
-    let artifact_hashes = json!({"source":snapshot::sha(&fs::read(dir.join("source.tar.gz"))?),"sarif":snapshot::sha(&fs::read(dir.join("run.sarif.json"))?),"logs":snapshot::sha(&fs::read(dir.join("run.log"))?)});
-    let metadata = json!({"id":rid,"crate":project.name,"version":project.version,"command":command,"working_directory":path_string(relative_cwd),"started_at":started.to_rfc3339(),"finished_at":finished.to_rfc3339(),"duration_ms":duration,"exit_code":status.code(),"execution_successful":successful,"platform":format!("{} {}",std::env::consts::OS,std::env::consts::ARCH),"rustc":output(Command::new("rustc").arg("-vV").current_dir(source.join(relative_cwd))).unwrap_or_default(),"environment":env,"artifacts":artifact_hashes,"contracts":verified,"diagnostic":diagnostic,"git_commit":crate::git::run(&root,&["rev-parse","HEAD"]).ok(),"git_dirty":crate::git::run(&root,&["status","--porcelain"]).ok().map(|s|!s.is_empty())});
-    let record = Record {
-        metadata,
-        contracts: verified,
-        files: hashes,
-        config_tool: serde_json::to_value(&config.tool)?,
-    };
-    state::write(&dir.join("record.json"), &record)?;
+    let mut artifacts: Vec<Value> = vec![];
+    invocation["stdout"] = json!({"index":artifacts.len()});
+    artifacts.push(json!({"contents":{"text":stdout}}));
+    invocation["stderr"] = json!({"index":artifacts.len()});
+    artifacts.push(json!({"contents":{"text":stderr}}));
+    let sarif = json!({"version":"2.1.0","$schema":"https://json.schemastore.org/sarif-2.1.0.json","runs":[{"tool":{"driver":{"name":config.tool.name,"version":config.tool.version}},"invocations":[invocation],"results":results,"artifacts":artifacts,"versionControlProvenance":[{"repositoryUri":source_ref["repository"],"revisionId":source_ref["commit"]}],"automationDetails":{"guid":rid},"properties":{"proofs":{"schemaVersion":1,"crate":project.name,"version":project.version,"contracts":verified,"target":config.tool.target,"platform":format!("{} {}",std::env::consts::OS,std::env::consts::ARCH),"rustc":output(Command::new("rustc").arg("-vV").current_dir(source.join(relative_cwd))).unwrap_or_default(),"recorderVersion":env!("CARGO_PKG_VERSION")}}}]});
+    let bytes = serde_json::to_vec_pretty(&sarif)?;
+    fs::write(dir.join("run.sarif.json"), &bytes)?;
+    ensure!(
+        bytes.len() <= 8 * 1024 * 1024,
+        "SARIF including logs exceeds 8 MiB"
+    );
     state::write(&base.join("latest.json"), &rid)?;
     println!("Saved run {rid}: {}", dir.display());
     unchanged?;
     ensure!(
         successful,
-        "Verification did not produce publishable results. Logs and SARIF saved locally. {}",
+        "Verification did not produce publishable results. SARIF including logs saved locally. {}",
         diagnostic.unwrap_or_default()
     );
     Ok(())
@@ -345,12 +320,6 @@ fn tee(mut input: impl Read, stderr: bool) -> Result<Vec<u8>> {
         }
     }
     Ok(result)
-}
-pub fn shell_command(args: &[String]) -> String {
-    args.iter()
-        .map(|s| format!("'{}'", s.replace('\'', "'\\''")))
-        .collect::<Vec<_>>()
-        .join(" ")
 }
 fn validate_command(cmd: &[String], creusot: bool) -> Result<()> {
     for arg in &cmd[2..] {
@@ -538,7 +507,10 @@ fn proof_files(root: &Path) -> Result<BTreeMap<PathBuf, String>> {
     {
         let e = e?;
         if e.file_name() == "proof.json" && e.file_type().is_some_and(|t| t.is_file()) {
-            out.insert(e.path().to_owned(), snapshot::sha(&fs::read(e.path())?));
+            out.insert(
+                e.path().to_owned(),
+                state::digest(&String::from_utf8_lossy(&fs::read(e.path())?)),
+            );
         }
     }
     Ok(out)
@@ -678,12 +650,5 @@ mod tests {
             1
         );
         assert!(creusot_results(d.path(), &proof_files(d.path()).unwrap(), &[contract()]).is_err());
-    }
-    #[test]
-    fn shell_quotes_literal_arguments() {
-        assert_eq!(
-            shell_command(&["x;y".into(), "a'b".into()]),
-            "'x;y' 'a'\\''b'"
-        );
     }
 }

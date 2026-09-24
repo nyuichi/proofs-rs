@@ -20,7 +20,10 @@ test("Reproduce starts collapsed, loads on demand, links claims and safely rende
     duration_ms: 1000,
     exit_code: 0,
     environment: { RUSTFLAGS: "--cfg demo" },
-    artifacts: { source: "abc" },
+    source: {
+      repository: "https://github.com/test/source",
+      commit: "a".repeat(40),
+    },
     contracts: [
       {
         harness: "demo::check_f",
@@ -38,6 +41,29 @@ test("Reproduce starts collapsed, loads on demand, links claims and safely rende
           ? {
               runs: [
                 {
+                  invocations: [
+                    {
+                      stdout: { index: 0 },
+                      executableLocation: { uri: run.command[0] },
+                      arguments: run.command.slice(1),
+                      workingDirectory: { uri: run.working_directory + "/" },
+                      executionSuccessful: true,
+                      exitCode: 0,
+                      startTimeUtc: run.started_at,
+                      endTimeUtc: run.finished_at,
+                      environmentVariables: run.environment,
+                    },
+                  ],
+                  versionControlProvenance: [
+                    {
+                      repositoryUri: run.source.repository,
+                      revisionId: run.source.commit,
+                    },
+                  ],
+                  properties: { proofs: { contracts: run.contracts } },
+                  artifacts: [
+                    { contents: { text: "<img src=x onerror=bad()>" } },
+                  ],
                   results: [
                     {
                       kind: "pass",
@@ -74,7 +100,7 @@ test("Reproduce starts collapsed, loads on demand, links claims and safely rende
   section.open = true;
   section.dispatchEvent(new w.Event("toggle"));
   await new Promise((r) => setTimeout(r, 10));
-  assert.equal(calls.length, 2);
+  assert.equal(calls.length, 1);
   assert.equal(w.document.querySelector("script"), null);
   assert.ok(
     w.document
@@ -102,11 +128,11 @@ test("Reproduce starts collapsed, loads on demand, links claims and safely rende
   assert.equal(w.document.querySelector("img"), null);
   assert.equal(
     logs.querySelector("pre")!.textContent,
-    "<img src=x onerror=bad()>",
+    "=== stdout ===\n<img src=x onerror=bad()>",
   );
   section.open = false;
   section.open = true;
   section.dispatchEvent(new w.Event("toggle"));
-  assert.equal(calls.length, 3);
+  assert.equal(calls.length, 1);
   w.close();
 });

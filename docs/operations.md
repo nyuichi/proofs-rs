@@ -143,21 +143,26 @@ they are for browsing, comments and voting, not publishing new reports or testin
 docs.rs import. Use a real release for publication tests. No proof was run.
 The generator and original sample data are retained in scripts/fixtures.
 
-## Recorded verification evidence (CLI 0.2.0)
+## Recorded verification evidence (CLI 0.3.0)
 
-Deploy migration `0005_verification_runs.sql` and the service before releasing CLI 0.2.0. New reports/revisions require `run_ids`; old clients cannot publish. Existing reports remain readable without a Reproduce section.
+The schema and application support SARIF-only verification runs. New databases use the current migration baseline.
 
-Source, SARIF, and logs are private R2 objects under `runs/<author>/<run>/<kind>/<sha256>`. D1 stores immutable metadata and per-revision associations. All three hashes must match before finalization; the service checks result-to-contract consistency but does not execute verification or authenticate an author's local machine. Limits: 32 MiB source, 8 MiB each SARIF/log, 90 new artifact uploads per author per UTC day. Exact retries are free and immutable. Unattached runs are readable only by the author. Any public report revision referencing a run makes it public; hiding the report removes anonymous access unless another public report references it. Exceptional revision redaction also removes that revision's run associations.
+SARIF is the canonical verification record. One upload request validates and registers the complete document. D1 `verification_runs` contains ownership/search indexes and the SARIF hash, size and R2 location; execution metadata and contracts are not duplicated in D1. R2 stores each attempt under `runs/<author>/<run>/<attempt>.sarif.json`. Limits: 8 MiB including logs, 90 registered runs per author per UTC day. See [the SARIF profile](sarif.md).
 
-Published evidence is retained with report history. Unattached or interrupted uploads currently remain private until operator cleanup; include this R2 prefix in storage monitoring and backup/restore procedures. Do not expire it with a blanket lifecycle rule. Source/log files may contain author-supplied data; removing an account anonymizes ownership but does not remove published evidence, consistent with retained reports. When responding to an erasure request for evidence contents, hide every referencing report, remove the affected R2 objects, and retain the existing audited restore marker process so backups cannot republish removed content.
+Failed registrations remove their attempt object after checking for a committed DB row. The daily scheduled sweep also removes unregistered objects older than 24 hours. Valid registered runs remain readable to their owner before publication; public access follows report visibility.
+
+### Deployment prerequisite
+
+Existing installations must be converted in a separate, one-time operator operation before deploying this version. Data-specific transformations and object deletion are not part of the application, schema baseline, or normal deployment workflows. Preserve report/claim identities and verify the converted SARIF and external source reference before deleting obsolete storage. Do not deploy against an unconverted database. Restored databases must also satisfy the current schema before serving traffic.
+
+Published evidence is retained with report history. Completed runs awaiting report publication remain private; include their R2 objects in backup/restore procedures. Do not expire it with a blanket lifecycle rule. Embedded logs may contain author-supplied data; removing an account anonymizes ownership but does not remove published evidence, consistent with retained reports. When responding to an erasure request for evidence contents, hide every referencing report, remove the affected R2 objects, and retain the existing audited restore marker process so backups cannot republish removed content.
 
 ### Verification run commands
 
 A run may use any nonempty executable name and zero or more arguments, including
 `python3 verify-core.py` or `./verify-core`. The server stores this command; it
 does not execute it. The registered verifier name/version must match the SARIF
-tool, and arguments, exit status, artifact hashes and per-contract results remain
-validated. The command executable is not required to match the verifier name.
+tool, and exit status and per-contract results are validated from that same document. The command executable is not required to match the verifier name.
 
 After deploying rustdoc format 60 support, retry a failed import by calling
 `POST /api/v1/publish/prepare` for the same crate/version. Failed jobs do not block

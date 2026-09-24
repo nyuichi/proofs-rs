@@ -4,6 +4,7 @@ import { App, Env, Fault, uid, requireUser } from "./core";
 import { authenticate, authRoutes } from "./auth";
 import api from "./api";
 import { importRoutes } from "./imports";
+import { cleanupRunUploads } from "./runs";
 import { queue, dispatch, backup } from "./jobs";
 import { admin } from "./admin";
 import { deviceRoutes, tokenRoutes, publicDevicePaths } from "./device";
@@ -26,10 +27,8 @@ app.use("*", async (c, next) => {
 });
 app.use("*", async (c, next) =>
   bodyLimit({
-    maxSize: /^\/api\/v1\/runs\/[^/]+\/artifacts\/(source|sarif|logs)$/.test(
-      c.req.path,
-    )
-      ? 32 * 1024 * 1024
+    maxSize: /^\/api\/v1\/runs\/[^/]+\/sarif$/.test(c.req.path)
+      ? 8 * 1024 * 1024
       : 131072,
     onError: (c) => c.json({ error: "payload_too_large" }, 413),
   })(c, next),
@@ -63,9 +62,7 @@ app.use("*", async (c, next) => {
         "/api/v1/tokens/revoke",
       ].includes(path) ||
         /^\/api\/v1\/reports\/[^/]+\/revisions$/.test(path) ||
-        /^\/api\/v1\/runs\/[^/]+(\/artifacts\/(source|sarif|logs))?$/.test(
-          path,
-        ));
+        /^\/api\/v1\/runs\/[^/]+(\/sarif)?$/.test(path));
     // The admin router checks the owner's current ADMIN_GITHUB_IDS membership.
     const administrative =
       path.startsWith("/api/v1/admin/") &&
@@ -152,7 +149,10 @@ export default {
         .bind(new Date(Date.now() - 86400000).toISOString())
         .run(),
     );
-    if (controller.cron === "17 2 * * *") ctx.waitUntil(backup(env));
+    if (controller.cron === "17 2 * * *") {
+      ctx.waitUntil(backup(env));
+      ctx.waitUntil(cleanupRunUploads(env));
+    }
   },
 };
 export { app };

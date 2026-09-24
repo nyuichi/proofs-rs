@@ -4,7 +4,6 @@ mod git;
 mod publish;
 mod record;
 mod scan;
-mod snapshot;
 mod state;
 
 use anyhow::Result;
@@ -72,14 +71,14 @@ enum Commands {
     },
     /// Revoke and remove this server's saved token.
     Logout,
-    /// Verify a frozen source snapshot and record results for publication.
+    /// Verify a detached Git worktree and record results for publication.
     Run {
         #[command(flatten)]
         project: ProjectArgs,
         #[arg(last=true, required=true, num_args=2..)]
         command: Vec<String>,
     },
-    /// Publish a recorded verification run and its source snapshot.
+    /// Publish recorded SARIF results with embedded execution logs.
     Publish {
         #[command(flatten)]
         project: ProjectArgs,

@@ -5,6 +5,66 @@ import { readFileSync, readdirSync } from "node:fs";
 import { app } from "../src/worker";
 import { hash, Env } from "../src/core";
 import { extractAPIs, importJob } from "../src/imports";
+import { cleanupRunUploads } from "../src/runs";
+function recordedSarif(id: string, command = ["cargo", "kani"]) {
+  return {
+    version: "2.1.0",
+    runs: [
+      {
+        automationDetails: { guid: id },
+        tool: { driver: { name: "Kani", version: "0.68.0" } },
+        versionControlProvenance: [
+          {
+            repositoryUri: "https://github.com/test/source",
+            revisionId: "a".repeat(40),
+          },
+        ],
+        invocations: [
+          {
+            executableLocation: { uri: command[0] },
+            arguments: command.slice(1),
+            workingDirectory: { uri: "./" },
+            startTimeUtc: "2026-09-23T00:00:00Z",
+            endTimeUtc: "2026-09-23T00:00:01Z",
+            executionSuccessful: true,
+            exitCode: 0,
+            stdout: { index: 0 },
+            stderr: { index: 1 },
+          },
+        ],
+        artifacts: [
+          { contents: { text: "SUCCESS" } },
+          { contents: { text: "" } },
+        ],
+        results: [
+          {
+            kind: "pass",
+            message: { text: "bounds" },
+            properties: { harness: "sample::check_safe" },
+          },
+        ],
+        properties: {
+          proofs: {
+            schemaVersion: 1,
+            crate: "sample",
+            version: "1.0.0",
+            contracts: [
+              {
+                harness: "sample::check_safe",
+                api_paths: ["sample::safe"],
+                properties: ["no_ub"],
+                precondition: "",
+                file: "src/lib.rs",
+                first_line: 1,
+                last_line: 2,
+              },
+            ],
+          },
+        },
+      },
+    ],
+  };
+}
 function database() {
   const db = new DatabaseSync(":memory:");
   for (const f of readdirSync(new URL("../migrations/", import.meta.url))
@@ -80,22 +140,15 @@ export async function fixture(seedTools = true) {
     `INSERT INTO crates(id,name) VALUES(1,'sample');INSERT INTO releases VALUES(1,1,'1.0.0','checksum',0,'${time}');INSERT INTO doc_snapshots VALUES(1,'test','{}',61,NULL,'https://docs.rs','hash','key','${time}');INSERT INTO api_items VALUES('safe',1,'sample::safe','sample::safe','function',0,'pub fn safe()','https://docs.rs');INSERT INTO api_items VALUES('unsafe',1,'sample::unsafe','sample::unsafe','function',1,'pub unsafe fn unsafe()','https://docs.rs');`,
   );
   if (seedTools) {
-    db.prepare("INSERT INTO verification_runs VALUES(?,?,?,?,?,?,?)").run(
+    db.prepare("INSERT INTO verification_runs VALUES(?,?,?,?,?,?,?,?,?)").run(
       "11111111-1111-4111-8111-111111111111",
       "alice",
       "sample",
       "1.0.0",
       "kani-0.68.0",
-      JSON.stringify({
-        artifacts: { source: "source-hash" },
-        contracts: [
-          {
-            api_paths: ["sample::safe"],
-            precondition: "",
-            properties: ["no_ub"],
-          },
-        ],
-      }),
+      "seed-hash",
+      100,
+      "seed-key",
       time,
     );
   }
@@ -106,7 +159,12 @@ export async function fixture(seedTools = true) {
     ADMIN_GITHUB_IDS: "3",
     TERMS_VERSION: "test",
     EMAIL_ALLOWLIST: "",
-    ARCHIVE: { put: async () => {} },
+    ARCHIVE: {
+      put: async () => {},
+      get: async () => ({
+        json: async () => recordedSarif("11111111-1111-4111-8111-111111111111"),
+      }),
+    },
     ASSETS: { fetch: async () => new Response("assets") },
   } as unknown as Env;
   async function request(
@@ -182,31 +240,10 @@ for (const command of [
       },
     } as any;
     const rid = "22222222-2222-4222-8222-222222222222";
-    const sarif = {
-      version: "2.1.0",
-      runs: [
-        {
-          tool: { driver: { name: "Kani", version: "0.68.0" } },
-          invocations: [
-            {
-              arguments: command.slice(1),
-              executionSuccessful: true,
-              exitCode: 0,
-            },
-          ],
-          results: [
-            {
-              kind: "pass",
-              message: { text: "bounds" },
-              properties: { harness: "sample::check_safe" },
-            },
-          ],
-        },
-      ],
-    };
+    const sarif = recordedSarif(rid, command);
     const upload = async (kind: string, bytes: Uint8Array, user = "alice") => {
       const r = await app.request(
-        `https://example.test/api/v1/runs/${rid}/artifacts/${kind}`,
+        `https://example.test/api/v1/runs/${rid}/${kind}`,
         {
           method: "POST",
           headers: {
@@ -221,89 +258,62 @@ for (const command of [
       );
       return { status: r.status, body: (await r.json()) as any };
     };
-    const artifacts: Record<string, string> = {};
-    for (const [kind, bytes] of [
-      ["source", new Uint8Array([31, 139, 8, 0])],
-      ["sarif", new TextEncoder().encode(JSON.stringify(sarif))],
-      ["logs", new TextEncoder().encode("SUCCESS")],
-    ] as const) {
-      const r = await upload(kind, bytes);
-      assert.equal(r.status, 201, JSON.stringify(r));
-      artifacts[kind] = r.body.sha256;
-      assert.equal((await upload(kind, bytes)).status, 200);
-    }
-    assert.equal(
-      (await upload("logs", new TextEncoder().encode("changed"))).status,
-      409,
-    );
-    assert.equal(
-      (await upload("logs", new TextEncoder().encode("SUCCESS"), "bob")).status,
-      409,
-    );
-    const metadata = {
-      crate: "sample",
-      version: "1.0.0",
-      tool_version_id: "kani-0.68.0",
-      command,
-      working_directory: ".",
-      started_at: "2026-09-23T00:00:00Z",
-      finished_at: "2026-09-23T00:00:01Z",
-      duration_ms: 1000,
-      exit_code: 0,
-      execution_successful: true,
-      artifacts,
-      contracts: [
-        {
-          harness: "sample::check_safe",
-          api_paths: ["sample::safe"],
-          properties: ["no_ub"],
-          precondition: "",
-          file: "src/lib.rs",
-          first_line: 1,
-          last_line: 2,
-        },
-      ],
-    };
-    assert.equal(
-      (
-        await request("/runs/" + rid, "POST", {
-          ...metadata,
-          working_directory: "../escape",
-        })
-      ).status,
-      400,
-    );
-    assert.equal(
-      (
-        await request("/runs/" + rid, "POST", {
-          ...metadata,
-          contracts: [{ ...metadata.contracts[0], harness: "unexecuted" }],
-        })
-      ).status,
-      400,
-    );
-    for (const invalid of [[], [""], ["   "], [null], ["python3", "\0"]]) {
-      const response = await request("/runs/" + rid, "POST", {
-        ...metadata,
-        command: invalid,
-      });
-      assert.equal(response.status, 400);
-      assert.equal(response.body.error, "invalid_command");
-    }
-    for (const mismatch of [
-      { command: [...command, "unrecorded-argument"] },
-      { execution_successful: false },
-      { exit_code: 1 },
+    const encode = (s: any) => new TextEncoder().encode(JSON.stringify(s));
+    for (const mutate of [
+      (s: any) => {
+        s.runs[0].invocations[0].workingDirectory.uri = "../escape/";
+      },
+      (s: any) => {
+        s.runs[0].properties.proofs.contracts[0].harness = "unexecuted";
+      },
+      (s: any) => {
+        s.runs[0].invocations[0].executionSuccessful = false;
+      },
+      (s: any) => {
+        s.runs[0].invocations[0].executableLocation.uri = "";
+      },
+      (s: any) => {
+        s.runs[0].artifacts.push({ contents: { text: "source" } });
+      },
+      (s: any) => {
+        s.runs[0].versionControlProvenance[0].revisionId = "main";
+      },
     ]) {
-      const response = await request("/runs/" + rid, "POST", {
-        ...metadata,
-        ...mismatch,
-      });
-      assert.equal(response.status, 400);
-      assert.equal(response.body.error, "run_sarif_mismatch");
+      const changed = structuredClone(sarif);
+      mutate(changed);
+      assert.equal((await upload("sarif", encode(changed))).status, 400);
+      assert.equal(objects.size, 0, "invalid requests must not store objects");
     }
-    assert.equal((await request("/runs/" + rid, "POST", metadata)).status, 201);
-    assert.equal((await request("/runs/" + rid, "POST", metadata)).status, 200);
+    const uploaded = await upload("sarif", encode(sarif));
+    assert.equal(uploaded.status, 201, JSON.stringify(uploaded));
+    assert.equal((await upload("sarif", encode(sarif))).status, 200);
+    assert.equal(objects.size, 1);
+    assert.equal(
+      (await upload("sarif", new TextEncoder().encode("changed"))).status,
+      409,
+    );
+    assert.equal((await upload("sarif", encode(sarif), "bob")).status, 409);
+    assert.equal((await request(`/runs/${rid}`, "POST", {})).status, 404);
+    for (const removed of [
+      "source",
+      "logs",
+      "artifacts/source",
+      "artifacts/logs",
+      "artifacts/sarif",
+    ]) {
+      assert.equal(
+        (await upload(removed, new TextEncoder().encode("unused"))).status,
+        404,
+      );
+      assert.equal(
+        (await request(`/runs/${rid}/${removed}`, "GET")).status,
+        404,
+      );
+    }
+    assert.equal(
+      db.prepare("SELECT name FROM sqlite_master WHERE name='run_sarif'").get(),
+      undefined,
+    );
     assert.equal(
       (await request("/runs/" + rid, "GET", undefined, "bob")).status,
       404,
@@ -347,12 +357,15 @@ for (const command of [
       200,
     );
     const downloaded = await app.request(
-      "https://example.test/api/v1/runs/" + rid + "/logs",
+      "https://example.test/api/v1/runs/" + rid + "/sarif",
       {},
       env,
     );
     assert.equal(downloaded.status, 200);
-    assert.equal(await downloaded.text(), "SUCCESS");
+    assert.equal(
+      ((await downloaded.json()) as any).runs[0].artifacts[0].contents.text,
+      "SUCCESS",
+    );
     assert.match(downloaded.headers.get("Content-Disposition")!, /attachment/);
     db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(
       made.body.id,
@@ -2122,4 +2135,72 @@ test("browser admin requests retain CSRF and origin checks and follow current ad
     (await request("/admin/audit", "GET", undefined, "admin")).body.error,
     "admin_required",
   );
+});
+
+test("single-request run registration compensates failures and reclaims only crash leftovers", async () => {
+  const { env, db } = await fixture();
+  const objects = new Map<string, { bytes: Uint8Array; uploaded: Date }>();
+  env.ARCHIVE = {
+    put: async (key: string, bytes: ArrayBuffer) => {
+      objects.set(key, { bytes: new Uint8Array(bytes), uploaded: new Date() });
+    },
+    delete: async (key: string) => {
+      objects.delete(key);
+    },
+    list: async () => ({
+      objects: [...objects].map(([key, o]) => ({ key, uploaded: o.uploaded })),
+      truncated: false,
+    }),
+  } as any;
+  const rid = "33333333-3333-4333-8333-333333333333";
+  const upload = () =>
+    app.request(
+      `https://example.test/api/v1/runs/${rid}/sarif`,
+      {
+        method: "POST",
+        headers: {
+          Origin: env.APP_ORIGIN,
+          Cookie: "__Host-proofsr_session=alice",
+          "X-CSRF-Token": "csrf",
+        },
+        body: JSON.stringify(recordedSarif(rid)),
+      },
+      env,
+    );
+  const batch = env.DB.batch.bind(env.DB);
+  env.DB.batch = async () => {
+    throw Error("simulated DB failure");
+  };
+  assert.equal((await upload()).status, 500);
+  assert.equal(
+    objects.size,
+    0,
+    "failed DB registration must remove its upload",
+  );
+  assert.equal(
+    db.prepare("SELECT id FROM verification_runs WHERE id=?").get(rid),
+    undefined,
+  );
+  env.DB.batch = async (statements: any) => {
+    await batch(statements);
+    throw Error("lost committed response");
+  };
+  assert.equal((await upload()).status, 200);
+  assert.equal(
+    objects.size,
+    1,
+    "lost response must not delete committed evidence",
+  );
+  env.DB.batch = batch;
+  const old = new Date(Date.now() - 2 * 86400000);
+  for (const o of objects.values()) o.uploaded = old;
+  objects.set("runs/orphan/old", { bytes: new Uint8Array(), uploaded: old });
+  objects.set("runs/orphan/recent", {
+    bytes: new Uint8Array(),
+    uploaded: new Date(),
+  });
+  await cleanupRunUploads(env);
+  assert.equal(objects.has("runs/orphan/old"), false);
+  assert.equal(objects.has("runs/orphan/recent"), true);
+  assert.equal(objects.size, 2, "keep committed evidence regardless of age");
 });

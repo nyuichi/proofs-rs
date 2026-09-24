@@ -736,9 +736,9 @@ version = "0.66.0" # Version used for verification</code></pre></details>
 <pre><code>cargo proofs login</code></pre>
 <p>Authorize the CLI in your browser with your GitHub account.</p>
 <h3>4. Preview and publish</h3>
-<p>Record verification on a source snapshot. No commit or push is required.</p>
+<p>Commit and push your source and Cargo.lock before recording verification.</p>
 <pre><code>cargo proofs run -- cargo kani</code></pre>
-<p>The source snapshot, SARIF results and logs will be uploaded with your report.</p>
+<p>Only SARIF results with embedded logs are uploaded. Source stays on GitHub. No additional push is needed between run and publish.</p>
 <pre><code>cargo proofs publish --dry-run
 cargo proofs publish</code></pre>
 <p>The CLI prints a link to your published report. Run <code>cargo proofs publish</code> again to update the same report.</p>
