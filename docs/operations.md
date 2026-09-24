@@ -77,8 +77,13 @@ staging alone gets fixture tools. Live import/email tests remain excluded.
 The Production workflow uses `wrangler.production.base.json`, generates an ignored
 `wrangler.production.json`, and creates `proofs-rs-production-reports-v1` D1/R2 plus
 `proofs-rs-production-reports-jobs`/`proofs-rs-production-reports-dead` Queues. Staging data is not
-copied. Email remains disabled. Production deploys require explicit approval through
-Actions (`Production` → `Run workflow`, branch `main`). Pushes never deploy production.
+copied. Email remains disabled. Production deploys require explicit approval from nyuichi
+and are dispatched through Actions (`Production` → `Run workflow`, branch `main`).
+An explicit request from nyuichi to an agent to deploy to production counts as that
+approval: the agent may dispatch the workflow on nyuichi's behalf using the authorized
+nyuichi account. No additional confirmation immediately before dispatch is required
+for the same approved scope. This is task-scoped delegation, not standing approval
+for unrelated deployments or destructive data operations. Pushes never deploy production.
 Only GitHub user ID `540144` (nyuichi), with triggering actor `nyuichi`, may execute
 or rerun Production. Before production credentials are accessed, a separate job
 checks that the exact selected commit has a successful Staging run from this repository
@@ -88,8 +93,9 @@ wait for Staging and start Production again. This promotes source commits, rebui
 with npm ci and the committed lockfile; it does not reuse a staging build artifact.
 
 Daily flow: push main → inspect Staging → follow the production link in its summary →
-nyuichi clicks Run workflow on main. If main advanced, first inspect that newer staging
-version. The authorization summary records the selected SHA and successful staging run.
+nyuichi or an agent explicitly instructed by nyuichi dispatches Run workflow on main.
+If main advanced, first inspect that newer staging version and confirm that the selected
+changes remain within the approved scope. The authorization summary records the selected SHA and successful staging run.
 
 This workflow-level approval works while the repository is private. GitHub Free/Pro/Team
 only support environment required reviewers on public repositories. After making this
