@@ -10,7 +10,19 @@ Restore into a new private database, never directly into a serving database. Dow
 
 ## Administrative API
 
-Sign in as an admin. Use the browser session and `/api/v1/me` CSRF value, same-origin requests. Never copy a session into an issue. `POST /api/v1/admin/action` takes `{action,target,reason,...}`. Reason is mandatory.
+Admin access is determined on every request by the owner's numeric GitHub ID in the current `ADMIN_GITHUB_IDS` configuration, for both browser sessions and API tokens. The stored role from the last login is not authoritative. Removing an ID takes effect for existing credentials once the configuration is deployed.
+
+Existing API tokens issued through `cargo proofs login` (device flow, `publish` scope) can access the admin API when their owner is currently listed. No CLI changes, special token, or new scope are required. This also grants administrative access to previously issued tokens belonging to listed users; other users' tokens remain unable to access admin routes. Token expiry, revocation, account suspension, terms acceptance for writes, and audit logging still apply.
+
+For curl, send `Authorization: Bearer <token>`. Cookies, Origin, and CSRF are not required with Bearer authentication. For example, with the token available privately in `PROOFS_API_TOKEN`:
+
+```sh
+curl --fail-with-body --silent --show-error \
+  -H "Authorization: Bearer $PROOFS_API_TOKEN" \
+  https://proofs.rs/api/v1/admin/audit
+```
+
+Browser sessions still require same-origin requests and the `/api/v1/me` CSRF value for writes. Never copy a session or token into an issue. `POST /api/v1/admin/action` takes `{action,target,reason,...}`. Reason is mandatory.
 
 | Action                                | Additional fields                                      | Result                                                                  |
 | ------------------------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------- |

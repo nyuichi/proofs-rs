@@ -84,6 +84,10 @@ export const random = () =>
   Array.from(crypto.getRandomValues(new Uint8Array(32)))
     .map((n) => n.toString(16).padStart(2, "0"))
     .join("");
+export const isAdmin = (env: Env, githubId: number) =>
+  (env.ADMIN_GITHUB_IDS || "")
+    .split(",")
+    .some((id) => id.trim() === String(githubId));
 export const requireUser = (c: Ctx) => {
   const u = c.get("user");
   if (!u) throw new Fault(401, "sign_in_required");
