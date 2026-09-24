@@ -180,7 +180,7 @@ evidence URLs accept only HTTP(S). R2 archives and private history are not publi
 On explicit preparation of the first crate/version, fetch crates.io metadata and
 that release's docs.rs rustdoc JSON. Cache the parsed catalogue in D1 and source
 in R2. Reuse it for later reports. No registry crawl or scraping fallback. Initial
-rustdoc format allowlist: 61. Public free functions and inherent methods are
+rustdoc format allowlist: 60, 61. Public free functions and inherent methods are
 supported; trait methods/implementations, Deref methods, unsupported syntax and
 unresolved external reexports are not silently fabricated. The docs.rs build's
 target/features define the API surface. Queue work and outbox events support

@@ -31,7 +31,7 @@ No GitHub tokens or client secrets are committed or included in the browser buil
 
 ## Data and behavior
 
-- First explicit preparation of a crate/version imports crates.io metadata plus one docs.rs rustdoc JSON; later publications reuse D1. Unsupported rustdoc formats fail closed. Initial allowlist: format 61. No whole-registry crawl, no re-run of proofs, no HTML scraping fallback.
+- First explicit preparation of a crate/version imports crates.io metadata plus one docs.rs rustdoc JSON; later publications reuse D1. Unsupported rustdoc formats fail closed. Supported formats: 60 and 61. No whole-registry crawl, no re-run of proofs, no HTML scraping fallback.
 - Reports publish one crate/version and tool/version with 1–100 claims in one transaction. Claim API/property and IDs are immutable. Shared and individual fields are additive; empty claim titles are generated. Full-report revisions retain stars and history.
 - Independent report/claim stars survive revisions. Only non-self report stars contribute to karma; one replaceable policy in `src/core.ts` supplies profile and list/detail scores.
 - Comments belong only to reports. Removed claims keep permanent links to their historical report revision.

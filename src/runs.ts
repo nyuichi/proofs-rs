@@ -165,8 +165,10 @@ runs.post("/:run", async (c) => {
   if (
     !relative(b.working_directory) ||
     !Array.isArray(b.command) ||
-    b.command.length < 2 ||
+    b.command.length < 1 ||
     b.command.length > 200 ||
+    typeof b.command[0] !== "string" ||
+    !b.command[0].trim() ||
     b.command.some(
       (x: any) => typeof x !== "string" || x.length > 4000 || x.includes("\0"),
     )
@@ -228,8 +230,6 @@ runs.post("/:run", async (c) => {
   const s = sarif.runs[0],
     inv = s.invocations[0];
   if (
-    b.command[0] !== "cargo" ||
-    b.command[1].toLowerCase() !== tv.tool.toLowerCase() ||
     s.tool.driver.name.toLowerCase() !== tv.tool.toLowerCase() ||
     s.tool.driver.version !== tv.version ||
     inv.executionSuccessful !== b.execution_successful ||
