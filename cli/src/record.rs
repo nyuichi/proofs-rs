@@ -124,7 +124,14 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
         .strip_prefix(&root)
         .context("Run from within the source root")?;
     let relative_manifest = project.manifest.strip_prefix(&root)?.to_owned();
-    let version = output(Command::new("cargo").args([config.tool.name.as_str(), "--version"]))?;
+    let version = output(Command::new("cargo").args([
+        config.tool.name.as_str(),
+        if config.tool.is_creusot() {
+            "version"
+        } else {
+            "--version"
+        },
+    ]))?;
     ensure!(
         version.split_whitespace().any(|s| s == config.tool.version),
         "Installed tool differs from proofs.toml: {version}"
@@ -537,7 +544,7 @@ fn creusot_results(
                     "/{}/proof.json",
                     c.harness.split("::").skip(1).collect::<Vec<_>>().join("/")
                 );
-                relative.ends_with(&suffix)
+                relative.ends_with(&suffix) || creusot_span_matches(root, &path, c)
             })
             .collect();
         if matching.len() != 1 {
@@ -562,6 +569,59 @@ fn creusot_results(
     }
     ensure!(!results.is_empty(),"No fresh Creusot proof.json results could be mapped to source APIs. Run the prover (not compilation only); unsupported proof layouts are rejected");
     Ok((results, verified))
+}
+// Creusot 0.13 emits methods under impl_Type / impl_Trait_for_Type rather
+// than their source paths. Use the generated declaration span, not the lossy
+// directory name, to distinguish same-named methods and external trait aliases.
+fn creusot_span_matches(root: &Path, proof: &Path, contract: &Contract) -> bool {
+    let Some(directory) = proof.parent() else {
+        return false;
+    };
+    let Some(method) = contract.harness.rsplit("::").next() else {
+        return false;
+    };
+    if directory.file_name().and_then(|n| n.to_str()) != Some(method) {
+        return false;
+    }
+    let Ok(coma) = fs::read_to_string(directory.with_extension("coma")) else {
+        return false;
+    };
+    let Some(header) = coma
+        .lines()
+        .next()
+        .and_then(|line| line.strip_prefix("(* #\""))
+    else {
+        return false;
+    };
+    let Some((file, coordinates)) = header.split_once('"') else {
+        return false;
+    };
+    let coordinates: Vec<_> = coordinates.split_whitespace().collect();
+    if coordinates.len() != 5 || coordinates[4] != "*)" {
+        return false;
+    }
+    let (Ok(first), Ok(last)) = (
+        coordinates[0].parse::<usize>(),
+        coordinates[2].parse::<usize>(),
+    ) else {
+        return false;
+    };
+    let source = Path::new(file);
+    let source = if source.is_absolute() {
+        source.to_owned()
+    } else {
+        root.join(source)
+    };
+    let (Ok(source), Ok(expected)) = (
+        source.canonicalize(),
+        root.join(&contract.file).canonicalize(),
+    ) else {
+        return false;
+    };
+    source == expected
+        && first >= contract.first_line
+        && last >= first
+        && last <= contract.last_line
 }
 fn proved(v: &Value) -> bool {
     if v.get("prover").and_then(Value::as_str).is_some() {
@@ -650,5 +710,56 @@ mod tests {
             1
         );
         assert!(creusot_results(d.path(), &proof_files(d.path()).unwrap(), &[contract()]).is_err());
+    }
+
+    #[test]
+    fn creusot_impl_sessions_require_matching_source_span() {
+        let d = tempfile::tempdir().unwrap();
+        fs::create_dir_all(d.path().join("src")).unwrap();
+        fs::write(d.path().join("src/lib.rs"), "// source\n").unwrap();
+        let mut c = contract();
+        c.harness = "demo::<S as core::hash::Hasher>::finish".into();
+        let session = d
+            .path()
+            .join("verif/demo_rlib/impl_Hasher_for_S/finish/proof.json");
+        fs::create_dir_all(session.parent().unwrap()).unwrap();
+        fs::write(
+            &session,
+            r#"{"proofs":{"M":{"vc_finish":{"prover":"z3","time":0.1}}}}"#,
+        )
+        .unwrap();
+        let coma = session.parent().unwrap().with_extension("coma");
+        let header = format!(
+            "(* #\"{}\" 2 0 2 30 *)\n",
+            d.path().join("src/lib.rs").display()
+        );
+        fs::write(&coma, header).unwrap();
+        let mut other = c.clone();
+        other.harness = "demo::<S as Other>::finish".into();
+        other.first_line = 10;
+        other.last_line = 20;
+        let (_, verified) =
+            creusot_results(d.path(), &BTreeMap::new(), &[c.clone(), other]).unwrap();
+        assert_eq!(verified.len(), 1);
+        assert_eq!(verified[0].harness, c.harness);
+        assert!(creusot_results(d.path(), &proof_files(d.path()).unwrap(), &[c.clone()]).is_err());
+        fs::write(&coma, "(* #\"src/other.rs\" 2 0 2 30 *)\n").unwrap();
+        assert!(creusot_results(d.path(), &BTreeMap::new(), &[c.clone()]).is_err());
+        fs::write(&coma, "(* #\"src/lib.rs\" 20 0 20 30 *)\n").unwrap();
+        assert!(creusot_results(d.path(), &BTreeMap::new(), &[c.clone()]).is_err());
+        fs::write(&coma, "(* #\"src/lib.rs\" 2 0 2 30 *)\n").unwrap();
+        c.harness = "demo::S::finish".into();
+        assert_eq!(
+            creusot_results(d.path(), &BTreeMap::new(), &[c.clone()])
+                .unwrap()
+                .1
+                .len(),
+            1
+        );
+        fs::write(&session, r#"{"proofs":{"M":{"vc_finish":{}}}}"#).unwrap();
+        assert!(creusot_results(d.path(), &BTreeMap::new(), &[c])
+            .unwrap()
+            .1
+            .is_empty());
     }
 }

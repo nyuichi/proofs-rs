@@ -238,7 +238,14 @@ pub fn init(
         Some(v) => v,
         None => {
             let out = Command::new("cargo")
-                .args([tool.as_str(), "--version"])
+                .args([
+                    tool.as_str(),
+                    if tool == "creusot" {
+                        "version"
+                    } else {
+                        "--version"
+                    },
+                ])
                 .output()
                 .with_context(|| format!("Cannot detect {label}; pass --tool-version VERSION"))?;
             if !out.status.success() {
