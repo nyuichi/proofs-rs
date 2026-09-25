@@ -25,7 +25,7 @@ for c in D['crates']:
     # Deliberately no doc_snapshots: dummy APIs must not masquerade as an imported catalog.
     for a in c['apis']:
         unsafe='unchecked' in a
-        insert('api_items',id=uid(c['name']+'/'+a),release_id=rel(c),canonical_key='demo:'+a,display_path=c['name'].replace('-','_')+'::'+a,kind='method' if '::' in a else 'function',is_unsafe=int(unsafe),signature=('pub unsafe fn ' if unsafe else 'pub fn ')+a.split('::')[-1]+'(/* demo signature */)',upstream_url='https://docs.rs/'+c['name']+'/'+c['v'])
+        insert('api_items',id=uid(c['name']+'/'+a),release_id=rel(c),canonical_key='demo:'+a,display_path=a if a.startswith('<') else c['name'].replace('-','_')+'::'+a,kind='method' if '::' in a else 'function',is_unsafe=int(unsafe),signature=c.get('signatures',{}).get(a,('pub unsafe fn ' if unsafe else 'pub fn ')+a.split('::')[-1]+'(/* demo signature */)'),upstream_url='https://docs.rs/'+c['name']+'/'+c['v'])
 claims=D['claims']+[dict(D['claims'][1],id=104,title='',comments=[],revision=1,description='')]
 groups={}
 for c in claims:groups.setdefault((c['crate'],c['method'].split(' · ')[0]),[]).append(c)
@@ -34,7 +34,7 @@ for index,(key,items) in enumerate(groups.items()):
     crate=next(c for c in D['crates'] if c['name']==key[0])
     t=next(t for t in D['tools'] if t['name']==key[1])
     author=items[0]['author']; rev=max(c['revision'] for c in items)
-    created=date(index)
+    created=date(15) if key[0]=='trait-demo' else date(index)
     insert('reports',create_key='staging-demo-reports-v1-'+key[0]+'-'+key[1],release_id=rel(crate),author_id=uid(author),withdrawn_at=date(10) if items[0]['id']==35 else None,created_at=created,updated_at=date(10) if rev>1 else created)
     for c in items:
         insert('claims',id=uid('claim/'+str(c['id'])),report_id=rid(key),api_item_id=uid(c['crate']+'/'+c['api']),property='no_ub' if c['property']=='No undefined behavior' else 'panic_contract',created_at=created)
