@@ -204,7 +204,7 @@ pub fn run(args: &ProjectArgs, command: Vec<String>) -> Result<()> {
                 api_paths: c
                     .api_paths
                     .iter()
-                    .map(|p| format!("{}::{p}", captured.lib_name))
+                    .map(|p| qualify_api_path(&captured.lib_name, p))
                     .collect(),
                 precondition: c.precondition.clone(),
                 file: c
@@ -504,6 +504,14 @@ pub fn kani_results(output: &str, contracts: &[Contract]) -> Result<(Vec<Value>,
     );
     Ok((results, verified))
 }
+fn qualify_api_path(crate_name: &str, path: &str) -> String {
+    // Qualified trait paths already contain the public crate-qualified type.
+    if path.starts_with('<') {
+        path.to_owned()
+    } else {
+        format!("{crate_name}::{path}")
+    }
+}
 fn proof_files(root: &Path) -> Result<BTreeMap<PathBuf, String>> {
     let mut out = BTreeMap::new();
     for e in ignore::WalkBuilder::new(root)
@@ -710,6 +718,15 @@ mod tests {
             1
         );
         assert!(creusot_results(d.path(), &proof_files(d.path()).unwrap(), &[contract()]).is_err());
+    }
+
+    #[test]
+    fn preserves_qualified_trait_api_paths() {
+        assert_eq!(qualify_api_path("demo", "S::new"), "demo::S::new");
+        assert_eq!(
+            qualify_api_path("demo", "<demo::S as demo::T>::f"),
+            "<demo::S as demo::T>::f"
+        );
     }
 
     #[test]
