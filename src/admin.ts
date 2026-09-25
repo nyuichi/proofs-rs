@@ -14,6 +14,7 @@ import {
   one,
   url,
 } from "./core";
+import { refreshCatalog } from "./imports";
 export const admin = new Hono<App>();
 admin.use("*", async (c, next) => {
   const u = requireUser(c);
@@ -28,6 +29,31 @@ admin.get("/audit", async (c) =>
     ),
   }),
 );
+admin.get("/catalogs", async (c) =>
+  c.json({
+    items: await rows(
+      c.env.DB,
+      "SELECT r.id,cr.name crate,r.version FROM doc_snapshots s JOIN releases r ON r.id=s.release_id JOIN crates cr ON cr.id=r.crate_id ORDER BY r.id",
+    ),
+  }),
+);
+admin.post("/catalogs/:id/refresh", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isSafeInteger(id) || id < 1)
+    throw new Fault(400, "invalid_release");
+  const result = await refreshCatalog(c.env, id);
+  await stmt(
+    c.env.DB,
+    "INSERT INTO audit_events VALUES(?,?,?,?,?,?)",
+    uid(),
+    requireUser(c).id,
+    "refresh_catalog",
+    String(id),
+    `Indexed ${result.indexed} APIs; added ${result.added}`,
+    now(),
+  ).run();
+  return c.json(result);
+});
 admin.get("/comments/:id/history", async (c) => {
   await stmt(
     c.env.DB,

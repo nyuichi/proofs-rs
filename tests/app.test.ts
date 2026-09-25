@@ -4,7 +4,7 @@ import { DatabaseSync } from "node:sqlite";
 import { readFileSync, readdirSync } from "node:fs";
 import { app } from "../src/worker";
 import { hash, Env } from "../src/core";
-import { extractAPIs, importJob } from "../src/imports";
+import { extractAPIs, importJob, refreshCatalog } from "../src/imports";
 import { cleanupRunUploads } from "../src/runs";
 function recordedSarif(id: string, command = ["cargo", "kani"]) {
   return {
@@ -646,7 +646,7 @@ test("CSRF, terms and publication scope remain enforced", async () => {
   );
   assert.equal((await request("/reports", "POST", reportInput)).status, 201);
 });
-test("rustdoc fixture: public free functions, inherent methods, reexports, no trait methods; unknown formats fail", () => {
+test("rustdoc fixture: public functions and concrete methods, reexports; unknown formats fail", () => {
   const fn = {
     header: { is_unsafe: false, abi: "Rust" },
     generics: { params: [], where_predicates: [] },
@@ -686,16 +686,32 @@ test("rustdoc fixture: public free functions, inherent methods, reexports, no tr
         visibility: "public",
         inner: { use: { id: 1, name: "renamed", is_glob: false } },
       },
-      7: { inner: { impl: { trait: { path: "Debug" }, items: [8] } } },
-      8: { name: "fmt", visibility: "public", inner: { function: fn } },
+      7: {
+        inner: {
+          impl: {
+            for: { resolved_path: { path: "sample::Thing" } },
+            trait: { path: "sample::Debug" },
+            generics: {},
+            items: [8],
+          },
+        },
+      },
+      8: { name: "fmt", visibility: "default", inner: { function: fn } },
     },
   };
   const apis = extractAPIs(doc, "sample", "1.0.0");
   assert.deepEqual(
     apis.map((a) => a.display_path),
-    ["sample::safe", "sample::Thing::run", "sample::renamed"],
+    [
+      "sample::safe",
+      "sample::Thing::run",
+      "sample::renamed",
+      "<sample::Thing as sample::Debug>::fmt",
+    ],
   );
   assert.equal(apis[1].is_unsafe, 1);
+  assert.equal(apis[3].kind, "method");
+  assert.match(apis[3].signature, /^impl sample::Debug for sample::Thing\n/);
   assert.throws(() =>
     extractAPIs({ ...doc, format_version: 999 }, "sample", "1.0.0"),
   );
@@ -737,6 +753,108 @@ test("docs.rs hex 0.4.3 format 60 imports codec APIs and associated types", () =
   assert.throws(
     () => extractAPIs({ ...doc, format_version: 999 }, "hex", "0.4.3"),
     /unsupported_rustdoc_format/,
+  );
+});
+
+test("catalog refresh adds concrete trait methods without changing existing API IDs", async () => {
+  const { db, env } = await fixture();
+  const fn = {
+    header: { is_unsafe: false, abi: "Rust" },
+    generics: { params: [], where_predicates: [] },
+    sig: { inputs: [], output: null },
+  };
+  const doc = {
+    format_version: 61,
+    crate_version: "1.0.0",
+    root: 0,
+    index: {
+      0: { name: "sample", inner: { module: { items: [1, 2] } } },
+      1: { name: "safe", visibility: "public", inner: { function: fn } },
+      2: {
+        name: "Thing",
+        visibility: "public",
+        inner: { struct: { impls: [3] } },
+      },
+      3: {
+        inner: {
+          impl: {
+            for: { resolved_path: { path: "sample::Thing" } },
+            trait: { path: "sample::Trait" },
+            generics: {},
+            items: [4],
+          },
+        },
+      },
+      4: { name: "method", visibility: "default", inner: { function: fn } },
+    },
+  };
+  (env as any).ARCHIVE.get = async () => ({
+    text: async () => JSON.stringify(doc),
+  });
+  assert.deepEqual(await refreshCatalog(env, 1), { indexed: 2, added: 1 });
+  assert.deepEqual(await refreshCatalog(env, 1), { indexed: 2, added: 0 });
+  assert.equal(
+    db
+      .prepare("SELECT id FROM api_items WHERE canonical_key='sample::safe'")
+      .get()?.id,
+    "safe",
+  );
+  assert.equal(
+    db
+      .prepare(
+        "SELECT kind FROM api_items WHERE canonical_key='<sample::Thing as sample::Trait>::method'",
+      )
+      .get()?.kind,
+    "method",
+  );
+});
+
+test("catalog uses public trait and type aliases without exposing private paths", () => {
+  const fn = {
+    header: { is_unsafe: false, abi: "Rust" },
+    generics: { params: [], where_predicates: [] },
+    sig: { inputs: [], output: null },
+  };
+  const doc = {
+    format_version: 61,
+    crate_version: "1.0.0",
+    root: 0,
+    index: {
+      0: { name: "sample", inner: { module: { items: [1, 2, 3] } } },
+      1: {
+        name: "hidden",
+        visibility: "default",
+        inner: { module: { items: [4, 5] } },
+      },
+      2: {
+        name: "Alias",
+        visibility: "public",
+        inner: { use: { id: 4, name: "Alias", is_glob: false } },
+      },
+      3: {
+        name: "PublicTrait",
+        visibility: "public",
+        inner: { use: { id: 5, name: "PublicTrait", is_glob: false } },
+      },
+      4: { name: "S", visibility: "public", inner: { struct: { impls: [6] } } },
+      5: { name: "T", visibility: "public", inner: { trait: { items: [7] } } },
+      6: {
+        inner: {
+          impl: {
+            for: { resolved_path: { path: "sample::hidden::S" } },
+            trait: { path: "sample::hidden::T", id: 5 },
+            generics: {},
+            items: [8],
+          },
+        },
+      },
+      7: { name: "m", visibility: "public", inner: { function: fn } },
+      8: { name: "m", visibility: "default", inner: { function: fn } },
+    },
+  };
+  assert.deepEqual(
+    extractAPIs(doc, "sample", "1.0.0").map((a) => a.canonical_key),
+    ["<sample::Alias as sample::PublicTrait>::m"],
   );
 });
 

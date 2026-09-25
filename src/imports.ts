@@ -249,19 +249,28 @@ export function extractAPIs(doc: any, crate: string, version: string) {
   if (!index?.[doc.root]?.inner?.module)
     throw new Fault(422, "invalid_rustdoc");
   const output = new Map<string, any>();
+  const publicTraits = new Map<string, Set<string>>();
+  const traitMethods: {
+    item: any;
+    path: string[];
+    owner: { kind: string; path: string[]; impl: any };
+    trait: any;
+  }[] = [];
   let visits = 0;
   const rootName = index[doc.root].name || crate.replaceAll("-", "_");
   function add(
     item: any,
     path: string[],
-    owner?: { kind: string; path: string[]; impl: any },
+    owner?: { kind: string; path: string[]; impl: any; trait?: string },
   ) {
     const fn = resolveEmptyPaths(item.inner.function, doc.paths);
     if (!fn || typeof fn.header?.is_unsafe !== "boolean")
       throw new Fault(422, "invalid_rustdoc_function");
-    const name = path.join("::");
+    const name = owner?.trait
+      ? `<${owner.path.join("::")} as ${owner.trait}>::${path.at(-1)}`
+      : path.join("::");
     const prefix = owner
-      ? `impl${params(owner.impl.generics)} ${typ(owner.impl.for)}${wheres(owner.impl.generics)}\n`
+      ? `impl${params(owner.impl.generics)} ${owner.trait ? owner.trait + " for " : ""}${typ(owner.impl.for)}${wheres(owner.impl.generics)}\n`
       : "";
     const h = fn.header;
     const abi = typeof h.abi === "string" ? h.abi : Object.keys(h.abi || {})[0];
@@ -331,24 +340,48 @@ export function extractAPIs(doc: any, crate: string, version: string) {
       add(item, current);
       return;
     }
+    if (inner.trait) {
+      const aliases = publicTraits.get(String(id)) || new Set<string>();
+      aliases.add(current.join("::"));
+      publicTraits.set(String(id), aliases);
+      return;
+    }
     for (const kind of ["struct", "enum", "union"])
       if (inner[kind])
         for (const implID of inner[kind].impls || []) {
           const imp = index[implID]?.inner?.impl;
           if (!imp) throw new Fault(422, "invalid_rustdoc_impl");
-          if (imp.trait || imp.is_synthetic) continue;
-          for (const methodID of imp.items) {
+          if (imp.is_synthetic) continue;
+          const trait = imp.trait && resolveEmptyPaths(imp.trait, doc.paths);
+          for (const methodID of imp.items || []) {
             const method = index[methodID];
-            if (method?.visibility === "public" && method.inner?.function)
-              add(method, [...current, method.name], {
-                kind,
-                path: current,
-                impl: resolveEmptyPaths(imp, doc.paths),
+            if (!method?.inner?.function) continue;
+            const owner = {
+              kind,
+              path: current,
+              impl: resolveEmptyPaths(imp, doc.paths),
+            };
+            if (trait)
+              traitMethods.push({
+                item: method,
+                path: [...current, method.name],
+                owner,
+                trait,
               });
+            else if (method.visibility === "public")
+              add(method, [...current, method.name], owner);
           }
         }
   }
   walk(doc.root, [], new Set());
+  for (const { item, path, owner, trait } of traitMethods) {
+    const local = trait.id !== undefined && index[trait.id]?.inner?.trait;
+    const paths = local
+      ? publicTraits.get(String(trait.id)) || new Set<string>()
+      : new Set([trait.path]);
+    for (const traitPath of paths)
+      add(item, path, { ...owner, trait: traitPath + args(trait.args) });
+  }
   return [...output.values()];
 }
 async function safeFetch(url: string, hosts: string[], signal: AbortSignal) {
@@ -399,6 +432,49 @@ async function bounded(stream: ReadableStream<Uint8Array>, max: number) {
   return result;
 }
 export const importRoutes = new Hono<App>();
+// Rebuild an imported release from its immutable source document. Existing keys
+// and their claim references are preserved; only newly indexed APIs are inserted.
+export async function refreshCatalog(env: Env, releaseId: number) {
+  const snapshot = await one(
+    env.DB,
+    "SELECT s.r2_key,cr.name,r.version FROM doc_snapshots s JOIN releases r ON r.id=s.release_id JOIN crates cr ON cr.id=r.crate_id WHERE r.id=?",
+    releaseId,
+  );
+  if (!snapshot) throw new Fault(404, "snapshot_not_found");
+  const object = await env.ARCHIVE.get(snapshot.r2_key);
+  if (!object) throw new Fault(502, "snapshot_missing");
+  const apis = extractAPIs(
+    JSON.parse(await object.text()),
+    snapshot.name,
+    snapshot.version,
+  );
+  let added = 0;
+  for (let i = 0; i < apis.length; i += 50) {
+    const statements = await Promise.all(
+      apis
+        .slice(i, i + 50)
+        .map(async (a) =>
+          stmt(
+            env.DB,
+            "INSERT INTO api_items VALUES(?,?,?,?,?,?,?,?) ON CONFLICT(release_id,canonical_key) DO NOTHING",
+            await hash(releaseId + ":" + a.canonical_key),
+            releaseId,
+            a.canonical_key,
+            a.display_path,
+            a.kind,
+            a.is_unsafe,
+            a.signature,
+            a.upstream_url,
+          ),
+        ),
+    );
+    added += (await env.DB.batch(statements)).reduce(
+      (n, result) => n + (result.meta?.changes || 0),
+      0,
+    );
+  }
+  return { indexed: apis.length, added };
+}
 importRoutes.post("/publish/prepare", async (c) => {
   const u = requireUser(c),
     b = await jsonBody(c),
