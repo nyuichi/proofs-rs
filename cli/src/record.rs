@@ -635,6 +635,12 @@ fn proved(v: &Value) -> bool {
     if v.get("prover").and_then(Value::as_str).is_some() {
         return true;
     }
+    if v.get("tactic").and_then(Value::as_str).is_some() {
+        return v
+            .get("children")
+            .and_then(Value::as_array)
+            .is_some_and(|children| !children.is_empty() && children.iter().all(proved));
+    }
     if let Some(o) = v.as_object() {
         return !o.is_empty()
             && o.values().all(|v| {
@@ -727,6 +733,20 @@ mod tests {
             qualify_api_path("demo", "<demo::S as demo::T>::f"),
             "<demo::S as demo::T>::f"
         );
+    }
+
+    #[test]
+    fn native_why3find_tactic_requires_all_children_proved() {
+        let pass = json!({"tactic":"split_vc","children":[{"prover":"z3","time":0.1},{"tactic":"split_vc","children":[{"prover":"cvc5","time":0.1}]}]});
+        assert!(proved(&pass));
+        for fail in [
+            json!({"tactic":"split_vc","children":[{"prover":"z3"},{}]}),
+            json!({"tactic":"split_vc","children":[]}),
+            json!({"tactic":"split_vc"}),
+            json!({"children":[{}]}),
+        ] {
+            assert!(!proved(&fail));
+        }
     }
 
     #[test]
