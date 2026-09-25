@@ -93,7 +93,7 @@ function navigate(path: string) {
 async function refreshMe() {
   me = await request("/me", "GET", undefined, undefined, false);
   document.querySelector("#account-nav")!.innerHTML = me.user
-    ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">My activity (${me.karma} karma)</a><a href="#/my-reports">My reports</a><a href="#/my-comments">My comments</a><a href="#/my-starred-reports">Starred reports</a><a href="#/my-starred-claims">Starred claims</a><a href="#/settings">Settings</a><button id="logout">Sign out</button></div></details>`
+    ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">My activity (${me.karma} karma)</a><a href="#/my-reports">My reports</a><a href="#/my-comments">My comments</a><a href="#/my-starred-reports">Starred reports</a><a href="#/my-starred-claims">Starred claims</a><a href="#/settings">Settings</a>${me.user.role === "admin" ? '<a href="#/admin/catalogs">Catalogs</a>' : ""}<button id="logout">Sign out</button></div></details>`
     : '<div class="signin"><a href="/auth/github">Sign in with GitHub</a></div>';
   document.querySelector("#logout")?.addEventListener("click", async () => {
     try {
@@ -183,6 +183,24 @@ async function claimsList(path: string, container: HTMLElement, cursor = 0) {
   pager(data, (n) => claimsList(path, container, n), container);
 }
 const loading = '<p data-loading role="status">Loading…</p>';
+async function adminCatalogs() {
+  if (!needUser()) return;
+  root.innerHTML = `<h1>Catalogs</h1><p>Reindex stored rustdoc snapshots to include all public callable APIs. Existing API IDs and claims are preserved.</p><div id="catalogs">${loading}</div>`;
+  const data = await request("/admin/catalogs");
+  root.querySelector("#catalogs")!.innerHTML = data.items.length
+    ? `<ul>${data.items.map((item: any) => `<li>${esc(item.crate)} ${esc(item.version)} <button data-refresh="${item.id}">Refresh</button> <span id="catalog-${item.id}" role="status"></span></li>`).join("")}</ul>`
+    : "<p>No imported catalogs.</p>";
+  bind("[data-refresh]", async (event) => {
+    const id = (event.currentTarget as HTMLElement).dataset.refresh!;
+    const result = await request(
+      `/admin/catalogs/${enc(id)}/refresh`,
+      "POST",
+      {},
+    );
+    root.querySelector(`#catalog-${id}`)!.textContent =
+      `${result.indexed} indexed, ${result.added} added`;
+  });
+}
 async function home() {
   root.innerHTML = `<section class="home-search"><h1>proofs.rs</h1><p>Verification reports and discussions for Rust APIs.</p><form id="search" class="searchbar"><input name="q" aria-label="Crate name" placeholder="Search crates"><button>Search</button></form></section><div class="home-columns"><section><h2>Recent reports</h2><div id="home-reports">${loading}</div></section><section><h2>Latest discussion</h2><div id="home-discussion">${loading}</div></section></div>`;
   bind(
@@ -864,6 +882,7 @@ async function route() {
       if (me.user) await activity(me.user.id);
       else login();
     } else if (p.startsWith("my-")) await mine(p.slice(3));
+    else if (p === "admin" && id === "catalogs") await adminCatalogs();
     else if (p === "settings") await settings();
     else if (p === "device") await devicePage();
     else if (p === "tool-version") await toolVersionPage(id);

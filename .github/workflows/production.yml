@@ -86,6 +86,8 @@ jobs:
           ADMIN_GITHUB_IDS: ${{ vars.ADMIN_GITHUB_IDS }}
       - run: npx wrangler d1 migrations apply DB --remote --config wrangler.production.json
       - run: npx wrangler deploy --config wrangler.production.json
+      - name: Refresh imported API catalogues
+        run: node --import tsx scripts/refresh-catalogs.mjs wrangler.production.json
       - name: Configure production secrets
         run: node scripts/secrets.mjs production
         env:

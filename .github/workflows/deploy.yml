@@ -47,6 +47,8 @@ jobs:
           GITHUB_CLIENT_SECRET: ${{ secrets.STAGING_GITHUB_CLIENT_SECRET }}
           TOKEN_SECRET: ${{ secrets.STAGING_TOKEN_SECRET }}
           CLOUDFLARE_D1_TOKEN: ${{ secrets.CLOUDFLARE_D1_BACKUP_TOKEN }}
+      - name: Refresh imported API catalogues
+        run: node --import tsx scripts/refresh-catalogs.mjs wrangler.staging.json
       - name: Public read-only smoke check
         run: node scripts/smoke.mjs '${{ steps.resources.outputs.url }}'
       - name: Seed staging examples
