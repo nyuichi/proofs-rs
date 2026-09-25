@@ -37,8 +37,13 @@ struct Function {
 #[derive(Clone)]
 enum CallableContext {
     Free,
-    Inherent { self_ty: syn::Path },
-    TraitImpl { self_ty: syn::Path, trait_path: syn::Path },
+    Inherent {
+        self_ty: syn::Path,
+    },
+    TraitImpl {
+        self_ty: syn::Path,
+        trait_path: syn::Path,
+    },
 }
 #[derive(Clone)]
 struct Import {
@@ -62,8 +67,12 @@ fn segments(path: &syn::Path) -> Result<Vec<String>> {
         path.leading_colon.is_none(),
         "Absolute extern paths are unsupported"
     );
-    ensure!(path.segments.iter().all(|s| matches!(s.arguments, syn::PathArguments::None)),
-        "Generic callable paths require compiler-backed resolution");
+    ensure!(
+        path.segments
+            .iter()
+            .all(|s| matches!(s.arguments, syn::PathArguments::None)),
+        "Generic callable paths require compiler-backed resolution"
+    );
     Ok(path
         .segments
         .iter()
@@ -74,8 +83,14 @@ impl CallableContext {
     fn path(&self, scanner: &Scanner<'_>, module: &[String], name: &str) -> Result<String> {
         match self {
             Self::Free => Ok(item_path(module, name)),
-            Self::Inherent { self_ty } => Ok(format!("{}::{name}", scanner.resolve(&segments(self_ty)?, module, 0)?)),
-            Self::TraitImpl { self_ty, trait_path } => Ok(format!(
+            Self::Inherent { self_ty } => Ok(format!(
+                "{}::{name}",
+                scanner.resolve(&segments(self_ty)?, module, 0)?
+            )),
+            Self::TraitImpl {
+                self_ty,
+                trait_path,
+            } => Ok(format!(
                 "<{} as {}>::{name}",
                 scanner.resolve(&segments(self_ty)?, module, 0)?,
                 scanner.resolve(&segments(trait_path)?, module, 0)?
@@ -310,24 +325,47 @@ pub fn discover_for_tool(project: &Project, tool: &Tool) -> Result<Vec<Contract>
 }
 
 impl Scanner<'_> {
-    fn public_callable_paths(&self, context: &CallableContext, module: &[String], name: &str) -> Result<Vec<String>> {
+    fn public_callable_paths(
+        &self,
+        context: &CallableContext,
+        module: &[String],
+        name: &str,
+    ) -> Result<Vec<String>> {
         match context {
             CallableContext::Free => self.creusot_public_paths(&item_path(module, name)),
             CallableContext::Inherent { self_ty } => {
                 let ty = self.resolve(&segments(self_ty)?, module, 0)?;
                 self.creusot_public_paths(&format!("{ty}::{name}"))
             }
-            CallableContext::TraitImpl { self_ty, trait_path } => {
+            CallableContext::TraitImpl {
+                self_ty,
+                trait_path,
+            } => {
                 let ty = self.resolve(&segments(self_ty)?, module, 0)?;
                 let tr = self.resolve(&segments(trait_path)?, module, 0)?;
                 let types = self.creusot_public_paths(&ty)?;
                 let local_trait = self.traits.contains(&tr);
-                let traits = if local_trait { self.creusot_public_paths(&tr)? } else { vec![tr] };
-                Ok(types.iter().flat_map(|ty| traits.iter().map(move |tr| {
-                    let ty = format!("{}::{ty}", self.project.lib_name);
-                    let tr = if local_trait { format!("{}::{tr}", self.project.lib_name) } else { tr.clone() };
-                    format!("<{ty} as {tr}>::{name}")
-                })).collect::<BTreeSet<_>>().into_iter().collect())
+                let traits = if local_trait {
+                    self.creusot_public_paths(&tr)?
+                } else {
+                    vec![tr]
+                };
+                Ok(types
+                    .iter()
+                    .flat_map(|ty| {
+                        traits.iter().map(move |tr| {
+                            let ty = format!("{}::{ty}", self.project.lib_name);
+                            let tr = if local_trait {
+                                format!("{}::{tr}", self.project.lib_name)
+                            } else {
+                                tr.clone()
+                            };
+                            format!("<{ty} as {tr}>::{name}")
+                        })
+                    })
+                    .collect::<BTreeSet<_>>()
+                    .into_iter()
+                    .collect())
             }
         }
     }
@@ -502,14 +540,15 @@ impl Scanner<'_> {
                         }
                     }
                 }
-                Item::Trait(i) => {
-                    if matches!(i.vis, syn::Visibility::Public(_)) && attrs(&i.attrs, self.project)?.is_some() {
-                        self.public_items.insert(item_path(module, &i.ident.to_string()));
-                    }
-                }
-                Item::Fn(f) => {
-                    self.function(&f.attrs, &f.sig, &f.vis, f.span(), file, module, CallableContext::Free)?
-                }
+                Item::Fn(f) => self.function(
+                    &f.attrs,
+                    &f.sig,
+                    &f.vis,
+                    f.span(),
+                    file,
+                    module,
+                    CallableContext::Free,
+                )?,
                 Item::Impl(i) => {
                     if attrs(&i.attrs, self.project)?.is_none() {
                         continue;
@@ -517,15 +556,31 @@ impl Scanner<'_> {
                     let syn::Type::Path(owner) = &*i.self_ty else {
                         continue;
                     };
-                    if owner.qself.is_some() { continue; }
-                    if owner.path.segments.iter().any(|s| !matches!(s.arguments, syn::PathArguments::None))
-                        || i.trait_.as_ref().is_some_and(|(_, path, _)| path.segments.iter().any(|s| !matches!(s.arguments, syn::PathArguments::None))) {
+                    if owner.qself.is_some() {
+                        continue;
+                    }
+                    if owner
+                        .path
+                        .segments
+                        .iter()
+                        .any(|s| !matches!(s.arguments, syn::PathArguments::None))
+                        || i.trait_.as_ref().is_some_and(|(_, path, _)| {
+                            path.segments
+                                .iter()
+                                .any(|s| !matches!(s.arguments, syn::PathArguments::None))
+                        })
+                    {
                         continue;
                     }
                     let context = if let Some((_, trait_path, _)) = &i.trait_ {
-                        CallableContext::TraitImpl { self_ty: owner.path.clone(), trait_path: trait_path.clone() }
+                        CallableContext::TraitImpl {
+                            self_ty: owner.path.clone(),
+                            trait_path: trait_path.clone(),
+                        }
                     } else {
-                        CallableContext::Inherent { self_ty: owner.path.clone() }
+                        CallableContext::Inherent {
+                            self_ty: owner.path.clone(),
+                        }
                     };
                     for method in &i.items {
                         if let syn::ImplItem::Fn(f) = method {
@@ -633,7 +688,8 @@ impl Scanner<'_> {
             path,
             name,
             module: module.to_vec(),
-            public: matches!(context, CallableContext::TraitImpl { .. }) || matches!(vis, syn::Visibility::Public(_)),
+            public: matches!(context, CallableContext::TraitImpl { .. })
+                || matches!(vis, syn::Visibility::Public(_)),
             context,
             requires,
             target,
@@ -753,7 +809,10 @@ pub fn discover(project: &Project) -> Result<Vec<Contract>> {
         functions.entry(path.clone()).or_default().push(i);
         if let CallableContext::TraitImpl { self_ty, .. } = &f.context {
             let ty = s.resolve(&segments(self_ty)?, &f.module, 0)?;
-            functions.entry(format!("{ty}::{}", f.name)).or_default().push(i);
+            functions
+                .entry(format!("{ty}::{}", f.name))
+                .or_default()
+                .push(i);
         }
     }
     let mut result = vec![];
@@ -763,10 +822,18 @@ pub fn discover(project: &Project) -> Result<Vec<Contract>> {
             continue;
         };
         let path = if let Some(qself) = &target.qself {
-            let syn::Type::Path(ty) = &*qself.ty else { bail!("Unsupported qualified contract target") };
-            ensure!(ty.qself.is_none(), "Nested qualified targets require compiler-backed resolution");
+            let syn::Type::Path(ty) = &*qself.ty else {
+                bail!("Unsupported qualified contract target")
+            };
+            ensure!(
+                ty.qself.is_none(),
+                "Nested qualified targets require compiler-backed resolution"
+            );
             let parts = segments(&target.path)?;
-            ensure!(qself.position + 1 == parts.len(), "Unsupported qualified contract target");
+            ensure!(
+                qself.position + 1 == parts.len(),
+                "Unsupported qualified contract target"
+            );
             let self_ty = s.resolve(&segments(&ty.path)?, &h.module, 0)?;
             if qself.position == 0 {
                 format!("{self_ty}::{}", parts.last().unwrap())
@@ -806,7 +873,10 @@ pub fn discover(project: &Project) -> Result<Vec<Contract>> {
                 .join(" && ")
         };
         let api_paths = s.public_callable_paths(&f.context, &f.module, &f.name)?;
-        ensure!(!api_paths.is_empty(), "Contract target {identity} has no public API path");
+        ensure!(
+            !api_paths.is_empty(),
+            "Contract target {identity} has no public API path"
+        );
         result.push(Contract {
             api_paths,
             precondition,
@@ -874,7 +944,9 @@ mod tests {
     fn trait_impl_qualified_target_and_public_reexports() {
         let (_d, p) = project("mod hidden { pub struct S; pub trait T { fn m(&self); } impl T for S { #[kani::requires(true)] fn m(&self) {} } #[kani::proof_for_contract(<S as T>::m)] fn check() {} } pub use hidden::{S as Alias, T as PublicTrait};");
         let c = discover(&p).unwrap();
-        assert!(c[0].api_paths.contains(&"<demo::Alias as demo::PublicTrait>::m".into()));
+        assert!(c[0]
+            .api_paths
+            .contains(&"<demo::Alias as demo::PublicTrait>::m".into()));
         assert_eq!(c[0].api_paths, ["<demo::Alias as demo::PublicTrait>::m"]);
     }
     #[test]
