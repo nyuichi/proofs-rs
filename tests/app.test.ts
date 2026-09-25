@@ -705,13 +705,13 @@ test("rustdoc fixture: public functions and concrete methods, reexports; unknown
     [
       "sample::safe",
       "sample::Thing::run",
-      "<sample::Thing as sample::Debug>::fmt",
       "sample::renamed",
+      "<sample::Thing as sample::Debug>::fmt",
     ],
   );
   assert.equal(apis[1].is_unsafe, 1);
-  assert.equal(apis[2].kind, "method");
-  assert.match(apis[2].signature, /^impl sample::Debug for sample::Thing\n/);
+  assert.equal(apis[3].kind, "method");
+  assert.match(apis[3].signature, /^impl sample::Debug for sample::Thing\n/);
   assert.throws(() =>
     extractAPIs({ ...doc, format_version: 999 }, "sample", "1.0.0"),
   );
