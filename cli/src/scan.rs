@@ -23,16 +23,22 @@ pub struct Contract {
 struct Function {
     path: String,
     module: Vec<String>,
-    owner: Option<syn::Path>,
+    context: CallableContext,
     name: String,
     public: bool,
     requires: Vec<String>,
-    target: Option<syn::Path>,
+    target: Option<syn::ExprPath>,
     annotated: bool,
     excluded: bool,
     file: PathBuf,
     first: usize,
     last: usize,
+}
+#[derive(Clone)]
+enum CallableContext {
+    Free,
+    Inherent { self_ty: syn::Path },
+    TraitImpl { self_ty: syn::Path, trait_path: syn::Path },
 }
 #[derive(Clone)]
 struct Import {
@@ -45,9 +51,9 @@ struct Scanner<'a> {
     project: &'a Project,
     creusot: bool,
     public_items: BTreeSet<String>,
+    traits: BTreeSet<String>,
     functions: Vec<Function>,
     imports: Vec<Import>,
-    public_modules: BTreeSet<String>,
     visited: BTreeSet<PathBuf>,
     ordinary: usize,
 }
@@ -56,11 +62,32 @@ fn segments(path: &syn::Path) -> Result<Vec<String>> {
         path.leading_colon.is_none(),
         "Absolute extern paths are unsupported"
     );
+    ensure!(path.segments.iter().all(|s| matches!(s.arguments, syn::PathArguments::None)),
+        "Generic callable paths require compiler-backed resolution");
     Ok(path
         .segments
         .iter()
         .map(|x| x.ident.to_string().trim_start_matches("r#").to_owned())
         .collect())
+}
+impl CallableContext {
+    fn path(&self, scanner: &Scanner<'_>, module: &[String], name: &str) -> Result<String> {
+        match self {
+            Self::Free => Ok(item_path(module, name)),
+            Self::Inherent { self_ty } => Ok(format!("{}::{name}", scanner.resolve(&segments(self_ty)?, module, 0)?)),
+            Self::TraitImpl { self_ty, trait_path } => Ok(format!(
+                "<{} as {}>::{name}",
+                scanner.resolve(&segments(self_ty)?, module, 0)?,
+                scanner.resolve(&segments(trait_path)?, module, 0)?
+            )),
+        }
+    }
+    fn self_ty(&self) -> Option<&syn::Path> {
+        match self {
+            Self::Free => None,
+            Self::Inherent { self_ty } | Self::TraitImpl { self_ty, .. } => Some(self_ty),
+        }
+    }
 }
 fn list(meta: &syn::MetaList) -> Result<Punctuated<Meta, Token![,]>> {
     Ok(Punctuated::parse_terminated.parse2(meta.tokens.clone())?)
@@ -251,16 +278,8 @@ pub fn discover_for_tool(project: &Project, tool: &Tool) -> Result<Vec<Contract>
         if !f.public || f.excluded || (target == CreusotTarget::Annotated && !f.annotated) {
             continue;
         }
-        let path = if let Some(owner) = &f.owner {
-            let owner = s.resolve(&segments(owner)?, &f.module, 0)?;
-            if !s.public_items.contains(&owner) {
-                continue;
-            }
-            format!("{owner}::{}", f.name)
-        } else {
-            f.path.clone()
-        };
-        let paths = s.creusot_public_paths(&path)?;
+        let path = f.context.path(&s, &f.module, &f.name)?;
+        let paths = s.public_callable_paths(&f.context, &f.module, &f.name)?;
         if paths.is_empty() {
             continue;
         }
@@ -291,6 +310,27 @@ pub fn discover_for_tool(project: &Project, tool: &Tool) -> Result<Vec<Contract>
 }
 
 impl Scanner<'_> {
+    fn public_callable_paths(&self, context: &CallableContext, module: &[String], name: &str) -> Result<Vec<String>> {
+        match context {
+            CallableContext::Free => self.creusot_public_paths(&item_path(module, name)),
+            CallableContext::Inherent { self_ty } => {
+                let ty = self.resolve(&segments(self_ty)?, module, 0)?;
+                self.creusot_public_paths(&format!("{ty}::{name}"))
+            }
+            CallableContext::TraitImpl { self_ty, trait_path } => {
+                let ty = self.resolve(&segments(self_ty)?, module, 0)?;
+                let tr = self.resolve(&segments(trait_path)?, module, 0)?;
+                let types = self.creusot_public_paths(&ty)?;
+                let local_trait = self.traits.contains(&tr);
+                let traits = if local_trait { self.creusot_public_paths(&tr)? } else { vec![tr] };
+                Ok(types.iter().flat_map(|ty| traits.iter().map(move |tr| {
+                    let ty = format!("{}::{ty}", self.project.lib_name);
+                    let tr = if local_trait { format!("{}::{tr}", self.project.lib_name) } else { tr.clone() };
+                    format!("<{ty} as {tr}>::{name}")
+                })).collect::<BTreeSet<_>>().into_iter().collect())
+            }
+        }
+    }
     fn creusot_attr(&self, meta: &Meta, name: &str, module: &[String]) -> Result<bool> {
         if creusot(meta, name) {
             return Ok(true);
@@ -369,9 +409,6 @@ impl Scanner<'_> {
         module: &[String],
         public: bool,
     ) -> Result<()> {
-        if public {
-            self.public_modules.insert(module.join("::"));
-        }
         // Imports are in scope regardless of their source order.
         for item in items {
             if let Item::Use(u) = item {
@@ -456,8 +493,22 @@ impl Scanner<'_> {
                             .insert(item_path(module, &i.ident.to_string()));
                     }
                 }
+                Item::Trait(i) => {
+                    if attrs(&i.attrs, self.project)?.is_some() {
+                        let path = item_path(module, &i.ident.to_string());
+                        self.traits.insert(path.clone());
+                        if matches!(i.vis, syn::Visibility::Public(_)) {
+                            self.public_items.insert(path);
+                        }
+                    }
+                }
+                Item::Trait(i) => {
+                    if matches!(i.vis, syn::Visibility::Public(_)) && attrs(&i.attrs, self.project)?.is_some() {
+                        self.public_items.insert(item_path(module, &i.ident.to_string()));
+                    }
+                }
                 Item::Fn(f) => {
-                    self.function(&f.attrs, &f.sig, &f.vis, f.span(), file, module, None)?
+                    self.function(&f.attrs, &f.sig, &f.vis, f.span(), file, module, CallableContext::Free)?
                 }
                 Item::Impl(i) => {
                     if attrs(&i.attrs, self.project)?.is_none() {
@@ -466,16 +517,18 @@ impl Scanner<'_> {
                     let syn::Type::Path(owner) = &*i.self_ty else {
                         continue;
                     };
+                    if owner.qself.is_some() { continue; }
+                    if owner.path.segments.iter().any(|s| !matches!(s.arguments, syn::PathArguments::None))
+                        || i.trait_.as_ref().is_some_and(|(_, path, _)| path.segments.iter().any(|s| !matches!(s.arguments, syn::PathArguments::None))) {
+                        continue;
+                    }
+                    let context = if let Some((_, trait_path, _)) = &i.trait_ {
+                        CallableContext::TraitImpl { self_ty: owner.path.clone(), trait_path: trait_path.clone() }
+                    } else {
+                        CallableContext::Inherent { self_ty: owner.path.clone() }
+                    };
                     for method in &i.items {
                         if let syn::ImplItem::Fn(f) = method {
-                            if i.trait_.is_some() {
-                                let ms = attrs(&f.attrs, self.project)?.unwrap_or_default();
-                                ensure!(
-                                    !ms.iter().any(|m| kani(m, "proof_for_contract")),
-                                    "Trait contract harnesses are unsupported"
-                                );
-                                continue;
-                            }
                             self.function(
                                 &f.attrs,
                                 &f.sig,
@@ -483,7 +536,7 @@ impl Scanner<'_> {
                                 f.span(),
                                 file,
                                 module,
-                                Some(owner.path.clone()),
+                                context.clone(),
                             )?;
                         }
                     }
@@ -512,7 +565,7 @@ impl Scanner<'_> {
         span: proc_macro2::Span,
         file: &Path,
         module: &[String],
-        owner: Option<syn::Path>,
+        context: CallableContext,
     ) -> Result<()> {
         let Some(ms) = attrs(attributes, self.project)? else {
             return Ok(());
@@ -564,7 +617,7 @@ impl Scanner<'_> {
                     bail!("Invalid proof_for_contract attribute");
                 };
                 target = Some(
-                    syn::parse2::<syn::Path>(l.tokens.clone())
+                    syn::parse2::<syn::ExprPath>(l.tokens.clone())
                         .context("Unsupported contract target path")?,
                 );
             }
@@ -580,8 +633,8 @@ impl Scanner<'_> {
             path,
             name,
             module: module.to_vec(),
-            owner,
-            public: matches!(vis, syn::Visibility::Public(_)),
+            public: matches!(context, CallableContext::TraitImpl { .. }) || matches!(vis, syn::Visibility::Public(_)),
+            context,
             requires,
             target,
             annotated,
@@ -680,9 +733,9 @@ fn scanner(project: &Project, creusot: bool) -> Scanner<'_> {
         project,
         creusot,
         public_items: BTreeSet::new(),
+        traits: BTreeSet::new(),
         functions: vec![],
         imports: vec![],
-        public_modules: BTreeSet::new(),
         visited: BTreeSet::new(),
         ordinary: 0,
     }
@@ -692,16 +745,12 @@ pub fn discover(project: &Project) -> Result<Vec<Contract>> {
     s.file(&project.root_source, &[], true)?;
     let mut functions = BTreeMap::<String, Vec<usize>>::new();
     for (i, f) in s.functions.iter().enumerate() {
-        let path = if let Some(owner) = &f.owner {
-            format!(
-                "{}::{}",
-                s.resolve(&segments(owner)?, &f.module, 0)?,
-                f.name
-            )
-        } else {
-            f.path.clone()
-        };
-        functions.entry(path).or_default().push(i);
+        let path = f.context.path(&s, &f.module, &f.name)?;
+        functions.entry(path.clone()).or_default().push(i);
+        if let CallableContext::TraitImpl { self_ty, .. } = &f.context {
+            let ty = s.resolve(&segments(self_ty)?, &f.module, 0)?;
+            functions.entry(format!("{ty}::{}", f.name)).or_default().push(i);
+        }
     }
     let mut result = vec![];
     let mut targets = BTreeSet::new();
@@ -709,52 +758,40 @@ pub fn discover(project: &Project) -> Result<Vec<Contract>> {
         let Some(target) = &h.target else {
             continue;
         };
-        let mut parts = segments(target)?;
-        if parts.first().is_some_and(|p| p == "Self") {
-            let owner = h.owner.as_ref().context("Self outside an impl")?;
-            let mut replacement = segments(owner)?;
-            replacement.extend(parts.into_iter().skip(1));
-            parts = replacement;
-        }
-        let path = s.resolve(&parts, &h.module, 0)?;
-        let indices = functions.get(&path).with_context(|| format!("Cannot resolve {} in harness {}. Glob imports, generated functions and trait methods are unsupported.", path, h.path))?;
+        let path = if let Some(qself) = &target.qself {
+            let syn::Type::Path(ty) = &*qself.ty else { bail!("Unsupported qualified contract target") };
+            ensure!(ty.qself.is_none(), "Nested qualified targets require compiler-backed resolution");
+            let parts = segments(&target.path)?;
+            ensure!(qself.position + 1 == parts.len(), "Unsupported qualified contract target");
+            let self_ty = s.resolve(&segments(&ty.path)?, &h.module, 0)?;
+            if qself.position == 0 {
+                format!("{self_ty}::{}", parts.last().unwrap())
+            } else {
+                let tr = s.resolve(&parts[..qself.position], &h.module, 0)?;
+                format!("<{self_ty} as {tr}>::{}", parts.last().unwrap())
+            }
+        } else {
+            let mut parts = segments(&target.path)?;
+            if parts.first().is_some_and(|p| p == "Self") {
+                let owner = h.context.self_ty().context("Self outside an impl")?;
+                let mut replacement = segments(owner)?;
+                replacement.extend(parts.into_iter().skip(1));
+                parts = replacement;
+            }
+            s.resolve(&parts, &h.module, 0)?
+        };
+        let indices = functions.get(&path).with_context(|| format!("Cannot resolve {path} in harness {}. Glob imports and generated functions require compiler-backed resolution.", h.path))?;
         ensure!(indices.len() == 1, "Ambiguous contract target {path}");
-        ensure!(
-            targets.insert(path.clone()),
-            "Multiple contract harnesses target {path}; only one per API is supported"
-        );
         let f = &s.functions[indices[0]];
+        let identity = f.context.path(&s, &f.module, &f.name)?;
+        ensure!(
+            targets.insert(identity.clone()),
+            "Multiple contract harnesses target {identity}; only one per API is supported"
+        );
         ensure!(
             f.public,
             "Contract target {path} is not a public function/method"
         );
-        let mut paths = BTreeSet::from([path.clone()]);
-        // Resolve explicit public reexports, including reexported types/modules.
-        for _ in 0..16 {
-            let before = paths.len();
-            for import in s
-                .imports
-                .iter()
-                .filter(|i| i.public && s.public_modules.contains(&i.module.join("::")))
-            {
-                let source = s.resolve(&import.target, &import.module, 0)?;
-                for candidate in paths.clone() {
-                    if candidate == source || candidate.starts_with(&(source.clone() + "::")) {
-                        let alias = import
-                            .module
-                            .iter()
-                            .chain(std::iter::once(&import.alias))
-                            .cloned()
-                            .collect::<Vec<_>>()
-                            .join("::");
-                        paths.insert(format!("{}{}", alias, &candidate[source.len()..]));
-                    }
-                }
-            }
-            if paths.len() == before {
-                break;
-            }
-        }
         let precondition = if f.requires.is_empty() {
             "true".into()
         } else {
@@ -764,8 +801,10 @@ pub fn discover(project: &Project) -> Result<Vec<Contract>> {
                 .collect::<Vec<_>>()
                 .join(" && ")
         };
+        let api_paths = s.public_callable_paths(&f.context, &f.module, &f.name)?;
+        ensure!(!api_paths.is_empty(), "Contract target {identity} has no public API path");
         result.push(Contract {
-            api_paths: paths.into_iter().collect(),
+            api_paths,
             precondition,
             file: h.file.clone(),
             first_line: h.first,
@@ -826,6 +865,23 @@ mod tests {
         let c = discover(&p).unwrap();
         assert!(c[0].api_paths.contains(&"S::f".into()));
         assert_eq!(c[0].precondition, "true");
+    }
+    #[test]
+    fn trait_impl_qualified_target_and_public_reexports() {
+        let (_d, p) = project("mod hidden { pub struct S; pub trait T { fn m(&self); } impl T for S { #[kani::requires(true)] fn m(&self) {} } #[kani::proof_for_contract(<S as T>::m)] fn check() {} } pub use hidden::{S as Alias, T as PublicTrait};");
+        let c = discover(&p).unwrap();
+        assert!(c[0].api_paths.contains(&"<demo::Alias as demo::PublicTrait>::m".into()));
+        assert_eq!(c[0].api_paths, ["<demo::Alias as demo::PublicTrait>::m"]);
+    }
+    #[test]
+    fn same_named_trait_methods_are_distinct() {
+        let (_d, p) = project("pub struct S; pub trait A { fn m(&self); } pub trait B { fn m(&self); } impl A for S { fn m(&self) {} } impl B for S { fn m(&self) {} } #[kani::proof_for_contract(<S as A>::m)] fn a() {} #[kani::proof_for_contract(<S as B>::m)] fn b() {}");
+        let c = discover(&p).unwrap();
+        assert_eq!(c.len(), 2);
+        assert_eq!(c[0].api_paths, ["<demo::S as demo::A>::m"]);
+        assert_eq!(c[1].api_paths, ["<demo::S as demo::B>::m"]);
+        let (_d, p) = project("pub struct S; pub trait A { fn m(&self); } pub trait B { fn m(&self); } impl A for S { fn m(&self) {} } impl B for S { fn m(&self) {} } #[kani::proof_for_contract(S::m)] fn check() {}");
+        assert!(discover(&p).unwrap_err().to_string().contains("Ambiguous"));
     }
     #[test]
     fn ignores_disabled_module_and_ordinary_proof() {
@@ -919,6 +975,11 @@ pub fn cfg(x: u32) {}
             ["Alias::f", "cfg", "exported"]
         );
         assert_eq!(c[1].precondition, "(x@ > 0)");
+    }
+    #[test]
+    fn creusot_trait_impl_method() {
+        let c = creusot_contracts("pub struct S; pub trait T { fn m(&self); } impl T for S { #[requires(true)] fn m(&self) {} }", CreusotTarget::Annotated);
+        assert_eq!(c[0].api_paths, ["<demo::S as demo::T>::m"]);
     }
     #[test]
     fn creusot_imported_macro_aliases_and_external_modules() {
