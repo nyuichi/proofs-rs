@@ -92,6 +92,25 @@
       "versions": [
         "0.2.0"
       ]
+    },
+    {
+      "name": "trait-demo",
+      "v": "0.1.0",
+      "desc": "Synthetic examples of concrete trait implementation methods.",
+      "category": "Data structures",
+      "apis": [
+        "<trait_demo::Buffer as trait_demo::Read>::read",
+        "<trait_demo::Buffer as trait_demo::Inspect>::read",
+        "Buffer::read"
+      ],
+      "versions": [
+        "0.1.0"
+      ],
+      "signatures": {
+        "<trait_demo::Buffer as trait_demo::Read>::read": "impl trait_demo::Read for trait_demo::Buffer\nfn read(&self, index: usize) -> Option<u8>",
+        "<trait_demo::Buffer as trait_demo::Inspect>::read": "impl trait_demo::Inspect for trait_demo::Buffer\nfn read(&self, index: usize) -> Option<u8>",
+        "Buffer::read": "pub fn read(&self, index: usize) -> Option<u8>"
+      }
     }
   ],
   "claims": [
@@ -360,6 +379,51 @@
       "condition": "Valid vector and len(v) < 4; standard allocator model.",
       "formula": "valid(v) ∧ len(v) < 4 ⇒ defined(v.push(x)) ∧ valid(v′)",
       "description": "A separate bounded verification record.",
+      "comments": [],
+      "revision": 1
+    },
+    {
+      "id": 201,
+      "crate": "trait-demo",
+      "api": "<trait_demo::Buffer as trait_demo::Read>::read",
+      "property": "Panic contract",
+      "title": "Read trait: checked byte access",
+      "author": "mira",
+      "method": "Kani · bounded model checking",
+      "scope": "Synthetic Buffer with at most 8 bytes; usize index. No verification was executed.",
+      "condition": "The buffer is valid; the index may be in bounds or out of bounds.",
+      "formula": "valid(buffer) ⇒ ¬panics(read(buffer, index))",
+      "description": "Synthetic display example. Out-of-bounds access returns None. The concrete implementation is identified by its full API path.",
+      "comments": [],
+      "revision": 1
+    },
+    {
+      "id": 202,
+      "crate": "trait-demo",
+      "api": "<trait_demo::Buffer as trait_demo::Inspect>::read",
+      "property": "Panic contract",
+      "title": "Inspect trait: checked byte access",
+      "author": "mira",
+      "method": "Kani · bounded model checking",
+      "scope": "Synthetic Buffer with at most 8 bytes; usize index. No verification was executed.",
+      "condition": "The buffer is valid; the index may be in bounds or out of bounds.",
+      "formula": "valid(buffer) ⇒ ¬panics(read(buffer, index))",
+      "description": "Synthetic display example. Out-of-bounds access returns None. The concrete implementation is identified by its full API path.",
+      "comments": [],
+      "revision": 1
+    },
+    {
+      "id": 203,
+      "crate": "trait-demo",
+      "api": "Buffer::read",
+      "property": "Panic contract",
+      "title": "Inherent method: checked byte access",
+      "author": "mira",
+      "method": "Kani · bounded model checking",
+      "scope": "Synthetic Buffer with at most 8 bytes; usize index. No verification was executed.",
+      "condition": "The buffer is valid; the index may be in bounds or out of bounds.",
+      "formula": "valid(buffer) ⇒ ¬panics(read(buffer, index))",
+      "description": "Synthetic display example. Out-of-bounds access returns None. The concrete implementation is identified by its full API path.",
       "comments": [],
       "revision": 1
     }

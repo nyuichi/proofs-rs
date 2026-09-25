@@ -1559,17 +1559,17 @@ test("staging fixture is repeatable and exposes report catalogue without importe
   );
   db.exec(sql);
   db.exec(sql);
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM reports").get()!.n, 8);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM reports").get()!.n, 9);
   const home = await request("/home");
   assert.equal(home.status, 200, JSON.stringify(home.body));
-  assert.equal(home.body.reports.length, 7);
+  assert.equal(home.body.reports.length, 8);
   assert.equal("crates" in home.body, false);
   const allCrates = await request("/crates");
   assert.equal(allCrates.status, 200, JSON.stringify(allCrates.body));
-  assert.equal(allCrates.body.total_count, 6);
-  assert.equal(allCrates.body.matching_count, 6);
+  assert.equal(allCrates.body.total_count, 7);
+  assert.equal(allCrates.body.matching_count, 7);
   const found = await request("/crates?q=array");
-  assert.equal(found.body.total_count, 6);
+  assert.equal(found.body.total_count, 7);
   assert.equal(found.body.matching_count, 1);
   assert.equal(found.body.items[0].api_count, 6);
   assert.equal(found.body.items[0].report_count, 2);
@@ -1596,6 +1596,17 @@ test("staging fixture is repeatable and exposes report catalogue without importe
     (await request("/crates/arrayvec/0.7.5/reports")).body.items.length,
     0,
   );
+
+  const traitReport = home.body.reports.find((r: any) => r.crate === "trait-demo");
+  const traitDetail = await request("/reports/" + traitReport.id);
+  assert.equal(traitDetail.body.claims.length, 3);
+  const traitAPIs = await request("/crates/trait-demo/0.1.0-demo.1/apis");
+  assert.deepEqual(traitAPIs.body.items.map((a: any) => a.display_path).sort(), [
+    "<trait_demo::Buffer as trait_demo::Inspect>::read",
+    "<trait_demo::Buffer as trait_demo::Read>::read",
+    "trait_demo::Buffer::read",
+  ]);
+  assert.ok(traitAPIs.body.items.every((a: any) => a.kind === "method"));
 
   const comments = await request("/reports/" + first.id + "/comments");
   assert.equal(comments.status, 200);
@@ -2322,3 +2333,4 @@ test("single-request run registration compensates failures and reclaims only cra
   assert.equal(objects.has("runs/orphan/recent"), true);
   assert.equal(objects.size, 2, "keep committed evidence regardless of age");
 });
+

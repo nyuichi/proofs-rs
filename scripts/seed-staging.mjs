@@ -55,11 +55,11 @@ const stats = await api(`/d1/database/${db.uuid}/query`, {
   sql: "SELECT COUNT(*) AS demo_claims FROM claims WHERE report_id IN (SELECT id FROM reports WHERE create_key LIKE 'staging-demo-reports-v1-%'); SELECT COUNT(*) AS demo_users FROM users WHERE github_id BETWEEN -91004 AND -91001; PRAGMA foreign_key_check;",
 });
 if (
-  stats[0].results[0].demo_claims !== 13 ||
+  stats[0].results[0].demo_claims !== 16 ||
   stats[1].results[0].demo_users !== 4 ||
   stats[2].results.length
 )
   throw Error("Seed verification failed");
 console.log(
-  "Staging demo ready: 6 crates, 8 reports, 13 claims, nested comments and independent stars.",
+  "Staging demo ready: 7 crates, 9 reports, 16 claims, nested comments and independent stars.",
 );
