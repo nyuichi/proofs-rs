@@ -61,10 +61,10 @@ You may set `PROOFS_SERVER` instead. The default is `https://proofs.rs`. Tokens 
 
 ## Discovery
 
-- Supports library free functions and inherent methods, nested/ordinary external modules, explicit `use` aliases and public reexports, `#[kani::...]` and `#[cfg_attr(kani, kani::...)]`.
+- Supports library free functions and concrete methods, including trait implementation methods identified as `<Type as Trait>::method`, nested/ordinary external modules, explicit `use` aliases and public reexports, `#[kani::...]` and `#[cfg_attr(kani, kani::...)]`.
 - `requires` predicates are conjoined. No `requires` means `true`, for both claims, including safe APIs.
 - Ordinary `#[kani::proof]` harnesses are ignored with a notice. Their target/scope cannot be safely inferred from arbitrary code.
-- Multiple contract harnesses for one API, ambiguous targets/reexports, trait methods, and `include!` source trees stop publication. Glob imports are not used to guess targets. Macro-generated functions/harnesses are not expanded or discovered; this is a source parser, not a Rust compiler frontend.
+- Multiple contract harnesses for one API, ambiguous targets/reexports, and `include!` source trees stop publication. Glob imports are not used to guess targets. Macro-generated functions/harnesses are not expanded or discovered; this is a source parser, not a Rust compiler frontend.
 - Conditional compilation is evaluated with `kani`, the selected Cargo features, and `rustc --print cfg` for the host or `--target`. Pass `--features foo,bar`, `--all-features`, `--no-default-features`, and `--target` to match verification. Build-script/custom cfgs are not inferred; encountered unsupported cfgs stop discovery. Integration-test targets are not scanned. Target-dependent dependency feature unification and RUSTFLAGS are not used to infer library features.
 - The service's imported public API catalogue is authoritative. Missing APIs or multiple public API matches stop publication; no silent skipping.
 - The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact source commit.
@@ -91,9 +91,9 @@ version = "VERSION"
 target = "annotated" # required: "annotated" or "all"
 ```
 
-- `annotated`: public free functions and inherent methods with `requires` or `ensures`.
-- `all`: public free functions and inherent methods even without these annotations. This selects source APIs; it does not attest that every function was verified.
-- Both exclude `trusted`, `logic`, `predicate`, `law`, and `check(ghost)` functions, including explicitly imported aliases. Private functions/types and APIs without a public path are excluded. Trait methods, macro-generated APIs and glob reexports are not discovered. Explicit function/type/module reexports are supported; complex reexport chains may require future compiler-backed discovery.
+- `annotated`: public free functions and concrete methods with `requires` or `ensures`.
+- `all`: public free functions and concrete methods even without these annotations. This selects source APIs; it does not attest that every function was verified.
+- Both exclude `trusted`, `logic`, `predicate`, `law`, and `check(ghost)` functions, including explicitly imported aliases. Private functions/types and APIs without a public path are excluded. Trait declarations, macro-generated APIs and glob reexports are not discovered. Explicit function/type/module reexports are supported; complex reexport chains may require future compiler-backed discovery.
 - Recognizes bare attributes, `creusot_std::...` / legacy `creusot_contracts::...`, and `cfg_attr`. Explicit macro imports/aliases are resolved; arbitrary user-defined wrapper macros and renamed dependency crates are unsupported. Bare attribute names are interpreted as Creusot attributes under this tool selection.
 - `requires` retains its original Pearlite source text, including `@`, `^`, quantifiers and implication. Multiple predicates are parenthesized and joined with `&&`; absence means `true`. `ensures` only selects an API, never becomes a precondition or functional correctness claim.
 - Evidence points to the API declaration and body, including its attributes. Logic bodies are not parsed as Rust expressions.
