@@ -66,6 +66,7 @@ You may set `PROOFS_SERVER` instead. The default is `https://proofs.rs`. Tokens 
 - Ordinary `#[kani::proof]` harnesses are ignored with a notice. Their target/scope cannot be safely inferred from arbitrary code.
 - Multiple contract harnesses for one API, ambiguous targets/reexports, and `include!` source trees stop publication. Glob imports are not used to guess targets. Macro-generated functions/harnesses are not expanded or discovered; this is a source parser, not a Rust compiler frontend.
 - Conditional compilation is evaluated with `kani`, the selected Cargo features, and `rustc --print cfg` for the host or `--target`. Pass `--features foo,bar`, `--all-features`, `--no-default-features`, and `--target` to match verification. Build-script/custom cfgs are not inferred; encountered unsupported cfgs stop discovery. Integration-test targets are not scanned. Target-dependent dependency feature unification and RUSTFLAGS are not used to infer library features.
+- For standard `Default`, `Clone`, and `Hasher` implementations, discovery also records the short trait spelling used by rustdoc catalogues. Arbitrary external trait basenames are not guessed.
 - The service's imported public API catalogue is authoritative. Missing APIs or multiple public API matches stop publication; no silent skipping.
 - The local fork's implementation may differ from the published crate with the same name/version. The CLI does not prove equivalence; evidence identifies the exact source commit.
 
@@ -79,7 +80,7 @@ cargo proofs publish --dry-run
 cargo proofs publish
 ```
 
-Use the version actually used for verification; it must be registered on the service. `init` tries `cargo creusot --version` when `--tool-version` is omitted. Review tool-version limitations on proofs.rs, including any panics outside the verifier's coverage.
+Use the version actually used for verification; it must be registered on the service. `init` tries `cargo creusot version` when `--tool-version` is omitted. Review tool-version limitations on proofs.rs, including any panics outside the verifier's coverage.
 
 ```toml
 [report]
@@ -110,7 +111,7 @@ Verification runs in a detached temporary Git worktree at that commit, with a se
 Each run directory contains only `run.sarif.json`. SARIF is the canonical record for source provenance, command, timing, contracts, results and embedded stdout/stderr. The latest-run pointer and report publication state are local navigation/retry state, not duplicate execution records. Review the logs before publishing. The complete SARIF has an 8 MiB limit. `publish` sends it in one request; there is no separate metadata registration.
 
 - Kani: regular serial check output is supported. Checks are associated with the exact observed contract harness. Quiet/terse output, parallel jobs, options disabling safety checks, and unknown result formats are rejected. Unexecuted harnesses do not generate claims; unreachable checks remain labeled unreachable.
-- Creusot: a prover run must create fresh `proof.json` sessions that map unambiguously to selected APIs. Compilation alone, unchanged stale sessions, unresolved proof goals, and unsupported proof layouts do not certify an API. The usual free-function layout is supported; generated method layouts may require an adapter extension.
+- Creusot: a prover run must create fresh `proof.json` sessions that map unambiguously to selected APIs. Compilation alone, unchanged stale sessions, unresolved proof goals, and unsupported proof layouts do not certify an API. Free-function sessions and Creusot 0.13 method sessions are supported. Method sessions are matched by the generated Coma declaration source span and method name; ambiguous matches are rejected.
 - A failed process, changed worktree, or run without verified contracts cannot be published. Failed recordings remain local for inspection.
 - Pass compilation flags **after** `--`, as part of the actual verifier command, for example `cargo proofs run -- cargo kani --features foo`. The same flags drive contract discovery. Select the workspace package with `-p NAME` as appropriate.
 - One run per CLI publication is supported. `publish` selects the latest recording, or use `publish --run UUID` for an explicit recording. Changes to tool configuration or crate/version require a new run.

@@ -62,6 +62,24 @@ struct Scanner<'a> {
     visited: BTreeSet<PathBuf>,
     ordinary: usize,
 }
+fn external_trait_paths(path: &str) -> Vec<String> {
+    let mut paths = vec![path.to_owned()];
+    // Rustdoc's external trait paths in the public catalogue may omit the
+    // standard-library module. Do not guess basenames for arbitrary traits.
+    if matches!(
+        path,
+        "core::default::Default"
+            | "std::default::Default"
+            | "core::clone::Clone"
+            | "std::clone::Clone"
+            | "core::hash::Hasher"
+            | "std::hash::Hasher"
+    ) {
+        paths.push(path.rsplit("::").next().unwrap().to_owned());
+    }
+    paths
+}
+
 fn segments(path: &syn::Path) -> Result<Vec<String>> {
     ensure!(
         path.leading_colon.is_none(),
@@ -348,7 +366,7 @@ impl Scanner<'_> {
                 let traits = if local_trait {
                     self.creusot_public_paths(&tr)?
                 } else {
-                    vec![tr]
+                    external_trait_paths(&tr)
                 };
                 Ok(types
                     .iter()
@@ -1056,6 +1074,23 @@ pub fn cfg(x: u32) {}
     fn creusot_trait_impl_method() {
         let c = creusot_contracts("pub struct S; pub trait T { fn m(&self); } impl T for S { #[requires(true)] fn m(&self) {} }", CreusotTarget::Annotated);
         assert_eq!(c[0].api_paths, ["<demo::S as demo::T>::m"]);
+    }
+
+    #[test]
+    fn standard_trait_catalog_aliases_are_explicit_and_limited() {
+        let c = creusot_contracts("use core::default::Default; pub struct S; impl Default for S { #[ensures(true)] fn default() -> Self { S } }", CreusotTarget::Annotated);
+        assert_eq!(
+            c[0].api_paths,
+            [
+                "<demo::S as Default>::default",
+                "<demo::S as core::default::Default>::default"
+            ]
+        );
+        assert_eq!(external_trait_paths("custom::Default"), ["custom::Default"]);
+        assert_eq!(
+            external_trait_paths("core::hash::Hasher"),
+            ["core::hash::Hasher", "Hasher"]
+        );
     }
     #[test]
     fn creusot_imported_macro_aliases_and_external_modules() {

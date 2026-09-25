@@ -186,7 +186,7 @@ for harness in re.findall(r'fn (check_\w+)\(',source):
     creusot = wrapper / 'cargo-creusot'
     creusot.write_text("""#!/usr/bin/env python3
 import sys,pathlib,json
-if '--version' in sys.argv:
+if 'version' in sys.argv:
     print('creusot 0.9.0');sys.exit(0)
 for name in ['f','g']:
     p=pathlib.Path('verif/fixture_rlib')/name/'proof.json'
