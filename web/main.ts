@@ -253,10 +253,38 @@ async function crates() {
   }
   await load();
 }
+type Crumb = { label: string; href: string };
+function breadcrumbs(items: Crumb[]) {
+  return `<div class="breadcrumbs" role="navigation" aria-label="Breadcrumb">${items.map(({ label, href }) => `<a href="${esc(href)}">${esc(label)}</a>`).join(' <span aria-hidden="true">/</span> ')}</div>`;
+}
+function crateHref(name: string, version: string) {
+  return `#/crate/${enc(name)}?version=${enc(version)}`;
+}
+function crateCrumbs(c: any, section: "apis" | "reports"): Crumb[] {
+  const href = crateHref(c.crate, c.version);
+  return [
+    { label: "crates", href: "#/crates" },
+    { label: `${c.crate} ${c.version}`, href },
+    {
+      label: section === "apis" ? "APIs" : "Reports",
+      href: `${href}&section=${section}`,
+    },
+  ];
+}
+function claimCrumbs(c: any): Crumb[] {
+  return [
+    ...crateCrumbs(c, "reports"),
+    {
+      label: `Report #${c.report_id} v${c.report_revision}`,
+      href: `#/report/${c.report_id}?v=${c.report_revision}`,
+    },
+  ];
+}
 async function cratePage(name: string) {
+  const section = current().searchParams.get("section");
   const d = await request("/crates/" + enc(name) + "/releases");
   const version = current().searchParams.get("version") || d.default_version;
-  root.innerHTML = `<p><a href="#/crates">crates</a> / ${esc(name)}${version ? " / " + esc(version) : ""}</p><h1>${esc(name)}</h1>${d.description ? `<p>${esc(d.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(name)}${version ? "/" + enc(version) : ""}" target="_blank" rel="noopener noreferrer">crates.io</a></p>${version ? `<label>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label><h2>APIs</h2><div id="apis"><div class="table-wrap"><table><thead><tr><th>API</th><th>Claims</th></tr></thead><tbody id="api-rows"></tbody></table></div></div><h2>Reports</h2><div id="crate-reports">${loading}</div>` : "<p>No published versions.</p>"}`;
+  root.innerHTML = `${breadcrumbs([{ label: "crates", href: "#/crates" }])}<h1>${esc(name)}${version ? " " + esc(version) : ""}</h1>${d.description ? `<p>${esc(d.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(name)}${version ? "/" + enc(version) : ""}" target="_blank" rel="noopener noreferrer">crates.io</a></p>${version ? `<label>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label><h2 id="apis-heading" tabindex="-1">APIs</h2><div id="apis"><div class="table-wrap"><table><thead><tr><th>API</th><th>Claims</th></tr></thead><tbody id="api-rows"></tbody></table></div></div><h2 id="reports-heading" tabindex="-1">Reports</h2><div id="crate-reports">${loading}</div>` : "<p>No published versions.</p>"}`;
   if (!version) return;
   root
     .querySelector("#version")!
@@ -265,7 +293,10 @@ async function cratePage(name: string) {
         "/crate/" +
           enc(name) +
           "?version=" +
-          enc((e.target as HTMLSelectElement).value),
+          enc((e.target as HTMLSelectElement).value) +
+          (section === "apis" || section === "reports"
+            ? "&section=" + section
+            : ""),
       ),
     );
   const box = root.querySelector<HTMLElement>("#apis")!;
@@ -304,10 +335,15 @@ async function cratePage(name: string) {
   ]);
   for (const result of results)
     if (result.status === "rejected") throw result.reason;
+  if (section === "apis" || section === "reports") {
+    const heading = root.querySelector<HTMLElement>(`#${section}-heading`)!;
+    heading.focus({ preventScroll: true });
+    heading.scrollIntoView();
+  }
 }
 async function apiPage(id: string) {
   const a = await request("/apis/" + enc(id));
-  root.innerHTML = `<p><a href="#/crate/${enc(a.crate)}?version=${enc(a.version)}">${esc(a.crate)} ${esc(a.version)}</a></p><h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}" target="_blank" rel="noopener noreferrer">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="#/publish">Publish a report</a></p><h2>Claims</h2><div id="claims"></div>`;
+  root.innerHTML = `${breadcrumbs(crateCrumbs(a, "apis"))}<h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}" target="_blank" rel="noopener noreferrer">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="#/publish">Publish a report</a></p><h2>Claims</h2><div id="claims"></div>`;
   await claimsList(
     "/apis/" + enc(id) + "/claims",
     root.querySelector("#claims")!,
@@ -331,11 +367,11 @@ function starButton(kind: string, c: any) {
   } <a href="#/${kind}/${enc(c.id)}/stars">${c.star_count} stars</a></div>`;
 }
 function titleWithStars(kind: string, c: any) {
-  return `<div class="title-row"><h1>${esc(c.title)}</h1>${starButton(kind, c)}</div>`;
+  return `<div class="title-row"><h1>${kind === "report" ? `Report #${esc(c.id)} — ` : ""}${esc(c.title)}</h1>${starButton(kind, c)}</div>`;
 }
 async function starsPage(kind: string, id: string) {
   const item = await request(`/${kind}s/${enc(id)}`);
-  root.innerHTML = `<p><a href="#/${kind}/${enc(id)}">${esc(item.title)}</a></p><h1>Stars</h1><div id="stargazers">${loading}</div>`;
+  root.innerHTML = `${breadcrumbs([...(kind === "claim" ? claimCrumbs(item) : crateCrumbs(item, "reports")), { label: kind === "report" ? `Report #${id}` : item.title, href: `#/${kind}/${enc(id)}` }])}<h1>Stars</h1><div id="stargazers">${loading}</div>`;
   const container = root.querySelector<HTMLElement>("#stargazers")!;
   async function load(cursor: any = 0) {
     const data = await request(
@@ -379,24 +415,27 @@ function toolLimitations(c: any) {
 }
 async function toolVersionPage(id: string) {
   const v = await request("/tool-versions/" + enc(id));
-  root.innerHTML = `<p class="breadcrumbs"><a href="#/tools">Tools</a> / <a href="#/tool/${enc(v.tool_id)}">${esc(v.tool)}</a> / ${esc(v.version)}</p><h1>${esc(v.tool)} ${esc(v.version)}</h1>${v.selectable ? "" : "<p>This version is retired from new submissions.</p>"}${v.limitations ? `<h2>Known limitations</h2><p class="plain-text">${esc(v.limitations)}</p>${v.limitations_updated_at ? `<p class="meta">Updated ${date(v.limitations_updated_at)}</p>` : ""}` : ""}<h2>Reports</h2><div id="items">${loading}</div>`;
+  root.innerHTML = `${breadcrumbs([
+    { label: "Tools", href: "#/tools" },
+    { label: v.tool, href: `#/tool/${enc(v.tool_id)}` },
+  ])}<h1>${esc(v.tool)} ${esc(v.version)}</h1>${v.selectable ? "" : "<p>This version is retired from new submissions.</p>"}${v.limitations ? `<h2>Known limitations</h2><p class="plain-text">${esc(v.limitations)}</p>${v.limitations_updated_at ? `<p class="meta">Updated ${date(v.limitations_updated_at)}</p>` : ""}` : ""}<h2>Reports</h2><div id="items">${loading}</div>`;
   await claimsList(
     "/tool-versions/" + enc(id) + "/reports",
     root.querySelector("#items")!,
   );
 }
 function reportContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p>${esc(c.crate)} ${esc(c.version)} · ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p><a href="${crateHref(c.crate, c.version)}">${esc(c.crate)} ${esc(c.version)}</a> · ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
 }
 function claimContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("claim", c) : `<h1>${esc(c.title)}</h1>`}<p><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("claim", c) : `<h1>${esc(c.title)}</h1>`}<p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
 }
 async function claimPage(id: string) {
   const n = current().searchParams.get("report_revision");
   const c = await request(
     "/claims/" + enc(id) + (n ? "?report_revision=" + enc(n) : ""),
   );
-  root.innerHTML = `<aside class="report-context"><p>Part of report #${c.report_id} · revision ${c.report_revision}</p><h2><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)}</a></h2><p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments · Discuss this report →</a></p></aside>${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c, true)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
+  root.innerHTML = `${breadcrumbs(claimCrumbs(c))}<aside class="report-context"><p>Part of report #${c.report_id} · revision ${c.report_revision}</p><h2><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)}</a></h2><p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments · Discuss this report →</a></p></aside>${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c, true)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
   bindStars();
 }
 let commentReply: any = null;
@@ -417,7 +456,7 @@ async function reportPage(id: number) {
     cursor = page.next_cursor;
   } while (cursor);
   commentReply = null;
-  root.innerHTML = `<p class="breadcrumbs"><a href="#/crates">crates</a> / <a href="#/crate/${enc(c.crate)}">${esc(c.crate)}</a> / <a href="#/crate/${enc(c.crate)}?version=${enc(c.version)}">${esc(c.version)}</a> / Report #${id}</p>${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reproduceSection(c.run_ids)}<h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `${breadcrumbs(crateCrumbs(c, "reports"))}${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reproduceSection(c.run_ids)}<h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
   bindReproduce(root, c);
   bindStars();
   bind("#withdraw", async () => {
@@ -712,7 +751,7 @@ async function devicePage() {
 async function toolsPage(id?: string) {
   if (id) {
     const t = await request("/tools/" + enc(id));
-    root.innerHTML = `<h1>${esc(t.name)}</h1><p>${esc(t.description)}</p><p><a href="${esc(t.official_url)}" rel="noopener noreferrer">Tool website</a></p><h2>Supported versions</h2><ul>${t.versions.map((v: any) => `<li><a href="#/tool-version/${enc(v.id)}">${esc(v.version)}</a>${v.selectable ? "" : " (retired)"}</li>`).join("")}</ul><h2>Reports</h2><div id="items"></div>`;
+    root.innerHTML = `${breadcrumbs([{ label: "Tools", href: "#/tools" }])}<h1>${esc(t.name)}</h1><p>${esc(t.description)}</p><p><a href="${esc(t.official_url)}" rel="noopener noreferrer">Tool website</a></p><h2>Supported versions</h2><ul>${t.versions.map((v: any) => `<li><a href="#/tool-version/${enc(v.id)}">${esc(v.version)}</a>${v.selectable ? "" : " (retired)"}</li>`).join("")}</ul><h2>Reports</h2><div id="items"></div>`;
     return claimsList(
       "/tools/" + enc(id) + "/reports",
       root.querySelector("#items")!,

@@ -1244,7 +1244,10 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     }) as any;
   };
   w.confirm = () => true;
-  w.HTMLElement.prototype.scrollIntoView = () => {};
+  const scrolled: string[] = [];
+  w.HTMLElement.prototype.scrollIntoView = function () {
+    scrolled.push(this.id);
+  };
   const legal = readFileSync(
     new URL("../web/legal.ts", import.meta.url),
     "utf8",
@@ -1311,6 +1314,41 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
       w.document.querySelector("#app")!.textContent!,
       /No undefined behavior for sample::safe/,
     );
+    assert.equal(
+      w.document.querySelector(".breadcrumbs")!.textContent,
+      "crates / sample 1.0.0 / Reports / Report #1 v1",
+    );
+    assert.ok(
+      w.document.querySelector('.breadcrumbs a[href="#/report/1?v=1"]'),
+    );
+    (w.document.querySelector('a[href="#/api/safe"]') as any).click();
+    await until("#claims");
+    assert.equal(
+      w.document.querySelector(".breadcrumbs")!.textContent,
+      "crates / sample 1.0.0 / APIs",
+    );
+    (
+      w.document.querySelector('.breadcrumbs a[href$="&section=apis"]') as any
+    ).click();
+    await until("#api-rows");
+    assert.equal(w.location.hash, "#/crate/sample?version=1.0.0&section=apis");
+    assert.equal(scrolled.at(-1), "apis-heading");
+    assert.equal(w.document.activeElement?.id, "apis-heading");
+    assert.equal(w.document.querySelector("h1")!.textContent, "sample 1.0.0");
+    w.location.hash = "/report/1";
+    await until("#comment-form");
+    (
+      w.document.querySelector(
+        '.breadcrumbs a[href$="&section=reports"]',
+      ) as any
+    ).click();
+    await until("#crate-reports");
+    assert.equal(scrolled.at(-1), "reports-heading");
+    assert.equal(w.document.activeElement?.id, "reports-heading");
+    // Direct section URLs work on a fresh route too; unknown sections are ignored.
+    w.location.hash = "/crate/sample?version=1.0.0&section=unknown";
+    await until("#crate-reports");
+    assert.equal(w.document.querySelector('[role="alert"]'), null);
     w.location.hash = "/report/1";
     await until("#comment-form");
     assert.equal(
@@ -1324,7 +1362,7 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     assert.equal(w.document.querySelector('[data-star="claim"]'), null);
     assert.equal(
       w.document.querySelector(".breadcrumbs")!.textContent,
-      "crates / sample / 1.0.0 / Report #1",
+      "crates / sample 1.0.0 / Reports",
     );
     assert.ok(w.document.querySelector('.title-row [data-star="report"]'));
     (
@@ -1370,9 +1408,24 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     await until("#comment-form");
     assert.equal(
       w.document.querySelector("h1")!.textContent,
-      "Revised through API",
+      "Report #1 — Revised through API",
     );
     assert.match(w.document.querySelector("#app")!.textContent!, /v2/);
+    // An old claim keeps its report revision in the parent breadcrumb.
+    w.location.hash = claimLink;
+    await until(".report-context");
+    (
+      w.document.querySelector('.breadcrumbs a[href="#/report/1?v=1"]') as any
+    ).click();
+    await until("#comment-form");
+    assert.match(
+      w.document.querySelector("#app")!.textContent!,
+      /Past revision/,
+    );
+    assert.doesNotMatch(
+      w.document.querySelector("h1")!.textContent!,
+      /Revised through API/,
+    );
     w.location.hash = "/account";
     await until("#claims");
     assert.equal(
