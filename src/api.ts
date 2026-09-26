@@ -77,22 +77,27 @@ api.get("/terms/current", (c) =>
 api.get("/me", async (c) => {
   const u = c.get("user");
   if (!u) return c.json({ user: null });
-  const email = await one(
-    c.env.DB,
-    "SELECT address,delivery_status FROM email_contacts WHERE user_id=?",
-    u.id,
-  );
-  const delayed = await one(
-    c.env.DB,
-    "SELECT COUNT(*) n FROM email_deliveries WHERE user_id=? AND status IN ('pending','retry','unknown')",
-    u.id,
-  );
+  const [contacts, stats] = await c.env.DB.batch<any>([
+    stmt(
+      c.env.DB,
+      "SELECT address,delivery_status FROM email_contacts WHERE user_id=?",
+      u.id,
+    ),
+    stmt(
+      c.env.DB,
+      `SELECT (SELECT COUNT(*) FROM email_deliveries WHERE user_id=? AND status IN ('pending','retry','unknown')) n,${karmaPolicy.sql("?")} karma`,
+      u.id,
+      u.id,
+    ),
+  ]);
+  const email = contacts.results[0] || null;
+  const delayed = stats.results[0];
   return c.json({
     user: u,
     csrf: c.get("csrf"),
     email,
     delayed_notifications: delayed.n,
-    karma: await karmaPolicy.compute(c.env.DB, u.id),
+    karma: delayed.karma,
     terms_required: u.accepted_terms_version !== c.env.TERMS_VERSION,
   });
 });
@@ -149,19 +154,20 @@ api.post("/notifications/unsubscribe", async (c) => {
   return c.json({ ok: true });
 });
 const activeReport = "p.visibility='public' AND p.withdrawn_at IS NULL";
-api.get("/home", async (c) =>
-  c.json({
-    reports: await rows(
+api.get("/home", async (c) => {
+  const [reports, discussion] = await c.env.DB.batch<any>([
+    stmt(
       c.env.DB,
       publicReport +
         ` WHERE ${activeReport} AND ${reportLatest} ORDER BY p.id DESC LIMIT 12`,
     ),
-    discussion: await rows(
+    stmt(
       c.env.DB,
       `SELECT cm.id,cm.report_id,cm.sequence_no,cm.revision_no,cm.body,cm.created_at,u.username,cm.author_id FROM report_comments cm JOIN reports p ON p.id=cm.report_id LEFT JOIN users u ON u.id=cm.author_id WHERE p.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL ORDER BY cm.created_at DESC,cm.id DESC LIMIT 12`,
     ),
-  }),
-);
+  ]);
+  return c.json({ reports: reports.results, discussion: discussion.results });
+});
 api.get("/reports", async (c) =>
   c.json(
     await listing(
@@ -195,16 +201,20 @@ api.get("/crates", async (c) => {
   return c.json({ ...data, ...counts });
 });
 api.get("/crates/:name/releases", async (c) => {
-  const items = await rows(
-    c.env.DB,
-    `SELECT rel.* FROM releases rel JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})`,
-    c.req.param("name"),
-  );
-  const crate = await one(
-    c.env.DB,
-    "SELECT description FROM crates WHERE name=?",
-    c.req.param("name"),
-  );
+  const [releases, crates] = await c.env.DB.batch<any>([
+    stmt(
+      c.env.DB,
+      `SELECT rel.* FROM releases rel JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})`,
+      c.req.param("name"),
+    ),
+    stmt(
+      c.env.DB,
+      "SELECT description FROM crates WHERE name=?",
+      c.req.param("name"),
+    ),
+  ]);
+  const items = releases.results as any[];
+  const crate = crates.results[0];
   items.sort((a, b) => semver.rcompare(a.version, b.version));
   return c.json({
     items,
@@ -278,45 +288,53 @@ api.get("/reports/:id/revisions", async (c) => {
   );
 });
 async function reportDetail(c: Ctx, revision?: number) {
-  const p = await report(c);
-  const r = await one(
-    c.env.DB,
-    publicReport +
-      ` WHERE p.id=? AND ${revision ? "rr.revision_no=?" : reportLatest}`,
-    p.id,
-    ...(revision ? [revision] : []),
-  );
+  const id = positive(c.req.param("id"));
+  const user = c.get("user")?.id;
+  const revisionSQL = revision
+    ? "?"
+    : "(SELECT MAX(v.revision_no) FROM report_revisions v WHERE v.report_id=p.id)";
+  const args = [id, ...(revision ? [revision] : [])];
+  const withStar = (sql: string, kind: "report" | "claim", alias: string) =>
+    sql.replace(
+      "SELECT ",
+      `SELECT ${user ? `EXISTS(SELECT 1 FROM ${kind}_stars s WHERE s.${kind}_id=${alias}.id AND s.user_id=?)` : "0"} my_star,`,
+    );
+  // One read transaction keeps visibility, revision selection and all child rows consistent.
+  // Keep the existence result to preserve report_not_found vs revision_not_found.
+  const [visible, reports, claims, runs] = await c.env.DB.batch<any>([
+    stmt(
+      c.env.DB,
+      "SELECT id FROM reports WHERE id=? AND visibility='public'",
+      id,
+    ),
+    stmt(
+      c.env.DB,
+      withStar(publicReport, "report", "p") +
+        ` WHERE p.id=? AND p.visibility='public' AND rr.revision_no=${revisionSQL}`,
+      ...(user ? [user] : []),
+      ...args,
+    ),
+    stmt(
+      c.env.DB,
+      withStar(publicClaim, "claim", "c") +
+        ` WHERE p.id=? AND p.visibility='public' AND r.report_revision=${revisionSQL} ORDER BY r.position`,
+      ...(user ? [user] : []),
+      ...args,
+    ),
+    stmt(
+      c.env.DB,
+      `SELECT run_id FROM report_runs x JOIN reports p ON p.id=x.report_id WHERE p.id=? AND p.visibility='public' AND x.revision_no=${revisionSQL} ORDER BY x.position`,
+      ...args,
+    ),
+  ]);
+  if (!visible.results.length) throw new Fault(404, "report_not_found");
+  const r = reports.results[0];
   if (!r) throw new Fault(404, "revision_not_found");
-  const claims = await rows(
-    c.env.DB,
-    publicClaim + " WHERE p.id=? AND r.report_revision=? ORDER BY r.position",
-    p.id,
-    r.revision_no,
-  );
-  const myStars = await rows(
-    c.env.DB,
-    "SELECT s.claim_id FROM claim_stars s JOIN claims c ON c.id=s.claim_id WHERE s.user_id=? AND c.report_id=?",
-    c.get("user")?.id || "",
-    p.id,
-  );
-  const mine = new Set(myStars.map((x) => x.claim_id));
   return c.json({
     ...r,
-    run_ids: (
-      await rows(
-        c.env.DB,
-        "SELECT run_id FROM report_runs WHERE report_id=? AND revision_no=? ORDER BY position",
-        p.id,
-        r.revision_no,
-      )
-    ).map((x) => x.run_id),
-    my_star: !!(await one(
-      c.env.DB,
-      "SELECT 1 FROM report_stars WHERE report_id=? AND user_id=?",
-      p.id,
-      c.get("user")?.id || "",
-    )),
-    claims: claims.map((x) => ({ ...x, my_star: mine.has(x.id) })),
+    my_star: !!r.my_star,
+    run_ids: runs.results.map((x) => x.run_id),
+    claims: claims.results.map((x) => ({ ...x, my_star: !!x.my_star })),
   });
 }
 api.get("/reports/:id", (c) => reportDetail(c));

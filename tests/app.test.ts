@@ -87,7 +87,10 @@ function database() {
         return { results: db.prepare(sql).all(...values) };
       },
       async run() {
-        return { meta: db.prepare(sql).run(...values) };
+        const statement = db.prepare(sql);
+        if (statement.columns().length)
+          return { results: statement.all(...values), meta: {} };
+        return { results: [], meta: statement.run(...values) };
       },
     };
     return q;
@@ -2634,6 +2637,88 @@ test("nested local type references use public aliases in structural keys", () =>
     extractAPIs(doc, "sample", "1.0.0")[0].canonical_key,
     "<alloc::vec::Vec<sample::Alias> as sample::T>::m",
   );
+});
+
+test("report reads use one D1 batch, preserve revision/star semantics and reject hidden reports", async () => {
+  const { env, db, request } = await fixture();
+  const created = await request("/reports", "POST", reportInput);
+  assert.equal(created.status, 201);
+  const id = created.body.id;
+  const first = (await request(`/reports/${id}`)).body;
+  const claim = first.claims[0].id;
+  await request(`/reports/${id}/star`, "PUT", {}, "bob");
+  await request(`/claims/${claim}/star`, "PUT", {}, "bob");
+  const revised = await request(`/reports/${id}/revisions`, "POST", {
+    ...reportInput,
+    expected_revision: 1,
+    title: "Revision two",
+    claims: [{ ...reportInput.claims[0], id: claim }],
+  });
+  assert.equal(revised.status, 201);
+  const original = env.DB;
+  let calls = 0;
+  env.DB = {
+    prepare(sql: string) {
+      const q = original.prepare(sql);
+      const wrap = (s: any): any => ({
+        bind: (...values: any[]) => wrap(s.bind(...values)),
+        first: (...args: any[]) => {
+          calls++;
+          return s.first(...args);
+        },
+        all: (...args: any[]) => {
+          calls++;
+          return s.all(...args);
+        },
+        run: (...args: any[]) => {
+          calls++;
+          return s.run(...args);
+        },
+      });
+      return wrap(q);
+    },
+    async batch(statements: any[]) {
+      // The fixture executes each statement via run(); count only the outer call.
+      const before = calls;
+      const result = await original.batch(statements);
+      calls = before + 1;
+      return result;
+    },
+  } as any;
+  for (const user of ["", "bob"]) {
+    for (const suffix of ["", "/revisions/1"]) {
+      calls = 0;
+      const r = await request(
+        `/reports/${id}${suffix}`,
+        "GET",
+        undefined,
+        user,
+      );
+      assert.equal(r.status, 200);
+      assert.equal(calls, user ? 2 : 1); // session authentication + one read batch
+      assert.equal(r.body.revision_no, suffix ? 1 : 2);
+      assert.equal(r.body.latest_revision_no, 2);
+      assert.equal(r.body.my_star, !!user);
+      assert.equal(r.body.claims[0].my_star, !!user);
+      assert.deepEqual(r.body.run_ids, reportInput.run_ids);
+    }
+  }
+  assert.equal(
+    (await request(`/reports/${id}/revisions/99`)).body.error,
+    "revision_not_found",
+  );
+  db.prepare("UPDATE reports SET withdrawn_at=? WHERE id=?").run(
+    new Date().toISOString(),
+    id,
+  );
+  assert.equal((await request(`/reports/${id}`)).status, 200);
+  db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(id);
+  for (const suffix of ["", "/revisions/1", "/revisions/99"]) {
+    const r = await request(`/reports/${id}${suffix}`);
+    assert.equal(r.status, 404);
+    assert.equal(r.body.error, "report_not_found");
+    assert.equal(r.body.claims, undefined);
+  }
 });
 
 test("claim numbers follow each report revision while UUID identity and old numbers survive", async () => {

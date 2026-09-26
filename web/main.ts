@@ -440,23 +440,50 @@ async function claimPage(id: string) {
 }
 let commentReply: any = null;
 async function reportPage(id: number) {
-  const base = await request("/reports/" + id),
-    version = Number(current().searchParams.get("v") || base.revision_no);
-  const c =
-    version === base.revision_no
-      ? base
-      : await request(`/reports/${id}/revisions/${version}`);
-  const history: any[] = [];
-  let cursor: any = null;
-  do {
-    const page = await request(
-      `/reports/${id}/revisions${cursor ? "?cursor=" + enc(cursor) : ""}`,
-    );
-    history.push(...page.items);
-    cursor = page.next_cursor;
-  } while (cursor);
+  const requestedVersion = current().searchParams.get("v");
+  const c = await request(
+    requestedVersion
+      ? `/reports/${id}/revisions/${enc(requestedVersion)}`
+      : `/reports/${id}`,
+  );
+  const version = c.revision_no;
+  const history = [{ revision_no: version }];
   commentReply = null;
-  root.innerHTML = `${breadcrumbs(crateCrumbs(c, "reports"))}${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p>Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== base.revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reproduceSection(c.run_ids)}<h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${base.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `${breadcrumbs(crateCrumbs(c, "reports"))}${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p id="revision-history">Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== c.latest_revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reproduceSection(c.run_ids)}<h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${c.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  const historyBox = root.querySelector<HTMLElement>("#revision-history")!;
+  const revisionSelect = root.querySelector<HTMLSelectElement>(
+    '[name="revision_no"]',
+  );
+  // History cannot block the report, comments, or comment form handlers.
+  void (async () => {
+    const revisions: any[] = [];
+    let cursor: string | null = null;
+    do {
+      const page = await request(
+        `/reports/${id}/revisions${cursor ? "?cursor=" + enc(cursor) : ""}`,
+      );
+      if (!historyBox.isConnected) return;
+      revisions.push(...page.items);
+      cursor = page.next_cursor;
+    } while (cursor);
+    historyBox.innerHTML = `Revision ${revisions.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== c.latest_revision_no ? " · <strong>Past revision</strong>" : ""}`;
+    if (revisionSelect) {
+      const selected = revisionSelect.value;
+      revisionSelect.innerHTML = revisions
+        .map(
+          (v: any) =>
+            `<option value="${v.revision_no}">v${v.revision_no}</option>`,
+        )
+        .join("");
+      revisionSelect.value = selected;
+    }
+  })().catch(() => {
+    if (historyBox.isConnected)
+      historyBox.insertAdjacentHTML(
+        "beforeend",
+        " · History unavailable. Reload to retry.",
+      );
+  });
   bindReproduce(root, c);
   bindStars();
   bind("#withdraw", async () => {
