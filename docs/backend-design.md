@@ -181,11 +181,57 @@ On explicit preparation of the first crate/version, fetch crates.io metadata and
 that release's docs.rs rustdoc JSON. Cache the parsed catalogue in D1 and source
 in R2. Reuse it for later reports. No registry crawl or scraping fallback.
 Rustdoc format allowlist: 60, 61. The catalogue indexes public free functions
-and concrete methods, identifying trait implementation methods as
-`<Type as Trait>::method`. Trait declarations, Deref methods, unsupported syntax
-and unresolved external reexports are not silently fabricated. The docs.rs build's
-target/features define the API surface. Queue work and outbox events support
-bounded retry and deduplication. Live import tests were explicitly waived.
+and implementation methods, identifying trait implementation methods as
+`<SelfType as TraitPath>::method`.
+
+Extraction has two ordered passes. The existing public struct/enum/union walk
+runs first and retains its keys **bit-for-bit**, including public type/trait
+reexports and the historical omission of nominal self-type generic arguments.
+The second pass follows `implementations` on public local traits (including
+reexports). Impl IDs already visited through a public type are skipped, so the
+new pass cannot rename or overwrite those entries. Synthetic/negative impls and
+impls belonging to another crate are excluded. A non-public local trait or
+private nominal self type does not become a public API through this traversal.
+
+Newly reached impls retain structural self types: foreign types with generic
+arguments, primitives, arrays with lengths, slices, tuples (including the
+singleton comma), references with lifetimes/mutability, pointers, and generic
+self parameters. Resolved path IDs use rustdoc's path summaries/public local
+paths; arbitrary foreign basenames are never conflated. For example:
+
+- `<alloc::vec::Vec<u8> as hex::FromHex>::from_hex`
+- `<[u8; 32] as hex::FromHex>::from_hex`
+- `<T as hex::ToHex>::encode_hex`
+
+Trait generic arguments remain part of the identity. Impl generics, bounds and
+method signatures remain in `signature`; a generic impl is one API rather than
+an enumeration of all its possible instantiations. Only actual function items
+in the impl are indexed: trait declarations, inherited defaults and Deref
+methods are not synthesized. New entries link to the public local trait page,
+using `#tymethod.name` for a required declaration and `#method.name` for a default
+body. Existing type-page URLs are unchanged.
+
+The cargo-proofs source scanner shares structural rendering fixtures with the
+importer. It resolves explicit imports and local trait reexports, preserves
+array lengths/type arguments, and supports qualified Kani targets such as
+`<[u8; 32] as FromHex>::from_hex`. Standard prelude spellings such as `Vec` and
+`std::vec::Vec` map to `alloc::vec::Vec`; arbitrary foreign modules are preserved.
+The source scanner does not expand macros, evaluate const expressions, resolve
+glob imports or perform compiler-level generic unification. Unsupported source
+syntax fails explicitly rather than supplying a guessed publication target.
+Rustdoc-expanded macro impls are nevertheless fully catalogued; the hex fixture
+covers all 159 array impls, the Vec impl and both generic ToHex methods.
+
+Catalogue refresh is insert-only: `(release_id, canonical_key)` conflicts do
+nothing. Existing API IDs, signatures, URLs, reports and claim references remain
+unchanged; rerunning refresh adds zero rows. No schema migration or report
+rewrite is needed. This change itself does not release the CLI, deploy the
+service or refresh production catalogues; those are separate reviewed operations.
+
+The docs.rs build's target/features define the API surface. Unsupported rustdoc
+syntax and unresolved external reexports fail explicitly. Queue work and outbox
+events support bounded retry and deduplication. Tests use checked-in snapshots
+without contacting docs.rs.
 
 ## Comments, mail, moderation and recovery
 

@@ -38,11 +38,12 @@ struct Function {
 enum CallableContext {
     Free,
     Inherent {
-        self_ty: syn::Path,
+        self_ty: syn::Type,
     },
     TraitImpl {
-        self_ty: syn::Path,
+        self_ty: syn::Type,
         trait_path: syn::Path,
+        generics: syn::Generics,
     },
 }
 #[derive(Clone)]
@@ -57,6 +58,7 @@ struct Scanner<'a> {
     creusot: bool,
     public_items: BTreeSet<String>,
     traits: BTreeSet<String>,
+    types: BTreeSet<String>,
     functions: Vec<Function>,
     imports: Vec<Import>,
     visited: BTreeSet<PathBuf>,
@@ -97,25 +99,37 @@ fn segments(path: &syn::Path) -> Result<Vec<String>> {
         .map(|x| x.ident.to_string().trim_start_matches("r#").to_owned())
         .collect())
 }
+// Rustdoc retains literal/parameter array lengths. Do not guess evaluated
+// constants or stringify arbitrary syntax into a potentially different key.
+fn render_const(expr: &syn::Expr) -> Result<String> {
+    match expr {
+        syn::Expr::Lit(l) => Ok(l.to_token_stream().to_string()),
+        syn::Expr::Path(p) if p.qself.is_none() => Ok(segments(&p.path)?.join("::")),
+        _ => bail!("Const expressions require compiler-backed resolution"),
+    }
+}
 impl CallableContext {
     fn path(&self, scanner: &Scanner<'_>, module: &[String], name: &str) -> Result<String> {
         match self {
             Self::Free => Ok(item_path(module, name)),
             Self::Inherent { self_ty } => Ok(format!(
                 "{}::{name}",
-                scanner.resolve(&segments(self_ty)?, module, 0)?
+                scanner
+                    .nominal_type(self_ty, module)?
+                    .context("Unsupported inherent self type")?
             )),
             Self::TraitImpl {
                 self_ty,
                 trait_path,
+                generics,
             } => Ok(format!(
                 "<{} as {}>::{name}",
-                scanner.resolve(&segments(self_ty)?, module, 0)?,
-                scanner.resolve(&segments(trait_path)?, module, 0)?
+                scanner.render_type(self_ty, module, generics)?,
+                scanner.render_path(trait_path, module, generics)?
             )),
         }
     }
-    fn self_ty(&self) -> Option<&syn::Path> {
+    fn self_ty(&self) -> Option<&syn::Type> {
         match self {
             Self::Free => None,
             Self::Inherent { self_ty } | Self::TraitImpl { self_ty, .. } => Some(self_ty),
@@ -343,6 +357,252 @@ pub fn discover_for_tool(project: &Project, tool: &Tool) -> Result<Vec<Contract>
 }
 
 impl Scanner<'_> {
+    fn nominal_type(&self, ty: &syn::Type, module: &[String]) -> Result<Option<String>> {
+        let syn::Type::Path(ty) = ty else {
+            return Ok(None);
+        };
+        if ty.qself.is_some() {
+            return Ok(None);
+        }
+        let mut path = ty.path.clone();
+        for s in &mut path.segments {
+            s.arguments = syn::PathArguments::None;
+        }
+        Ok(Some(self.resolve(&segments(&path)?, module, 0)?))
+    }
+    fn render_type(
+        &self,
+        value: &syn::Type,
+        module: &[String],
+        generics: &syn::Generics,
+    ) -> Result<String> {
+        self.render_type_in(value, module, generics, false)
+    }
+    fn render_path(
+        &self,
+        value: &syn::Path,
+        module: &[String],
+        generics: &syn::Generics,
+    ) -> Result<String> {
+        self.render_path_in(value, module, generics, false)
+    }
+
+    fn render_path_in(
+        &self,
+        path: &syn::Path,
+        module: &[String],
+        generics: &syn::Generics,
+        public_paths: bool,
+    ) -> Result<String> {
+        let mut bare = path.clone();
+        bare.leading_colon = None;
+        for s in &mut bare.segments {
+            s.arguments = syn::PathArguments::None;
+        }
+        let parts = segments(&bare)?;
+        let resolved = self.resolve(&parts, module, 0)?;
+        let local = self.types.contains(&resolved) || self.traits.contains(&resolved);
+        let primitive = parts.len() == 1
+            && matches!(
+                parts[0].as_str(),
+                "bool"
+                    | "char"
+                    | "str"
+                    | "u8"
+                    | "u16"
+                    | "u32"
+                    | "u64"
+                    | "u128"
+                    | "usize"
+                    | "i8"
+                    | "i16"
+                    | "i32"
+                    | "i64"
+                    | "i128"
+                    | "isize"
+                    | "f32"
+                    | "f64"
+            );
+        let generic = parts.len() == 1
+            && generics.params.iter().any(|p| match p {
+                syn::GenericParam::Type(t) => t.ident == parts[0],
+                syn::GenericParam::Const(c) => c.ident == parts[0],
+                _ => false,
+            });
+        let mut name = if generic || primitive {
+            parts[0].clone()
+        } else if local {
+            let name = if public_paths {
+                self.creusot_public_paths(&resolved)?
+                    .into_iter()
+                    .next()
+                    .with_context(|| format!("Type {resolved} has no public API path"))?
+            } else {
+                resolved
+            };
+            format!("{}::{name}", self.project.lib_name)
+        } else {
+            // Imports are resolved before recognizing prelude names. Never
+            // strip arbitrary external modules down to a basename.
+            let prefix = module.join("::") + "::";
+            resolved
+                .strip_prefix(&prefix)
+                .unwrap_or(&resolved)
+                .to_owned()
+        };
+        if !generic {
+            name = match name.as_str() {
+                "Vec" | "std::vec::Vec" => "alloc::vec::Vec".into(),
+                "String" | "std::string::String" => "alloc::string::String".into(),
+                "Box" | "std::boxed::Box" => "alloc::boxed::Box".into(),
+                "Option" | "std::option::Option" => "core::option::Option".into(),
+                "Result" | "std::result::Result" => "core::result::Result".into(),
+                _ => name,
+            };
+        }
+        ensure!(
+            path.segments
+                .iter()
+                .rev()
+                .skip(1)
+                .all(|s| matches!(s.arguments, syn::PathArguments::None)),
+            "Generic intermediate paths require compiler-backed resolution"
+        );
+        name.push_str(&self.render_arguments_in(
+            &path.segments.last().context("Empty type path")?.arguments,
+            module,
+            generics,
+            public_paths,
+        )?);
+        Ok(name)
+    }
+    fn render_arguments_in(
+        &self,
+        args: &syn::PathArguments,
+        module: &[String],
+        generics: &syn::Generics,
+        public_paths: bool,
+    ) -> Result<String> {
+        match args {
+            syn::PathArguments::None => Ok(String::new()),
+            syn::PathArguments::AngleBracketed(a) => {
+                let values = a
+                    .args
+                    .iter()
+                    .map(|arg| {
+                        Ok(match arg {
+                            syn::GenericArgument::Type(t) => {
+                                self.render_type_in(t, module, generics, public_paths)?
+                            }
+                            syn::GenericArgument::Lifetime(l) => l.to_string(),
+                            syn::GenericArgument::Const(c) => render_const(c)?,
+                            syn::GenericArgument::AssocType(a) => format!(
+                                "{} = {}",
+                                a.ident,
+                                self.render_type_in(&a.ty, module, generics, public_paths)?
+                            ),
+                            syn::GenericArgument::AssocConst(a) => {
+                                format!("{} = {}", a.ident, render_const(&a.value)?)
+                            }
+                            _ => bail!(
+                                "Unsupported generic argument; compiler-backed resolution required"
+                            ),
+                        })
+                    })
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(if values.is_empty() {
+                    String::new()
+                } else {
+                    format!("<{}>", values.join(", "))
+                })
+            }
+            syn::PathArguments::Parenthesized(a) => {
+                let inputs = a
+                    .inputs
+                    .iter()
+                    .map(|t| self.render_type_in(t, module, generics, public_paths))
+                    .collect::<Result<Vec<_>>>()?;
+                Ok(format!(
+                    "({}){}",
+                    inputs.join(", "),
+                    self.render_return_in(&a.output, module, generics, public_paths)?
+                ))
+            }
+        }
+    }
+    fn render_return_in(
+        &self,
+        out: &syn::ReturnType,
+        module: &[String],
+        generics: &syn::Generics,
+        public_paths: bool,
+    ) -> Result<String> {
+        match out {
+            syn::ReturnType::Default => Ok(String::new()),
+            syn::ReturnType::Type(_, t) => Ok(format!(
+                " -> {}",
+                self.render_type_in(t, module, generics, public_paths)?
+            )),
+        }
+    }
+    fn render_type_in(
+        &self,
+        ty: &syn::Type,
+        module: &[String],
+        generics: &syn::Generics,
+        public_paths: bool,
+    ) -> Result<String> {
+        Ok(match ty {
+            syn::Type::Path(t) if t.qself.is_none() => {
+                self.render_path_in(&t.path, module, generics, public_paths)?
+            }
+            syn::Type::Array(t) => format!(
+                "[{}; {}]",
+                self.render_type_in(&t.elem, module, generics, public_paths)?,
+                render_const(&t.len)?
+            ),
+            syn::Type::Slice(t) => format!(
+                "[{}]",
+                self.render_type_in(&t.elem, module, generics, public_paths)?
+            ),
+            syn::Type::Tuple(t) => {
+                let elements = t
+                    .elems
+                    .iter()
+                    .map(|t| self.render_type_in(t, module, generics, public_paths))
+                    .collect::<Result<Vec<_>>>()?;
+                format!(
+                    "({}{})",
+                    elements.join(", "),
+                    if elements.len() == 1 { "," } else { "" }
+                )
+            }
+            syn::Type::Reference(t) => format!(
+                "&{}{}{}",
+                t.lifetime
+                    .as_ref()
+                    .map(|l| format!("{l} "))
+                    .unwrap_or_default(),
+                if t.mutability.is_some() { "mut " } else { "" },
+                self.render_type_in(&t.elem, module, generics, public_paths)?
+            ),
+            syn::Type::Ptr(t) => format!(
+                "*{} {}",
+                if t.mutability.is_some() {
+                    "mut"
+                } else {
+                    "const"
+                },
+                self.render_type_in(&t.elem, module, generics, public_paths)?
+            ),
+            syn::Type::Paren(t) => self.render_type_in(&t.elem, module, generics, public_paths)?,
+            syn::Type::Group(t) => self.render_type_in(&t.elem, module, generics, public_paths)?,
+            syn::Type::Never(_) => "!".into(),
+            syn::Type::Infer(_) => "_".into(),
+            _ => bail!("Unsupported self type; compiler-backed resolution required"),
+        })
+    }
+
     fn public_callable_paths(
         &self,
         context: &CallableContext,
@@ -352,17 +612,41 @@ impl Scanner<'_> {
         match context {
             CallableContext::Free => self.creusot_public_paths(&item_path(module, name)),
             CallableContext::Inherent { self_ty } => {
-                let ty = self.resolve(&segments(self_ty)?, module, 0)?;
+                let ty = self
+                    .nominal_type(self_ty, module)?
+                    .context("Unsupported inherent self type")?;
                 self.creusot_public_paths(&format!("{ty}::{name}"))
             }
             CallableContext::TraitImpl {
                 self_ty,
                 trait_path,
+                generics,
             } => {
-                let ty = self.resolve(&segments(self_ty)?, module, 0)?;
-                let tr = self.resolve(&segments(trait_path)?, module, 0)?;
-                let types = self.creusot_public_paths(&ty)?;
+                let mut bare_trait = trait_path.clone();
+                for segment in &mut bare_trait.segments {
+                    segment.arguments = syn::PathArguments::None;
+                }
+                let tr = self.resolve(&segments(&bare_trait)?, module, 0)?;
+                let nominal = self.nominal_type(self_ty, module)?;
+                let legacy = nominal.as_ref().is_some_and(|ty| self.types.contains(ty));
+                let types = if legacy {
+                    self.creusot_public_paths(nominal.as_ref().unwrap())?
+                        .into_iter()
+                        .map(|ty| format!("{}::{ty}", self.project.lib_name))
+                        .collect()
+                } else {
+                    vec![self.render_type_in(self_ty, module, generics, true)?]
+                };
                 let local_trait = self.traits.contains(&tr);
+                if !legacy && !local_trait {
+                    return Ok(vec![]);
+                }
+                let suffix = self.render_arguments_in(
+                    &trait_path.segments.last().unwrap().arguments,
+                    module,
+                    generics,
+                    !legacy,
+                )?;
                 let traits = if local_trait {
                     self.creusot_public_paths(&tr)?
                 } else {
@@ -371,14 +655,14 @@ impl Scanner<'_> {
                 Ok(types
                     .iter()
                     .flat_map(|ty| {
+                        let suffix = &suffix;
                         traits.iter().map(move |tr| {
-                            let ty = format!("{}::{ty}", self.project.lib_name);
                             let tr = if local_trait {
                                 format!("{}::{tr}", self.project.lib_name)
                             } else {
                                 tr.clone()
                             };
-                            format!("<{ty} as {tr}>::{name}")
+                            format!("<{ty} as {tr}{suffix}>::{name}")
                         })
                     })
                     .collect::<BTreeSet<_>>()
@@ -403,6 +687,11 @@ impl Scanner<'_> {
         }))
     }
     fn creusot_public_paths(&self, path: &str) -> Result<Vec<String>> {
+        if (self.types.contains(path) || self.traits.contains(path))
+            && !self.public_items.contains(path)
+        {
+            return Ok(vec![]);
+        }
         // Every intermediate module/type must be public, unless explicitly reexported.
         let traversable = |path: &str, from: usize| {
             let parts: Vec<_> = path.split("::").collect();
@@ -526,6 +815,9 @@ impl Scanner<'_> {
                     }
                 }
                 Item::Struct(i) => {
+                    if attrs(&i.attrs, self.project)?.is_some() {
+                        self.types.insert(item_path(module, &i.ident.to_string()));
+                    }
                     if matches!(i.vis, syn::Visibility::Public(_))
                         && attrs(&i.attrs, self.project)?.is_some()
                     {
@@ -534,6 +826,9 @@ impl Scanner<'_> {
                     }
                 }
                 Item::Enum(i) => {
+                    if attrs(&i.attrs, self.project)?.is_some() {
+                        self.types.insert(item_path(module, &i.ident.to_string()));
+                    }
                     if matches!(i.vis, syn::Visibility::Public(_))
                         && attrs(&i.attrs, self.project)?.is_some()
                     {
@@ -542,6 +837,9 @@ impl Scanner<'_> {
                     }
                 }
                 Item::Union(i) => {
+                    if attrs(&i.attrs, self.project)?.is_some() {
+                        self.types.insert(item_path(module, &i.ident.to_string()));
+                    }
                     if matches!(i.vis, syn::Visibility::Public(_))
                         && attrs(&i.attrs, self.project)?.is_some()
                     {
@@ -571,33 +869,24 @@ impl Scanner<'_> {
                     if attrs(&i.attrs, self.project)?.is_none() {
                         continue;
                     }
-                    let syn::Type::Path(owner) = &*i.self_ty else {
-                        continue;
-                    };
-                    if owner.qself.is_some() {
-                        continue;
-                    }
-                    if owner
-                        .path
-                        .segments
-                        .iter()
-                        .any(|s| !matches!(s.arguments, syn::PathArguments::None))
-                        || i.trait_.as_ref().is_some_and(|(_, path, _)| {
-                            path.segments
-                                .iter()
-                                .any(|s| !matches!(s.arguments, syn::PathArguments::None))
-                        })
-                    {
-                        continue;
-                    }
-                    let context = if let Some((_, trait_path, _)) = &i.trait_ {
+                    let context = if let Some((negative, trait_path, _)) = &i.trait_ {
+                        if negative.is_some() {
+                            continue;
+                        }
                         CallableContext::TraitImpl {
-                            self_ty: owner.path.clone(),
+                            self_ty: (*i.self_ty).clone(),
                             trait_path: trait_path.clone(),
+                            generics: i.generics.clone(),
                         }
                     } else {
+                        let syn::Type::Path(owner) = &*i.self_ty else {
+                            continue;
+                        };
+                        if owner.qself.is_some() || segments(&owner.path).is_err() {
+                            continue;
+                        }
                         CallableContext::Inherent {
-                            self_ty: owner.path.clone(),
+                            self_ty: (*i.self_ty).clone(),
                         }
                     };
                     for method in &i.items {
@@ -808,6 +1097,7 @@ fn scanner(project: &Project, creusot: bool) -> Scanner<'_> {
         creusot,
         public_items: BTreeSet::new(),
         traits: BTreeSet::new(),
+        types: BTreeSet::new(),
         functions: vec![],
         imports: vec![],
         visited: BTreeSet::new(),
@@ -825,8 +1115,11 @@ pub fn discover(project: &Project) -> Result<Vec<Contract>> {
             Err(err) => return Err(err),
         };
         functions.entry(path.clone()).or_default().push(i);
-        if let CallableContext::TraitImpl { self_ty, .. } = &f.context {
-            let ty = s.resolve(&segments(self_ty)?, &f.module, 0)?;
+        if let CallableContext::TraitImpl {
+            self_ty, generics, ..
+        } = &f.context
+        {
+            let ty = s.render_type(self_ty, &f.module, generics)?;
             functions
                 .entry(format!("{ty}::{}", f.name))
                 .or_default()
@@ -840,34 +1133,50 @@ pub fn discover(project: &Project) -> Result<Vec<Contract>> {
             continue;
         };
         let path = if let Some(qself) = &target.qself {
-            let syn::Type::Path(ty) = &*qself.ty else {
-                bail!("Unsupported qualified contract target")
-            };
+            let mut trait_path = target.path.clone();
+            let method = trait_path
+                .segments
+                .pop()
+                .context("Missing method")?
+                .into_value();
             ensure!(
-                ty.qself.is_none(),
-                "Nested qualified targets require compiler-backed resolution"
-            );
-            let parts = segments(&target.path)?;
-            ensure!(
-                qself.position + 1 == parts.len(),
+                qself.position == trait_path.segments.len(),
                 "Unsupported qualified contract target"
             );
-            let self_ty = s.resolve(&segments(&ty.path)?, &h.module, 0)?;
+            let self_ty = s.render_type(&qself.ty, &h.module, &syn::Generics::default())?;
             if qself.position == 0 {
-                format!("{self_ty}::{}", parts.last().unwrap())
+                format!("{self_ty}::{}", method.ident)
             } else {
-                let tr = s.resolve(&parts[..qself.position], &h.module, 0)?;
-                format!("<{self_ty} as {tr}>::{}", parts.last().unwrap())
+                let tr = s.render_path(&trait_path, &h.module, &syn::Generics::default())?;
+                format!("<{self_ty} as {tr}>::{}", method.ident)
             }
+        } else if target
+            .path
+            .segments
+            .first()
+            .is_some_and(|p| p.ident == "Self")
+        {
+            let owner = h.context.self_ty().context("Self outside an impl")?;
+            let generics = match &h.context {
+                CallableContext::TraitImpl { generics, .. } => generics.clone(),
+                _ => syn::Generics::default(),
+            };
+            let owner = if matches!(h.context, CallableContext::Inherent { .. }) {
+                s.nominal_type(owner, &h.module)?
+                    .context("Unsupported inherent self type")?
+            } else {
+                s.render_type(owner, &h.module, &generics)?
+            };
+            let parts = segments(&target.path)?;
+            format!("{owner}::{}", parts[1..].join("::"))
         } else {
-            let mut parts = segments(&target.path)?;
-            if parts.first().is_some_and(|p| p == "Self") {
-                let owner = h.context.self_ty().context("Self outside an impl")?;
-                let mut replacement = segments(owner)?;
-                replacement.extend(parts.into_iter().skip(1));
-                parts = replacement;
+            let parts = segments(&target.path)?;
+            let resolved = s.resolve(&parts, &h.module, 0)?;
+            if functions.contains_key(&resolved) {
+                resolved
+            } else {
+                format!("{}::{resolved}", s.project.lib_name)
             }
-            s.resolve(&parts, &h.module, 0)?
         };
         let indices = functions.get(&path).with_context(|| format!("Cannot resolve {path} in harness {}. Glob imports and generated functions require compiler-backed resolution.", h.path))?;
         ensure!(indices.len() == 1, "Ambiguous contract target {path}");
@@ -935,6 +1244,83 @@ mod tests {
             cfg: BTreeSet::from(["kani".into()]),
         };
         (d, p)
+    }
+    #[test]
+    fn structural_paths_match_importer_fixtures() {
+        let cases: serde_json::Value =
+            serde_json::from_str(include_str!("../tests/fixtures/canonical-trait-paths.json"))
+                .unwrap();
+        for case in cases.as_array().unwrap() {
+            let ty = case["source"].as_str().unwrap();
+            let generic = case["generics"].as_str().unwrap_or("");
+            let imports = case["imports"].as_str().unwrap_or("");
+            let source = format!("{imports} pub trait T {{ fn m(); }} impl{generic} T for {ty} {{ #[requires(true)] fn m() {{}} }}");
+            let contracts = creusot_contracts(&source, CreusotTarget::Annotated);
+            assert_eq!(
+                contracts[0].api_paths,
+                [format!("<{} as demo::T>::m", case["key"].as_str().unwrap())],
+                "{source}"
+            );
+            // Concrete qualified Kani targets use the same renderer as impls.
+            if generic.is_empty() {
+                let source =
+                    format!("{source} #[kani::proof_for_contract(<{ty} as T>::m)] fn check() {{}}");
+                let (_d, p) = project(&source);
+                assert_eq!(
+                    discover(&p).unwrap()[0].api_paths,
+                    contracts[0].api_paths,
+                    "{source}"
+                );
+            }
+        }
+    }
+    #[test]
+    fn structural_trait_aliases_generic_arguments_and_private_traits() {
+        let source = "mod inner { use alloc::vec::Vec as Bytes; pub trait T<A> { fn m(); } impl T<u16> for Bytes<u8> { #[requires(true)] fn m() {} } } pub use inner::T as Export;";
+        let c = creusot_contracts(source, CreusotTarget::Annotated);
+        assert_eq!(
+            c[0].api_paths,
+            ["<alloc::vec::Vec<u8> as demo::Export<u16>>::m"]
+        );
+        let (_d, mut p) = project(
+            "trait Private { fn m(); } impl Private for u8 { #[requires(true)] fn m() {} }",
+        );
+        p.cfg = BTreeSet::from(["creusot".into()]);
+        assert!(discover_for_tool(
+            &p,
+            &Tool {
+                name: "creusot".into(),
+                version: "test".into(),
+                target: Some(CreusotTarget::Annotated)
+            }
+        )
+        .unwrap_err()
+        .to_string()
+        .contains("No eligible"));
+    }
+    #[test]
+    fn nested_local_types_use_public_reexports() {
+        let c = creusot_contracts("mod hidden { pub struct S; pub trait T { fn m(); } impl T for Vec<S> { #[requires(true)] fn m() {} } } pub use hidden::{S as Alias, T};", CreusotTarget::Annotated);
+        assert_eq!(
+            c[0].api_paths,
+            ["<alloc::vec::Vec<demo::Alias> as demo::T>::m"]
+        );
+    }
+    #[test]
+    fn self_qualified_targets_keep_impl_identity() {
+        let (_d, p) = project("mod inner { pub struct S; pub trait T { fn m(); } impl T for S { fn m() {} #[kani::proof_for_contract(Self::m)] fn check() {} } } pub use inner::{S, T};");
+        assert_eq!(
+            discover(&p).unwrap()[0].api_paths,
+            ["<demo::S as demo::T>::m"]
+        );
+    }
+    #[test]
+    fn generic_local_nominal_identity_remains_erased() {
+        let c = creusot_contracts(
+            "pub struct S<U>(U); pub trait T {} impl<U> T for S<U> { #[requires(true)] fn m() {} }",
+            CreusotTarget::Annotated,
+        );
+        assert_eq!(c[0].api_paths, ["<demo::S as demo::T>::m"]);
     }
     #[test]
     fn extracts_cfg_attrs_conditions_aliases_and_lines() {

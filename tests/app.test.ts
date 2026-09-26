@@ -725,7 +725,15 @@ test("docs.rs hex 0.4.3 format 60 imports codec APIs and associated types", () =
     ),
   );
   const apis = extractAPIs(doc, "hex", "0.4.3");
-  assert.equal(apis.length, 11);
+  assert.deepEqual(
+    apis,
+    JSON.parse(
+      readFileSync(
+        new URL("../fixtures/hex-0.4.3-legacy-apis.json", import.meta.url),
+        "utf8",
+      ),
+    ),
+  );
   const encode = apis.find((a) => a.canonical_key === "hex::encode_to_slice")!;
   const decode = apis.find((a) => a.canonical_key === "hex::decode_to_slice")!;
   assert.equal(
@@ -1597,15 +1605,20 @@ test("staging fixture is repeatable and exposes report catalogue without importe
     0,
   );
 
-  const traitReport = home.body.reports.find((r: any) => r.crate === "trait-demo");
+  const traitReport = home.body.reports.find(
+    (r: any) => r.crate === "trait-demo",
+  );
   const traitDetail = await request("/reports/" + traitReport.id);
   assert.equal(traitDetail.body.claims.length, 3);
   const traitAPIs = await request("/crates/trait-demo/0.1.0-demo.1/apis");
-  assert.deepEqual(traitAPIs.body.items.map((a: any) => a.display_path).sort(), [
-    "<trait_demo::Buffer as trait_demo::Inspect>::read",
-    "<trait_demo::Buffer as trait_demo::Read>::read",
-    "trait_demo::Buffer::read",
-  ]);
+  assert.deepEqual(
+    traitAPIs.body.items.map((a: any) => a.display_path).sort(),
+    [
+      "<trait_demo::Buffer as trait_demo::Inspect>::read",
+      "<trait_demo::Buffer as trait_demo::Read>::read",
+      "trait_demo::Buffer::read",
+    ],
+  );
   assert.ok(traitAPIs.body.items.every((a: any) => a.kind === "method"));
 
   const comments = await request("/reports/" + first.id + "/comments");
@@ -2334,3 +2347,235 @@ test("single-request run registration compensates failures and reclaims only cra
   assert.equal(objects.size, 2, "keep committed evidence regardless of age");
 });
 
+test("new trait-driven structural paths match cargo-proofs fixtures", () => {
+  const cases = JSON.parse(
+    readFileSync(
+      new URL(
+        "../cli/tests/fixtures/canonical-trait-paths.json",
+        import.meta.url,
+      ),
+      "utf8",
+    ),
+  );
+  for (const c of cases) {
+    const doc = traitImplFixture(c.type);
+    doc.paths = c.paths || {};
+    const apis = extractAPIs(doc, "sample", "1.0.0");
+    assert.deepEqual(
+      apis.map((a) => a.canonical_key),
+      [`<${c.key} as sample::T>::m`],
+      c.source,
+    );
+    assert.equal(
+      apis[0].upstream_url,
+      "https://docs.rs/sample/1.0.0/sample/trait.T.html#tymethod.m",
+    );
+  }
+});
+
+function traitImplFixture(selfType: any): any {
+  const fn = {
+    header: { is_unsafe: false, abi: "Rust" },
+    generics: {},
+    sig: { inputs: [], output: null },
+    has_body: false,
+  };
+  return {
+    format_version: 61,
+    crate_version: "1.0.0",
+    root: 0,
+    index: {
+      0: { crate_id: 0, name: "sample", inner: { module: { items: [1] } } },
+      1: {
+        crate_id: 0,
+        name: "T",
+        visibility: "public",
+        inner: { trait: { items: [2], implementations: [3] } },
+      },
+      2: { name: "m", inner: { function: fn } },
+      3: {
+        crate_id: 0,
+        inner: {
+          impl: {
+            for: selfType,
+            trait: { path: "T", id: 1 },
+            generics: {},
+            items: [4],
+          },
+        },
+      },
+      4: {
+        name: "m",
+        visibility: "default",
+        inner: { function: { ...fn, has_body: true } },
+      },
+    },
+  };
+}
+
+test("trait traversal preserves legacy entries and all public aliases without duplicates", () => {
+  const doc = traitImplFixture({ resolved_path: { path: "S", id: 5 } });
+  doc.index[0].inner.module.items.push(5, 6, 7);
+  doc.index[5] = {
+    crate_id: 0,
+    name: "S",
+    visibility: "public",
+    inner: { struct: { impls: [3] } },
+  };
+  doc.index[6] = {
+    visibility: "public",
+    inner: { use: { id: 1, name: "Alias", is_glob: false } },
+  };
+  doc.index[7] = {
+    visibility: "public",
+    inner: { use: { id: 5, name: "Other", is_glob: false } },
+  };
+  doc.index[1].inner.trait.implementations = [];
+  const legacy = extractAPIs(doc, "sample", "1.0.0");
+  doc.index[1].inner.trait.implementations = [3, 3];
+  assert.deepEqual(extractAPIs(doc, "sample", "1.0.0"), legacy);
+  assert.equal(legacy.length, 4);
+  doc.index[3].inner.impl.for = { primitive: "u8" };
+  doc.index[5].inner.struct.impls = [];
+  assert.deepEqual(
+    extractAPIs(doc, "sample", "1.0.0").map((a) => a.canonical_key),
+    ["<u8 as sample::T>::m", "<u8 as sample::Alias>::m"],
+  );
+  doc.index[1].visibility = "default";
+  doc.index[0].inner.module.items = [1];
+  assert.deepEqual(extractAPIs(doc, "sample", "1.0.0"), []);
+});
+
+test("trait traversal excludes synthetic, negative, external and private nominal impls", () => {
+  for (const change of [
+    (d: any) => {
+      d.index[3].inner.impl.is_synthetic = true;
+    },
+    (d: any) => {
+      d.index[3].inner.impl.is_negative = true;
+    },
+    (d: any) => {
+      d.index[3].crate_id = 1;
+    },
+    (d: any) => {
+      d.index[1].crate_id = 1;
+    },
+    (d: any) => {
+      d.index[3].inner.impl.for = { resolved_path: { path: "Private", id: 5 } };
+      d.index[5] = { crate_id: 0, inner: { struct: { impls: [3] } } };
+    },
+  ]) {
+    const doc = traitImplFixture({ primitive: "u8" });
+    change(doc);
+    assert.deepEqual(extractAPIs(doc, "sample", "1.0.0"), []);
+  }
+  const doc = traitImplFixture({ primitive: "u8" });
+  delete doc.index[3];
+  assert.throws(
+    () => extractAPIs(doc, "sample", "1.0.0"),
+    /invalid_rustdoc_impl/,
+  );
+});
+
+test("hex trait fixture includes every macro array impl, Vec and generic ToHex", () => {
+  const doc = JSON.parse(
+    readFileSync(
+      new URL("../fixtures/hex-0.4.3-trait-impls.json", import.meta.url),
+      "utf8",
+    ),
+  );
+  const apis = extractAPIs(doc, "hex", "0.4.3");
+  assert.equal(apis.length, 162);
+  const keys = new Set(apis.map((a) => a.canonical_key));
+  assert(keys.has("<alloc::vec::Vec<u8> as hex::FromHex>::from_hex"));
+  assert(keys.has("<T as hex::ToHex>::encode_hex"));
+  assert(keys.has("<T as hex::ToHex>::encode_hex_upper"));
+  const arrays = doc.index[85].inner.trait.implementations
+    .map((id: number) => doc.index[id].inner.impl.for.array)
+    .filter(Boolean);
+  assert.equal(arrays.length, 159);
+  for (const a of arrays)
+    assert(keys.has(`<\u005bu8; ${a.len}] as hex::FromHex>::from_hex`));
+  assert(
+    apis.every((a) =>
+      /trait\.(FromHex|ToHex)\.html#tymethod\./.test(a.upstream_url),
+    ),
+  );
+});
+
+test("structural trait arguments distinguish impls and refresh preserves reports and IDs", async () => {
+  const { db, env, request } = await fixture();
+  const report = await request("/reports", "POST", reportInput);
+  assert.equal(report.status, 201);
+  const before = db.prepare("SELECT * FROM api_items ORDER BY id").all();
+  const reports = db.prepare("SELECT * FROM reports ORDER BY id").all();
+  const claims = db.prepare("SELECT * FROM claims ORDER BY id").all();
+  const doc = traitImplFixture({ primitive: "u8" });
+  const first = doc.index[3].inner.impl;
+  first.trait.args = {
+    angle_bracketed: { args: [{ type: { primitive: "u16" } }] },
+  };
+  doc.index[5] = structuredClone(doc.index[3]);
+  doc.index[5].inner.impl.trait.args.angle_bracketed.args[0].type.primitive =
+    "u32";
+  doc.index[1].inner.trait.implementations.push(5);
+  (env as any).ARCHIVE.get = async () => ({
+    text: async () => JSON.stringify(doc),
+  });
+  assert.deepEqual(await refreshCatalog(env, 1), { indexed: 2, added: 2 });
+  assert.deepEqual(await refreshCatalog(env, 1), { indexed: 2, added: 0 });
+  assert.deepEqual(
+    db
+      .prepare(
+        "SELECT * FROM api_items WHERE id IN ('safe','unsafe') ORDER BY id",
+      )
+      .all(),
+    before,
+  );
+  assert.deepEqual(
+    db.prepare("SELECT * FROM reports ORDER BY id").all(),
+    reports,
+  );
+  assert.deepEqual(
+    db.prepare("SELECT * FROM claims ORDER BY id").all(),
+    claims,
+  );
+  for (const arg of ["u16", "u32"]) {
+    const path = `<u8 as sample::T<${arg}>>::m`;
+    const resolved = await request(
+      `/resolve-api?crate=sample&version=1.0.0&path=${encodeURIComponent(path)}`,
+    );
+    assert.equal(resolved.status, 200);
+    assert.equal(resolved.body.id, await hash("1:" + path));
+  }
+});
+
+test("nested local type references use public aliases in structural keys", () => {
+  const doc = traitImplFixture({
+    resolved_path: {
+      path: "Vec",
+      id: 20,
+      args: {
+        angle_bracketed: {
+          args: [{ type: { resolved_path: { path: "hidden::S", id: 5 } } }],
+        },
+      },
+    },
+  });
+  doc.paths = { 20: { path: ["alloc", "vec", "Vec"] } };
+  doc.index[5] = {
+    crate_id: 0,
+    name: "S",
+    visibility: "public",
+    inner: { struct: { impls: [] } },
+  };
+  doc.index[6] = {
+    visibility: "public",
+    inner: { use: { id: 5, name: "Alias", is_glob: false } },
+  };
+  doc.index[0].inner.module.items.push(6);
+  assert.equal(
+    extractAPIs(doc, "sample", "1.0.0")[0].canonical_key,
+    "<alloc::vec::Vec<sample::Alias> as sample::T>::m",
+  );
+});

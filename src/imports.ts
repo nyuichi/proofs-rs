@@ -250,6 +250,8 @@ export function extractAPIs(doc: any, crate: string, version: string) {
     throw new Fault(422, "invalid_rustdoc");
   const output = new Map<string, any>();
   const publicTraits = new Map<string, Set<string>>();
+  const typeImpls = new Set<string>();
+  const publicTypes = new Map<string, string>();
   const traitMethods: {
     item: any;
     path: string[];
@@ -261,13 +263,20 @@ export function extractAPIs(doc: any, crate: string, version: string) {
   function add(
     item: any,
     path: string[],
-    owner?: { kind: string; path: string[]; impl: any; trait?: string },
+    owner?: {
+      kind: string;
+      path: string[];
+      impl: any;
+      trait?: string;
+      selfType?: string;
+      anchor?: string;
+    },
   ) {
     const fn = resolveEmptyPaths(item.inner.function, doc.paths);
     if (!fn || typeof fn.header?.is_unsafe !== "boolean")
       throw new Fault(422, "invalid_rustdoc_function");
     const name = owner?.trait
-      ? `<${owner.path.join("::")} as ${owner.trait}>::${path.at(-1)}`
+      ? `<${owner.selfType ?? owner.path.join("::")} as ${owner.trait}>::${path.at(-1)}`
       : path.join("::");
     const prefix = owner
       ? `impl${params(owner.impl.generics)} ${owner.trait ? owner.trait + " for " : ""}${typ(owner.impl.for)}${wheres(owner.impl.generics)}\n`
@@ -288,7 +297,7 @@ export function extractAPIs(doc: any, crate: string, version: string) {
       wheres(fn.generics);
     const parts = owner ? owner.path : path;
     const file = owner
-      ? `${owner.kind}.${parts.at(-1)}.html#method.${path.at(-1)}`
+      ? `${owner.kind}.${parts.at(-1)}.html#${owner.anchor || "method"}.${path.at(-1)}`
       : `fn.${parts.at(-1)}.html`;
     const link = `https://docs.rs/${encodeURIComponent(crate)}/${encodeURIComponent(version)}/${parts.slice(0, -1).map(encodeURIComponent).join("/")}/${file}`;
     output.set(name, {
@@ -347,11 +356,18 @@ export function extractAPIs(doc: any, crate: string, version: string) {
       return;
     }
     for (const kind of ["struct", "enum", "union"])
-      if (inner[kind])
+      if (inner[kind]) {
+        publicTypes.set(
+          String(id),
+          [publicTypes.get(String(id)), current.join("::")]
+            .filter(Boolean)
+            .sort()[0]!,
+        );
         for (const implID of inner[kind].impls || []) {
           const imp = index[implID]?.inner?.impl;
           if (!imp) throw new Fault(422, "invalid_rustdoc_impl");
           if (imp.is_synthetic) continue;
+          typeImpls.add(String(implID));
           const trait = imp.trait && resolveEmptyPaths(imp.trait, doc.paths);
           for (const methodID of imp.items || []) {
             const method = index[methodID];
@@ -372,6 +388,7 @@ export function extractAPIs(doc: any, crate: string, version: string) {
               add(method, [...current, method.name], owner);
           }
         }
+      }
   }
   walk(doc.root, [], new Set());
   for (const { item, path, owner, trait } of traitMethods) {
@@ -381,6 +398,81 @@ export function extractAPIs(doc: any, crate: string, version: string) {
       : new Set([trait.path]);
     for (const traitPath of paths)
       add(item, path, { ...owner, trait: traitPath + args(trait.args) });
+  }
+  // Preserve every type-driven identity above (including its aliases and generic
+  // erasure). Only impls not reached there may introduce structural self types.
+  function canonicalPaths(value: any): any {
+    if (Array.isArray(value)) return value.map(canonicalPaths);
+    if (!value || typeof value !== "object") return value;
+    const result = Object.fromEntries(
+      Object.entries(value).map(([k, v]) => [k, canonicalPaths(v)]),
+    );
+    if (typeof result.path === "string" && result.id !== undefined) {
+      const id = String(result.id);
+      const publicPath =
+        publicTypes.get(id) || [...(publicTraits.get(id) || [])].sort()[0];
+      const summary = doc.paths?.[id];
+      if (publicPath) result.path = publicPath;
+      else if (summary?.path) result.path = summary.path.join("::");
+    }
+    return result;
+  }
+  const visitedImpls = new Set<string>();
+  for (const [traitID, aliases] of publicTraits) {
+    const declaration = index[traitID];
+    const localCrate = index[doc.root].crate_id;
+    if (localCrate !== undefined && declaration.crate_id !== localCrate)
+      continue;
+    for (const implID of declaration.inner.trait.implementations || []) {
+      if (++visits > 100000) throw new Fault(422, "api_graph_too_large");
+      const id = String(implID);
+      if (typeImpls.has(id) || visitedImpls.has(id)) continue;
+      visitedImpls.add(id);
+      const entry = index[id];
+      const raw = entry?.inner?.impl;
+      if (!raw) throw new Fault(422, "invalid_rustdoc_impl");
+      if (raw.is_synthetic || raw.is_negative) continue;
+      if (localCrate !== undefined && entry.crate_id !== localCrate) continue;
+      if (String(raw.trait?.id) !== traitID)
+        throw new Fault(422, "invalid_rustdoc_impl_trait");
+      // A private nominal type does not become a public API through its trait.
+      const nominal = raw.for?.resolved_path?.id;
+      if (
+        nominal !== undefined &&
+        !publicTypes.has(String(nominal)) &&
+        index[nominal]?.crate_id === localCrate &&
+        ["struct", "enum", "union"].some((k) => index[nominal]?.inner?.[k])
+      )
+        continue;
+      const imp = resolveEmptyPaths(raw, doc.paths);
+      const selfType = typ(canonicalPaths(imp.for));
+      for (const methodID of imp.items || []) {
+        const method = index[methodID];
+        if (!method) throw new Fault(422, "invalid_rustdoc_impl_item");
+        if (!method.inner?.function) continue;
+        const declared = (declaration.inner.trait.items || [])
+          .map((id: any) => index[id])
+          .find(
+            (item: any) => item?.name === method.name && item.inner?.function,
+          );
+        for (const alias of aliases) {
+          const traitPath = alias + args(canonicalPaths(imp.trait.args));
+          const key = `<${selfType} as ${traitPath}>::${method.name}`;
+          if (output.has(key)) continue;
+          add(method, [method.name], {
+            kind: "trait",
+            path: alias.split("::"),
+            impl: imp,
+            trait: traitPath,
+            selfType,
+            anchor:
+              declared?.inner.function.has_body === false
+                ? "tymethod"
+                : "method",
+          });
+        }
+      }
+    }
   }
   return [...output.values()];
 }

@@ -1,0 +1,90 @@
+[
+  {
+    "canonical_key": "hex::serde::serialize_upper",
+    "display_path": "hex::serde::serialize_upper",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn serialize_upper<S, T>(data: T, serializer: S) -> Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: Serializer, T: ToHex",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/serde/fn.serialize_upper.html"
+  },
+  {
+    "canonical_key": "hex::serde::serialize",
+    "display_path": "hex::serde::serialize",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn serialize<S, T>(data: T, serializer: S) -> Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: Serializer, T: ToHex",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/serde/fn.serialize.html"
+  },
+  {
+    "canonical_key": "hex::serde::deserialize",
+    "display_path": "hex::serde::deserialize",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, <D as serde_core::de::Deserializer>::Error> where D: Deserializer<'de>, T: FromHex, <T as FromHex>::Error: fmt::Display",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/serde/fn.deserialize.html"
+  },
+  {
+    "canonical_key": "hex::deserialize",
+    "display_path": "hex::deserialize",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn deserialize<'de, D, T>(deserializer: D) -> Result<T, <D as serde_core::de::Deserializer>::Error> where D: Deserializer<'de>, T: FromHex, <T as FromHex>::Error: fmt::Display",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/fn.deserialize.html"
+  },
+  {
+    "canonical_key": "hex::serialize",
+    "display_path": "hex::serialize",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn serialize<S, T>(data: T, serializer: S) -> Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: Serializer, T: ToHex",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/fn.serialize.html"
+  },
+  {
+    "canonical_key": "hex::serialize_upper",
+    "display_path": "hex::serialize_upper",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn serialize_upper<S, T>(data: T, serializer: S) -> Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error> where S: Serializer, T: ToHex",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/fn.serialize_upper.html"
+  },
+  {
+    "canonical_key": "hex::encode",
+    "display_path": "hex::encode",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn encode<T: AsRef<[u8]>>(data: T) -> alloc::string::String",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/fn.encode.html"
+  },
+  {
+    "canonical_key": "hex::encode_upper",
+    "display_path": "hex::encode_upper",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn encode_upper<T: AsRef<[u8]>>(data: T) -> alloc::string::String",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/fn.encode_upper.html"
+  },
+  {
+    "canonical_key": "hex::decode",
+    "display_path": "hex::decode",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn decode<T: AsRef<[u8]>>(data: T) -> Result<alloc::vec::Vec<u8>, FromHexError>",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/fn.decode.html"
+  },
+  {
+    "canonical_key": "hex::decode_to_slice",
+    "display_path": "hex::decode_to_slice",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn decode_to_slice<T: AsRef<[u8]>>(data: T, out: &mut [u8]) -> Result<(), FromHexError>",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/fn.decode_to_slice.html"
+  },
+  {
+    "canonical_key": "hex::encode_to_slice",
+    "display_path": "hex::encode_to_slice",
+    "kind": "function",
+    "is_unsafe": 0,
+    "signature": "pub fn encode_to_slice<T: AsRef<[u8]>>(input: T, output: &mut [u8]) -> Result<(), FromHexError>",
+    "upstream_url": "https://docs.rs/hex/0.4.3/hex/fn.encode_to_slice.html"
+  }
+]
