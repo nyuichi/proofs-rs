@@ -1307,7 +1307,9 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
       .querySelector('a[href^="#/claim/"]')!
       .getAttribute("href")!;
     w.location.hash = claimLink;
-    await until(".report-context");
+    await until('.breadcrumbs a[href="#/report/1?v=1"]');
+    assert.equal(w.document.querySelector(".report-context"), null);
+    assert.match(w.document.querySelector("h1")!.textContent!, /^Claim #1 — /);
     assert.equal(w.document.querySelector("#comment-form"), null);
     assert.ok(w.document.querySelector('.title-row [data-star="claim"]'));
     assert.match(
@@ -1316,7 +1318,7 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     );
     assert.equal(
       w.document.querySelector(".breadcrumbs")!.textContent,
-      "crates / sample 1.0.0 / Reports / Report #1 v1",
+      "crates / sample 1.0.0 / Reports / Report #1 v1 /",
     );
     assert.ok(
       w.document.querySelector('.breadcrumbs a[href="#/report/1?v=1"]'),
@@ -1325,7 +1327,7 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     await until("#claims");
     assert.equal(
       w.document.querySelector(".breadcrumbs")!.textContent,
-      "crates / sample 1.0.0 / APIs",
+      "crates / sample 1.0.0 / APIs /",
     );
     (
       w.document.querySelector('.breadcrumbs a[href$="&section=apis"]') as any
@@ -1362,7 +1364,7 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     assert.equal(w.document.querySelector('[data-star="claim"]'), null);
     assert.equal(
       w.document.querySelector(".breadcrumbs")!.textContent,
-      "crates / sample 1.0.0 / Reports",
+      "crates / sample 1.0.0 / Reports /",
     );
     assert.ok(w.document.querySelector('.title-row [data-star="report"]'));
     (
@@ -1413,7 +1415,8 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     assert.match(w.document.querySelector("#app")!.textContent!, /v2/);
     // An old claim keeps its report revision in the parent breadcrumb.
     w.location.hash = claimLink;
-    await until(".report-context");
+    await until('.breadcrumbs a[href="#/report/1?v=1"]');
+    assert.equal(w.document.querySelector(".report-context"), null);
     (
       w.document.querySelector('.breadcrumbs a[href="#/report/1?v=1"]') as any
     ).click();
@@ -2630,5 +2633,83 @@ test("nested local type references use public aliases in structural keys", () =>
   assert.equal(
     extractAPIs(doc, "sample", "1.0.0")[0].canonical_key,
     "<alloc::vec::Vec<sample::Alias> as sample::T>::m",
+  );
+});
+
+test("claim numbers follow each report revision while UUID identity and old numbers survive", async () => {
+  const { request } = await fixture();
+  const input = {
+    ...reportInput,
+    claims: [1, 2, 3].map((n) => ({
+      ...reportInput.claims[0],
+      title: `Scope ${n}`,
+      claim_number: 99,
+    })),
+  };
+  const made = await request("/reports", "POST", input);
+  assert.equal(made.status, 201);
+  const id = made.body.id;
+  const original = (await request(`/reports/${id}`)).body.claims;
+  assert.deepEqual(
+    original.map((c: any) => c.claim_number),
+    [1, 2, 3],
+  );
+  const revision = {
+    ...reportInput,
+    expected_revision: 1,
+    claims: [
+      original[2],
+      original[0],
+      { ...reportInput.claims[0], title: "Added" },
+    ],
+  };
+  assert.equal(
+    (await request(`/reports/${id}/revisions`, "POST", revision)).status,
+    201,
+  );
+  const current = (await request(`/reports/${id}`)).body.claims;
+  assert.deepEqual(
+    current.map((c: any) => c.claim_number),
+    [1, 2, 3],
+  );
+  assert.equal(current[0].id, original[2].id);
+  assert.equal(current[1].id, original[0].id);
+  assert.deepEqual(
+    (await request(`/reports/${id}/revisions/1`)).body.claims.map(
+      (c: any) => c.claim_number,
+    ),
+    [1, 2, 3],
+  );
+  assert.equal(
+    (await request(`/claims/${original[2].id}?report_revision=1`)).body
+      .claim_number,
+    3,
+  );
+  assert.equal(
+    (await request(`/claims/${original[2].id}`)).body.claim_number,
+    1,
+  );
+  const removed = (await request(`/claims/${original[1].id}`)).body;
+  assert.equal(removed.claim_number, 2);
+  assert.equal(removed.report_revision, 1);
+  assert.equal(removed.in_current_report, 0);
+  assert.equal(
+    (
+      await request(`/reports/${id}/revisions`, "POST", {
+        ...reportInput,
+        expected_revision: 2,
+        claims: [original[1]],
+      })
+    ).status,
+    201,
+  );
+  assert.equal(
+    (await request(`/claims/${original[1].id}`)).body.claim_number,
+    1,
+  );
+  const another = (await request("/reports", "POST", reportInput)).body.id;
+  assert.equal(
+    (await request(`/reports/${another}`)).body.claims[0].claim_number,
+    1,
   );
 });

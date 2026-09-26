@@ -1386,7 +1386,7 @@
     "/api/v1/crates/{name}/{version}/apis": {
       "get": {
         "operationId": "get_api_v1_crates_name_version_apis",
-        "summary": "List imported public functions and inherent methods",
+        "summary": "List imported public functions and concrete methods",
         "tags": [
           "Registry"
         ],
@@ -7434,6 +7434,11 @@
               "string",
               "null"
             ]
+          },
+          "claim_number": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "One-based position within this report revision. Renumbered when claims are reordered in a new revision; use id for permanent identity."
           }
         },
         "required": [
@@ -7476,7 +7481,8 @@
           "author_id",
           "username",
           "withdrawn_at",
-          "tool_limitations_updated_at"
+          "tool_limitations_updated_at",
+          "claim_number"
         ]
       },
       "ClaimDetail": {

@@ -142,7 +142,7 @@ function needUser() {
   return true;
 }
 function claimItem(c: any) {
-  return `<article class="claim-item"><a href="#/claim/${enc(c.id)}?report_revision=${c.report_revision}">${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""} · ${c.star_count} stars</div><p class="meta"><a href="#/report/${c.report_id}">${esc(c.report_title)}</a> · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)} · ${c.author_karma} karma${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
+  return `<article class="claim-item"><a href="#/claim/${enc(c.id)}?report_revision=${c.report_revision}">Claim #${esc(c.claim_number)} — ${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""} · ${c.star_count} stars</div><p class="meta"><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)} · v${c.report_revision}</a> · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)} · ${c.author_karma} karma${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
 }
 function reportItem(c: any) {
   return `<article class="claim-item"><a href="#/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${esc(c.crate)} ${esc(c.version)} · ${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.star_count} stars · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
@@ -255,7 +255,7 @@ async function crates() {
 }
 type Crumb = { label: string; href: string };
 function breadcrumbs(items: Crumb[]) {
-  return `<div class="breadcrumbs" role="navigation" aria-label="Breadcrumb">${items.map(({ label, href }) => `<a href="${esc(href)}">${esc(label)}</a>`).join(' <span aria-hidden="true">/</span> ')}</div>`;
+  return `<div class="breadcrumbs" role="navigation" aria-label="Breadcrumb">${items.map(({ label, href }) => `<a href="${esc(href)}">${esc(label)}</a>`).join(' <span aria-hidden="true">/</span> ')} <span aria-hidden="true">/</span></div>`;
 }
 function crateHref(name: string, version: string) {
   return `#/crate/${enc(name)}?version=${enc(version)}`;
@@ -367,11 +367,11 @@ function starButton(kind: string, c: any) {
   } <a href="#/${kind}/${enc(c.id)}/stars">${c.star_count} stars</a></div>`;
 }
 function titleWithStars(kind: string, c: any) {
-  return `<div class="title-row"><h1>${kind === "report" ? `Report #${esc(c.id)} — ` : ""}${esc(c.title)}</h1>${starButton(kind, c)}</div>`;
+  return `<div class="title-row"><h1>${kind === "report" ? `Report #${esc(c.id)} — ` : `Claim #${esc(c.claim_number)} — `}${esc(c.title)}</h1>${starButton(kind, c)}</div>`;
 }
 async function starsPage(kind: string, id: string) {
   const item = await request(`/${kind}s/${enc(id)}`);
-  root.innerHTML = `${breadcrumbs([...(kind === "claim" ? claimCrumbs(item) : crateCrumbs(item, "reports")), { label: kind === "report" ? `Report #${id}` : item.title, href: `#/${kind}/${enc(id)}` }])}<h1>Stars</h1><div id="stargazers">${loading}</div>`;
+  root.innerHTML = `${breadcrumbs([...(kind === "claim" ? claimCrumbs(item) : crateCrumbs(item, "reports")), { label: kind === "report" ? `Report #${id} v${item.revision_no}` : `Claim #${item.claim_number}`, href: kind === "report" ? `#/report/${enc(id)}?v=${item.revision_no}` : `#/claim/${enc(id)}?report_revision=${item.report_revision}` }])}<h1>Stars</h1><div id="stargazers">${loading}</div>`;
   const container = root.querySelector<HTMLElement>("#stargazers")!;
   async function load(cursor: any = 0) {
     const data = await request(
@@ -428,14 +428,14 @@ function reportContent(c: any, stars = false) {
   return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p><a href="${crateHref(c.crate, c.version)}">${esc(c.crate)} ${esc(c.version)}</a> · ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
 }
 function claimContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("claim", c) : `<h1>${esc(c.title)}</h1>`}<p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}<p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
 }
 async function claimPage(id: string) {
   const n = current().searchParams.get("report_revision");
   const c = await request(
     "/claims/" + enc(id) + (n ? "?report_revision=" + enc(n) : ""),
   );
-  root.innerHTML = `${breadcrumbs(claimCrumbs(c))}<aside class="report-context"><p>Part of report #${c.report_id} · revision ${c.report_revision}</p><h2><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)}</a></h2><p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments · Discuss this report →</a></p></aside>${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c, true)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
+  root.innerHTML = `${breadcrumbs(claimCrumbs(c))}${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c, true)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
   bindStars();
 }
 let commentReply: any = null;

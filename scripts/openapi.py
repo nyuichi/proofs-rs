@@ -33,6 +33,7 @@ sc['Report']=obj(reportFields)
 claimFields={k:S() for k in ['id','api_item_id','property','created_at','title','precondition','explanation','trusted_assumptions','evidence_url','limitations','display_path','signature','upstream_url','report_title','shared_explanation','shared_trusted_assumptions','shared_evidence_url','shared_limitations','environment','tool_version_id','crate','version','tool','tool_version','tool_limitations','visibility']}
 claimFields.update({k:{'type':'integer'} for k in ['report_id','report_revision','latest_report_revision','position','star_count','report_star_count','report_comment_count','author_karma','is_unsafe','in_current_report']})
 claimFields.update({k:{'type':['string','null']} for k in ['author_id','username','withdrawn_at','tool_limitations_updated_at']})
+claimFields['claim_number']={**I,'description':'One-based position within this report revision. Renumbered when claims are reordered in a new revision; use id for permanent identity.'}
 sc['Claim']=obj(claimFields)
 sc['ClaimDetail']={'allOf':[ref('Claim'),obj({'my_star':B})]}
 sc['ReportDetail']={'allOf':[ref('Report'),obj({'my_star':B,'run_ids':arr(S(format='uuid')),'claims':arr(ref('ClaimDetail'))})]}
