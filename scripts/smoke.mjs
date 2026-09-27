@@ -3,7 +3,7 @@ const environment = process.argv[3] || "staging";
 if (!origin?.startsWith("https://")) throw Error("Expected HTTPS URL");
 for (const path of [
   "/",
-  "/docs/api",
+  "/api/docs",
   "/openapi.json",
   "/api/v1/health",
   "/api/v1/home",
@@ -25,7 +25,7 @@ for (const path of [
     !r.headers.get("x-robots-tag")?.includes("noindex")
   )
     throw Error("Missing staging noindex header");
-  if (path === "/openapi.json" && (await r.json()).openapi !== "3.1.1")
+  if (path === "/openapi.json" && (await r.json()).openapi !== "3.1.0")
     throw Error("Invalid OpenAPI document");
   if (path === "/api/v1/config") {
     const config = await r.json();

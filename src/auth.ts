@@ -1,3 +1,5 @@
+import { operation } from "./openapi";
+import * as S from "./schemas";
 import { Hono } from "hono";
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
 import {
@@ -172,167 +174,191 @@ async function finishLogin(
 }
 export function authRoutes() {
   const app = new Hono<App>();
-  app.get("/github", async (c) => {
-    if (!c.env.GITHUB_CLIENT_ID || !c.env.GITHUB_CLIENT_SECRET)
-      throw new Fault(
-        503,
-        "oauth_not_configured",
-        "GitHub sign-in is not configured for this environment yet.",
+  app.get(
+    "/github",
+    ...operation("Start GitHub sign-in", S.string, {
+      tags: ["Authentication"],
+      query: S.z.object({
+        return_to: S.string.optional(),
+        switch_account: S.string.optional(),
+      }),
+      status: 302,
+      redirect: true,
+      errors: [429, 503],
+    }),
+    async (c) => {
+      if (!c.env.GITHUB_CLIENT_ID || !c.env.GITHUB_CLIENT_SECRET)
+        throw new Fault(
+          503,
+          "oauth_not_configured",
+          "GitHub sign-in is not configured for this environment yet.",
+        );
+      const old = getCookie(c, signupCookie(c));
+      if (old)
+        await stmt(
+          c.env.DB,
+          "DELETE FROM pending_signups WHERE token_hash=?",
+          await hash(old),
+        ).run();
+      deleteCookie(c, signupCookie(c), { path: "/", secure: secure(c) });
+      const returnTo = safeReturn(c.req.query("return_to"));
+      if (returnTo)
+        setCookie(c, "oauth_return", returnTo, {
+          secure: secure(c),
+          httpOnly: true,
+          sameSite: "Lax",
+          path: "/",
+          maxAge: 600,
+        });
+      else deleteCookie(c, "oauth_return", { path: "/" });
+      const state = random(),
+        verifier = random();
+      const digest = await crypto.subtle.digest(
+        "SHA-256",
+        new TextEncoder().encode(verifier),
       );
-    const old = getCookie(c, signupCookie(c));
-    if (old)
-      await stmt(
-        c.env.DB,
-        "DELETE FROM pending_signups WHERE token_hash=?",
-        await hash(old),
-      ).run();
-    deleteCookie(c, signupCookie(c), { path: "/", secure: secure(c) });
-    const returnTo = safeReturn(c.req.query("return_to"));
-    if (returnTo)
-      setCookie(c, "oauth_return", returnTo, {
+      const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
+        .replace(/\+/g, "-")
+        .replace(/\//g, "_")
+        .replace(/=+$/, "");
+      await batch(c.env.DB, [
+        quota(
+          c.env.DB,
+          await hash(c.req.header("cf-connecting-ip") || "unknown"),
+          "oauth",
+          100,
+        ),
+        stmt(
+          c.env.DB,
+          "INSERT INTO oauth_flows VALUES(?,?,?,?)",
+          await hash(state),
+          verifier,
+          c.env.TERMS_VERSION,
+          expiry(600000),
+        ),
+      ]);
+      setCookie(c, "oauth_state", state, {
         secure: secure(c),
         httpOnly: true,
         sameSite: "Lax",
         path: "/",
         maxAge: 600,
       });
-    else deleteCookie(c, "oauth_return", { path: "/" });
-    const state = random(),
-      verifier = random();
-    const digest = await crypto.subtle.digest(
-      "SHA-256",
-      new TextEncoder().encode(verifier),
-    );
-    const challenge = btoa(String.fromCharCode(...new Uint8Array(digest)))
-      .replace(/\+/g, "-")
-      .replace(/\//g, "_")
-      .replace(/=+$/, "");
-    await batch(c.env.DB, [
-      quota(
+      const u = new URL("https://github.com/login/oauth/authorize");
+      u.search = new URLSearchParams({
+        client_id: c.env.GITHUB_CLIENT_ID,
+        redirect_uri: c.env.APP_ORIGIN + "/auth/github/callback",
+        scope: "read:user user:email",
+        state,
+        code_challenge: challenge,
+        code_challenge_method: "S256",
+      }).toString();
+      if (c.req.query("switch_account") === "1")
+        u.searchParams.set("prompt", "select_account");
+      return c.redirect(u.href);
+    },
+  );
+  app.get(
+    "/github/callback",
+    ...operation("Complete GitHub sign-in", S.string, {
+      tags: ["Authentication"],
+      query: S.z.object({ state: S.string, code: S.string }),
+      status: 302,
+      redirect: true,
+      errors: [400, 403, 502],
+      description: "OAuth callback; requires the matching oauth_state cookie.",
+    }),
+    async (c) => {
+      const state = c.req.query("state"),
+        code = c.req.query("code");
+      if (!state || state !== getCookie(c, "oauth_state") || !code)
+        throw new Fault(400, "oauth_state");
+      deleteCookie(c, "oauth_state", { path: "/" });
+      const flow = await stmt(
         c.env.DB,
-        await hash(c.req.header("cf-connecting-ip") || "unknown"),
-        "oauth",
-        100,
-      ),
-      stmt(
-        c.env.DB,
-        "INSERT INTO oauth_flows VALUES(?,?,?,?)",
+        "DELETE FROM oauth_flows WHERE state_hash=? AND expires_at>? RETURNING *",
         await hash(state),
-        verifier,
-        c.env.TERMS_VERSION,
-        expiry(600000),
-      ),
-    ]);
-    setCookie(c, "oauth_state", state, {
-      secure: secure(c),
-      httpOnly: true,
-      sameSite: "Lax",
-      path: "/",
-      maxAge: 600,
-    });
-    const u = new URL("https://github.com/login/oauth/authorize");
-    u.search = new URLSearchParams({
-      client_id: c.env.GITHUB_CLIENT_ID,
-      redirect_uri: c.env.APP_ORIGIN + "/auth/github/callback",
-      scope: "read:user user:email",
-      state,
-      code_challenge: challenge,
-      code_challenge_method: "S256",
-    }).toString();
-    if (c.req.query("switch_account") === "1")
-      u.searchParams.set("prompt", "select_account");
-    return c.redirect(u.href);
-  });
-  app.get("/github/callback", async (c) => {
-    const state = c.req.query("state"),
-      code = c.req.query("code");
-    if (!state || state !== getCookie(c, "oauth_state") || !code)
-      throw new Fault(400, "oauth_state");
-    deleteCookie(c, "oauth_state", { path: "/" });
-    const flow = await stmt(
-      c.env.DB,
-      "DELETE FROM oauth_flows WHERE state_hash=? AND expires_at>? RETURNING *",
-      await hash(state),
-      now(),
-    ).first<any>();
-    if (!flow) throw new Fault(400, "oauth_expired");
-    const response = await fetch(
-      "https://github.com/login/oauth/access_token",
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          client_id: c.env.GITHUB_CLIENT_ID,
-          client_secret: c.env.GITHUB_CLIENT_SECRET,
-          code,
-          code_verifier: flow.verifier,
-          redirect_uri: c.env.APP_ORIGIN + "/auth/github/callback",
-        }),
-        signal: AbortSignal.timeout(15000),
-      },
-    );
-    const token: any = await response.json();
-    if (!token.access_token) throw new Fault(502, "oauth_failed");
-    const headers = {
-      Authorization: `Bearer ${token.access_token}`,
-      Accept: "application/vnd.github+json",
-      "User-Agent": "proofs.rs",
-    };
-    const [ur, er] = await Promise.all([
-      fetch("https://api.github.com/user", { headers }),
-      fetch("https://api.github.com/user/emails", { headers }),
-    ]);
-    if (!ur.ok) throw new Fault(502, "github_unavailable");
-    const user: any = await ur.json();
-    if (!Number.isSafeInteger(user.id) || typeof user.login !== "string")
-      throw new Fault(502, "github_response");
-    const emails: any = er.ok ? await er.json() : null;
-    const email = Array.isArray(emails)
-      ? emails.find((x) => x.primary && x.verified)
-      : undefined;
-    const db = c.env.DB;
-    const existing = await one(
-      db,
-      "SELECT * FROM users WHERE github_id=?",
-      user.id,
-    );
-    if (existing?.status === "suspended")
-      throw new Fault(403, "account_suspended");
-    const back = safeReturn(getCookie(c, "oauth_return"));
-    deleteCookie(c, "oauth_return", { path: "/" });
-    if (!existing) {
-      const pending = random();
-      await stmt(
-        db,
-        "INSERT INTO pending_signups VALUES(?,?,?,?,?,?)",
-        await hash(pending),
-        JSON.stringify({
-          user: { id: user.id, login: user.login },
-          email,
-          emailsOK: Array.isArray(emails),
-        }),
-        random(),
-        back,
         now(),
-        expiry(600000),
-      ).run();
-      setCookie(c, signupCookie(c), pending, {
-        secure: secure(c),
-        httpOnly: true,
-        sameSite: "Lax",
-        path: "/",
-        maxAge: 600,
-      });
-      return c.redirect("/#/signup");
-    }
-    await finishLogin(c, user, email, Array.isArray(emails), existing);
-    return c.redirect(
-      back === "/#/account" && !er.ok ? "/#/settings?email=retry" : back,
-    );
-  });
+      ).first<any>();
+      if (!flow) throw new Fault(400, "oauth_expired");
+      const response = await fetch(
+        "https://github.com/login/oauth/access_token",
+        {
+          method: "POST",
+          headers: {
+            Accept: "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            client_id: c.env.GITHUB_CLIENT_ID,
+            client_secret: c.env.GITHUB_CLIENT_SECRET,
+            code,
+            code_verifier: flow.verifier,
+            redirect_uri: c.env.APP_ORIGIN + "/auth/github/callback",
+          }),
+          signal: AbortSignal.timeout(15000),
+        },
+      );
+      const token: any = await response.json();
+      if (!token.access_token) throw new Fault(502, "oauth_failed");
+      const headers = {
+        Authorization: `Bearer ${token.access_token}`,
+        Accept: "application/vnd.github+json",
+        "User-Agent": "proofs.rs",
+      };
+      const [ur, er] = await Promise.all([
+        fetch("https://api.github.com/user", { headers }),
+        fetch("https://api.github.com/user/emails", { headers }),
+      ]);
+      if (!ur.ok) throw new Fault(502, "github_unavailable");
+      const user: any = await ur.json();
+      if (!Number.isSafeInteger(user.id) || typeof user.login !== "string")
+        throw new Fault(502, "github_response");
+      const emails: any = er.ok ? await er.json() : null;
+      const email = Array.isArray(emails)
+        ? emails.find((x) => x.primary && x.verified)
+        : undefined;
+      const db = c.env.DB;
+      const existing = await one(
+        db,
+        "SELECT * FROM users WHERE github_id=?",
+        user.id,
+      );
+      if (existing?.status === "suspended")
+        throw new Fault(403, "account_suspended");
+      const back = safeReturn(getCookie(c, "oauth_return"));
+      deleteCookie(c, "oauth_return", { path: "/" });
+      if (!existing) {
+        const pending = random();
+        await stmt(
+          db,
+          "INSERT INTO pending_signups VALUES(?,?,?,?,?,?)",
+          await hash(pending),
+          JSON.stringify({
+            user: { id: user.id, login: user.login },
+            email,
+            emailsOK: Array.isArray(emails),
+          }),
+          random(),
+          back,
+          now(),
+          expiry(600000),
+        ).run();
+        setCookie(c, signupCookie(c), pending, {
+          secure: secure(c),
+          httpOnly: true,
+          sameSite: "Lax",
+          path: "/",
+          maxAge: 600,
+        });
+        return c.redirect("/#/signup");
+      }
+      await finishLogin(c, user, email, Array.isArray(emails), existing);
+      return c.redirect(
+        back === "/#/account" && !er.ok ? "/#/settings?email=retry" : back,
+      );
+    },
+  );
   async function pendingSignup(c: Ctx) {
     const token = getCookie(c, signupCookie(c));
     const p =
@@ -351,54 +377,93 @@ export function authRoutes() {
       );
     return p;
   }
-  app.get("/signup", async (c) => {
-    const p = await pendingSignup(c);
-    return c.json({
-      username: JSON.parse(p.profile_json).user.login,
-      csrf: p.csrf,
-      terms_version: c.env.TERMS_VERSION,
-      return_to: p.return_to,
-    });
-  });
-  app.post("/signup", async (c) => {
-    const p = await pendingSignup(c);
-    if (c.req.header("X-CSRF-Token") !== p.csrf)
-      throw new Fault(403, "invalid_csrf");
-    const b = await jsonBody(c);
-    if (b.terms_version !== c.env.TERMS_VERSION)
-      throw new Fault(
-        409,
-        "terms_changed",
-        "Terms changed. Reload before signing up.",
-      );
-    const { user, email, emailsOK } = JSON.parse(p.profile_json);
-    const existing = await one(
-      c.env.DB,
-      "SELECT * FROM users WHERE github_id=?",
-      user.id,
-    );
-    if (existing?.status === "suspended")
-      throw new Fault(403, "account_suspended");
-    // A failed consume aborts the entire batch, including account/session creation.
-    const consume = stmt(
-      c.env.DB,
-      "INSERT INTO transaction_checks(ok) SELECT CASE WHEN EXISTS(SELECT 1 FROM pending_signups WHERE token_hash=? AND expires_at>?) THEN 1 ELSE 0 END",
-      p.token_hash,
-      now(),
-    );
-    await finishLogin(c, user, email, emailsOK, existing, consume);
-    deleteCookie(c, signupCookie(c), { path: "/", secure: secure(c) });
-    return c.json({ return_to: p.return_to });
-  });
-  app.post("/logout", async (c) => {
-    if (c.get("sessionHash"))
-      await stmt(
+  app.get(
+    "/signup",
+    ...operation(
+      "Read pending signup details",
+      S.z.object({
+        username: S.string,
+        csrf: S.string,
+        terms_version: S.string,
+        return_to: S.string,
+      }),
+      {
+        tags: ["Authentication"],
+        errors: [401],
+        description: "Requires the pending signup cookie from GitHub sign-in.",
+      },
+    ),
+    async (c) => {
+      const p = await pendingSignup(c);
+      return c.json({
+        username: JSON.parse(p.profile_json).user.login,
+        csrf: p.csrf,
+        terms_version: c.env.TERMS_VERSION,
+        return_to: p.return_to,
+      });
+    },
+  );
+  app.post(
+    "/signup",
+    ...operation(
+      "Complete account signup",
+      S.z.object({ return_to: S.string }),
+      {
+        tags: ["Authentication"],
+        body: S.z.object({ terms_version: S.string }),
+        auth: "signup",
+        write: true,
+        errors: [401, 403, 409],
+      },
+    ),
+    async (c) => {
+      const p = await pendingSignup(c);
+      if (c.req.header("X-CSRF-Token") !== p.csrf)
+        throw new Fault(403, "invalid_csrf");
+      const b = await jsonBody(c);
+      if (b.terms_version !== c.env.TERMS_VERSION)
+        throw new Fault(
+          409,
+          "terms_changed",
+          "Terms changed. Reload before signing up.",
+        );
+      const { user, email, emailsOK } = JSON.parse(p.profile_json);
+      const existing = await one(
         c.env.DB,
-        "DELETE FROM sessions WHERE token_hash=?",
-        c.get("sessionHash"),
-      ).run();
-    deleteCookie(c, cookieName(c), { path: "/", secure: secure(c) });
-    return c.json({ ok: true });
-  });
+        "SELECT * FROM users WHERE github_id=?",
+        user.id,
+      );
+      if (existing?.status === "suspended")
+        throw new Fault(403, "account_suspended");
+      // A failed consume aborts the entire batch, including account/session creation.
+      const consume = stmt(
+        c.env.DB,
+        "INSERT INTO transaction_checks(ok) SELECT CASE WHEN EXISTS(SELECT 1 FROM pending_signups WHERE token_hash=? AND expires_at>?) THEN 1 ELSE 0 END",
+        p.token_hash,
+        now(),
+      );
+      await finishLogin(c, user, email, emailsOK, existing, consume);
+      deleteCookie(c, signupCookie(c), { path: "/", secure: secure(c) });
+      return c.json({ return_to: p.return_to });
+    },
+  );
+  app.post(
+    "/logout",
+    ...operation("End the browser session", S.ok, {
+      tags: ["Authentication"],
+      auth: "session",
+      write: true,
+    }),
+    async (c) => {
+      if (c.get("sessionHash"))
+        await stmt(
+          c.env.DB,
+          "DELETE FROM sessions WHERE token_hash=?",
+          c.get("sessionHash"),
+        ).run();
+      deleteCookie(c, cookieName(c), { path: "/", secure: secure(c) });
+      return c.json({ ok: true });
+    },
+  );
   return app;
 }

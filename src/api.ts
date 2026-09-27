@@ -1,3 +1,5 @@
+import { operation } from "./openapi";
+import * as S from "./schemas";
 import { Hono } from "hono";
 import semver from "semver";
 import {
@@ -52,250 +54,413 @@ function publicComment(cm: any) {
   if (visibility !== "public") rest.username = null;
   return { ...rest, author_id, hidden: visibility !== "public" };
 }
-api.get("/health", (c) => c.json({ ok: true, environment: c.env.ENVIRONMENT }));
-api.get("/config", (c) =>
-  c.json({
-    environment: c.env.ENVIRONMENT,
-    oauth_configured: !!(c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET),
-    email_disabled: c.env.EMAIL_DISABLED === "true",
-    email_configured:
-      c.env.EMAIL_DISABLED !== "true" && !!(c.env.EMAIL && c.env.EMAIL_FROM),
-    terms_version: c.env.TERMS_VERSION,
-  }),
-);
-api.get("/terms/current", (c) =>
-  c.json({
-    version: c.env.TERMS_VERSION,
-    url: "/#/terms",
-    summary:
-      "Report publication, permanent claim links, independent stars and report discussions.",
-    requires_agreement:
-      !!c.get("user") &&
-      c.get("user")!.accepted_terms_version !== c.env.TERMS_VERSION,
-  }),
-);
-api.get("/me", async (c) => {
-  const u = c.get("user");
-  if (!u) return c.json({ user: null });
-  const [contacts, stats] = await c.env.DB.batch<any>([
-    stmt(
-      c.env.DB,
-      "SELECT address,delivery_status FROM email_contacts WHERE user_id=?",
-      u.id,
-    ),
-    stmt(
-      c.env.DB,
-      `SELECT (SELECT COUNT(*) FROM email_deliveries WHERE user_id=? AND status IN ('pending','retry','unknown')) n,${karmaPolicy.sql("?")} karma`,
-      u.id,
-      u.id,
-    ),
-  ]);
-  const email = contacts.results[0] || null;
-  const delayed = stats.results[0];
-  return c.json({
-    user: u,
-    csrf: c.get("csrf"),
-    email,
-    delayed_notifications: delayed.n,
-    karma: delayed.karma,
-    terms_required: u.accepted_terms_version !== c.env.TERMS_VERSION,
-  });
-});
-api.post("/me/terms-acceptance", async (c) => {
-  const u = requireUser(c),
-    b = await jsonBody(c);
-  if (b.version !== c.env.TERMS_VERSION) throw new Fault(409, "terms_changed");
-  await stmt(
-    c.env.DB,
-    "UPDATE users SET accepted_terms_version=?,terms_accepted_at=? WHERE id=? AND accepted_terms_version<>?",
-    b.version,
-    now(),
-    u.id,
-    b.version,
-  ).run();
-  return c.json({ ok: true });
-});
-api.get("/me/notification-preferences", async (c) =>
-  c.json(
-    await one(
-      c.env.DB,
-      "SELECT replies,report_comments FROM notification_preferences WHERE user_id=?",
-      requireUser(c).id,
-    ),
+api.get(
+  "/health",
+  ...operation(
+    "Check service health",
+    S.z.object({ ok: S.z.literal(true), environment: S.string }),
+    { tags: ["System"], auth: "optional" },
   ),
+  (c) => c.json({ ok: true, environment: c.env.ENVIRONMENT }),
 );
-api.patch("/me/notification-preferences", async (c) => {
-  const u = requireUser(c),
-    b = await jsonBody(c);
-  if (typeof b.replies !== "boolean" || typeof b.report_comments !== "boolean")
-    throw new Fault(400, "invalid_preferences");
-  await stmt(
-    c.env.DB,
-    "UPDATE notification_preferences SET replies=?,report_comments=? WHERE user_id=?",
-    +b.replies,
-    +b.report_comments,
-    u.id,
-  ).run();
-  return c.json({ ok: true });
-});
-api.post("/notifications/unsubscribe", async (c) => {
-  const b = await jsonBody(c);
-  if (
-    typeof b.user !== "string" ||
-    typeof b.signature !== "string" ||
-    !(await verifyToken(c.env, `unsubscribe:${b.user}`, b.signature))
-  )
-    throw new Fault(403, "invalid_token");
-  await stmt(
-    c.env.DB,
-    "UPDATE notification_preferences SET replies=0,report_comments=0 WHERE user_id=?",
-    b.user,
-  ).run();
-  return c.json({ ok: true });
-});
+api.get(
+  "/config",
+  ...operation(
+    "Read public application configuration",
+    S.z.object({
+      environment: S.string,
+      oauth_configured: S.z.boolean(),
+      email_disabled: S.z.boolean(),
+      email_configured: S.z.boolean(),
+      terms_version: S.string,
+    }),
+    { tags: ["System"], auth: "optional" },
+  ),
+  (c) =>
+    c.json({
+      environment: c.env.ENVIRONMENT,
+      oauth_configured: !!(
+        c.env.GITHUB_CLIENT_ID && c.env.GITHUB_CLIENT_SECRET
+      ),
+      email_disabled: c.env.EMAIL_DISABLED === "true",
+      email_configured:
+        c.env.EMAIL_DISABLED !== "true" && !!(c.env.EMAIL && c.env.EMAIL_FROM),
+      terms_version: c.env.TERMS_VERSION,
+    }),
+);
+api.get(
+  "/terms/current",
+  ...operation(
+    "Read current terms",
+    S.z.object({
+      version: S.string,
+      url: S.string,
+      summary: S.string,
+      requires_agreement: S.z.boolean(),
+    }),
+    { tags: ["System"], auth: "optional" },
+  ),
+  (c) =>
+    c.json({
+      version: c.env.TERMS_VERSION,
+      url: "/#/terms",
+      summary:
+        "Report publication, permanent claim links, independent stars and report discussions.",
+      requires_agreement:
+        !!c.get("user") &&
+        c.get("user")!.accepted_terms_version !== c.env.TERMS_VERSION,
+    }),
+);
+api.get(
+  "/me",
+  ...operation("Read the current session", S.me, {
+    tags: ["Account"],
+    auth: "optional",
+  }),
+  async (c) => {
+    const u = c.get("user");
+    if (!u) return c.json({ user: null });
+    const [contacts, stats] = await c.env.DB.batch<any>([
+      stmt(
+        c.env.DB,
+        "SELECT address,delivery_status FROM email_contacts WHERE user_id=?",
+        u.id,
+      ),
+      stmt(
+        c.env.DB,
+        `SELECT (SELECT COUNT(*) FROM email_deliveries WHERE user_id=? AND status IN ('pending','retry','unknown')) n,${karmaPolicy.sql("?")} karma`,
+        u.id,
+        u.id,
+      ),
+    ]);
+    const email = contacts.results[0] || null;
+    const delayed = stats.results[0];
+    return c.json({
+      user: u,
+      csrf: c.get("csrf"),
+      email,
+      delayed_notifications: delayed.n,
+      karma: delayed.karma,
+      terms_required: u.accepted_terms_version !== c.env.TERMS_VERSION,
+    });
+  },
+);
+api.post(
+  "/me/terms-acceptance",
+  ...operation("Accept current terms", S.ok, {
+    tags: ["Account"],
+    body: S.z.object({ version: S.string }),
+    auth: "session",
+    write: true,
+    errors: [409],
+  }),
+  async (c) => {
+    const u = requireUser(c),
+      b = await jsonBody(c);
+    if (b.version !== c.env.TERMS_VERSION)
+      throw new Fault(409, "terms_changed");
+    await stmt(
+      c.env.DB,
+      "UPDATE users SET accepted_terms_version=?,terms_accepted_at=? WHERE id=? AND accepted_terms_version<>?",
+      b.version,
+      now(),
+      u.id,
+      b.version,
+    ).run();
+    return c.json({ ok: true });
+  },
+);
+api.get(
+  "/me/notification-preferences",
+  ...operation("Read notification preferences", S.preferences, {
+    tags: ["Account"],
+    auth: "session",
+  }),
+  async (c) =>
+    c.json(
+      await one(
+        c.env.DB,
+        "SELECT replies,report_comments FROM notification_preferences WHERE user_id=?",
+        requireUser(c).id,
+      ),
+    ),
+);
+api.patch(
+  "/me/notification-preferences",
+  ...operation("Update notification preferences", S.ok, {
+    tags: ["Account"],
+    body: S.preferencesInput,
+    auth: "session",
+    write: true,
+  }),
+  async (c) => {
+    const u = requireUser(c),
+      b = await jsonBody(c);
+    if (
+      typeof b.replies !== "boolean" ||
+      typeof b.report_comments !== "boolean"
+    )
+      throw new Fault(400, "invalid_preferences");
+    await stmt(
+      c.env.DB,
+      "UPDATE notification_preferences SET replies=?,report_comments=? WHERE user_id=?",
+      +b.replies,
+      +b.report_comments,
+      u.id,
+    ).run();
+    return c.json({ ok: true });
+  },
+);
+api.post(
+  "/notifications/unsubscribe",
+  ...operation("Unsubscribe from notifications", S.ok, {
+    tags: ["Account"],
+    body: S.z.object({ user: S.string, signature: S.string }),
+    description:
+      "Requires a signed unsubscribe link and the application Origin.",
+  }),
+  async (c) => {
+    const b = await jsonBody(c);
+    if (
+      typeof b.user !== "string" ||
+      typeof b.signature !== "string" ||
+      !(await verifyToken(c.env, `unsubscribe:${b.user}`, b.signature))
+    )
+      throw new Fault(403, "invalid_token");
+    await stmt(
+      c.env.DB,
+      "UPDATE notification_preferences SET replies=0,report_comments=0 WHERE user_id=?",
+      b.user,
+    ).run();
+    return c.json({ ok: true });
+  },
+);
 const activeReport = "p.visibility='public' AND p.withdrawn_at IS NULL";
-api.get("/home", async (c) => {
-  const [reports, discussion] = await c.env.DB.batch<any>([
-    stmt(
-      c.env.DB,
-      publicReport +
-        ` WHERE ${activeReport} AND ${reportLatest} ORDER BY p.id DESC LIMIT 12`,
-    ),
-    stmt(
-      c.env.DB,
-      `SELECT cm.id,cm.report_id,cm.sequence_no,cm.revision_no,cm.body,cm.created_at,u.username,cm.author_id FROM report_comments cm JOIN reports p ON p.id=cm.report_id LEFT JOIN users u ON u.id=cm.author_id WHERE p.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL ORDER BY cm.created_at DESC,cm.id DESC LIMIT 12`,
-    ),
-  ]);
-  return c.json({ reports: reports.results, discussion: discussion.results });
-});
-api.get("/reports", async (c) =>
-  c.json(
-    await listing(
-      c,
-      publicReport + ` WHERE ${activeReport} AND ${reportLatest}`,
-      [],
-      [{ sql: "p.id", key: "id", desc: true }],
-    ),
+api.get(
+  "/home",
+  ...operation(
+    "Read recent reports and discussion",
+    S.z.object({
+      reports: S.z.array(S.report),
+      discussion: S.z.array(S.discussion),
+    }),
+    { tags: ["System"] },
   ),
+  async (c) => {
+    const [reports, discussion] = await c.env.DB.batch<any>([
+      stmt(
+        c.env.DB,
+        publicReport +
+          ` WHERE ${activeReport} AND ${reportLatest} ORDER BY p.id DESC LIMIT 12`,
+      ),
+      stmt(
+        c.env.DB,
+        `SELECT cm.id,cm.report_id,cm.sequence_no,cm.revision_no,cm.body,cm.created_at,u.username,cm.author_id FROM report_comments cm JOIN reports p ON p.id=cm.report_id LEFT JOIN users u ON u.id=cm.author_id WHERE p.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL ORDER BY cm.created_at DESC,cm.id DESC LIMIT 12`,
+      ),
+    ]);
+    return c.json({ reports: reports.results, discussion: discussion.results });
+  },
 );
-api.get("/crates", async (c) => {
-  const published = `EXISTS(SELECT 1 FROM releases rel JOIN reports p ON p.release_id=rel.id WHERE rel.crate_id=cr.id AND ${activeReport})`;
-  const filter = "cr.name LIKE ? ESCAPE '\\'";
-  const query = "%" + (c.req.query("q") || "").replace(/[\\%_]/g, "\\$&") + "%";
-  let counts: any;
-  const data = await listing(
-    c,
-    `SELECT cr.*,
+api.get(
+  "/reports",
+  ...operation("List public reports", S.list(S.report), {
+    tags: ["Reports"],
+    auth: "optional",
+    query: S.pagination,
+  }),
+  async (c) =>
+    c.json(
+      await listing(
+        c,
+        publicReport + ` WHERE ${activeReport} AND ${reportLatest}`,
+        [],
+        [{ sql: "p.id", key: "id", desc: true }],
+      ),
+    ),
+);
+api.get(
+  "/crates",
+  ...operation(
+    "Search crates with published reports",
+    S.list(S.crate).extend({
+      total_count: S.integer,
+      matching_count: S.integer,
+    }),
+    { tags: ["Crates"], auth: "optional", query: S.search },
+  ),
+  async (c) => {
+    const published = `EXISTS(SELECT 1 FROM releases rel JOIN reports p ON p.release_id=rel.id WHERE rel.crate_id=cr.id AND ${activeReport})`;
+    const filter = "cr.name LIKE ? ESCAPE '\\'";
+    const query =
+      "%" + (c.req.query("q") || "").replace(/[\\%_]/g, "\\$&") + "%";
+    let counts: any;
+    const data = await listing(
+      c,
+      `SELECT cr.*,
     (SELECT COUNT(DISTINCT a.display_path) FROM api_items a JOIN releases rel ON rel.id=a.release_id WHERE rel.crate_id=cr.id AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})) api_count,
     (SELECT COUNT(*) FROM reports p JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport}) report_count,
     (SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport} AND ${latest}) claim_count,
     (SELECT MAX(p.updated_at) FROM reports p JOIN releases rel ON rel.id=p.release_id WHERE rel.crate_id=cr.id AND ${activeReport}) updated_at
     FROM crates cr WHERE ${filter} AND ${published}`,
-    [query],
-    [{ sql: "cr.name", key: "name" }],
-    undefined,
-    {
-      statements: [
-        stmt(
-          c.env.DB,
-          `SELECT COUNT(*) total_count,COALESCE(SUM(${filter}),0) matching_count FROM crates cr WHERE ${published}`,
-          query,
-        ),
-      ],
-      check: ([result]) => {
-        counts = result.results[0];
+      [query],
+      [{ sql: "cr.name", key: "name" }],
+      undefined,
+      {
+        statements: [
+          stmt(
+            c.env.DB,
+            `SELECT COUNT(*) total_count,COALESCE(SUM(${filter}),0) matching_count FROM crates cr WHERE ${published}`,
+            query,
+          ),
+        ],
+        check: ([result]) => {
+          counts = result.results[0];
+        },
       },
-    },
-  );
-  return c.json({ ...data, ...counts });
-});
-api.get("/crates/:name/releases", async (c) => {
-  const [releases, crates] = await c.env.DB.batch<any>([
-    stmt(
-      c.env.DB,
-      `SELECT rel.* FROM releases rel JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})`,
-      c.req.param("name"),
-    ),
-    stmt(
-      c.env.DB,
-      "SELECT description FROM crates WHERE name=?",
-      c.req.param("name"),
-    ),
-  ]);
-  const items = releases.results as any[];
-  const crate = crates.results[0];
-  items.sort((a, b) => semver.rcompare(a.version, b.version));
-  return c.json({
-    items,
-    description: crate?.description || "",
-    default_version:
-      items.find((x) => !semver.prerelease(x.version))?.version ||
-      items[0]?.version,
-  });
-});
-api.get("/crates/:name/:version/apis", async (c) => {
-  const count = (property: string) =>
-    `(SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id WHERE c.api_item_id=a.id AND c.property='${property}' AND ${activeReport} AND ${latest})`;
-  return c.json(
-    await listing(
-      c,
-      `SELECT a.*,${count("no_ub")} no_ub_count,${count("panic_contract")} panic_count FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND rel.version=? AND a.display_path LIKE ?`,
-      [
+    );
+    return c.json({ ...data, ...counts });
+  },
+);
+api.get(
+  "/crates/:name/releases",
+  ...operation(
+    "List published crate releases",
+    S.z.object({
+      items: S.z.array(S.release),
+      description: S.string,
+      default_version: S.string.optional(),
+    }),
+    { tags: ["Crates"], auth: "optional" },
+  ),
+  async (c) => {
+    const [releases, crates] = await c.env.DB.batch<any>([
+      stmt(
+        c.env.DB,
+        `SELECT rel.* FROM releases rel JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND EXISTS(SELECT 1 FROM reports p WHERE p.release_id=rel.id AND ${activeReport})`,
         c.req.param("name"),
-        c.req.param("version"),
-        "%" + (c.req.query("q") || "") + "%",
-      ],
-      [
-        { sql: "a.display_path", key: "display_path" },
-        { sql: "a.id", key: "id" },
-      ],
-    ),
-  );
-});
-api.get("/crates/:name/:version/reports", async (c) =>
-  c.json(
-    await listing(
-      c,
-      publicReport +
-        ` WHERE cr.name=? AND rel.version=? AND ${activeReport} AND ${reportLatest}`,
-      [c.req.param("name"), c.req.param("version")],
-      [{ sql: "p.id", key: "id", desc: true }],
-    ),
-  ),
+      ),
+      stmt(
+        c.env.DB,
+        "SELECT description FROM crates WHERE name=?",
+        c.req.param("name"),
+      ),
+    ]);
+    const items = releases.results as any[];
+    const crate = crates.results[0];
+    items.sort((a, b) => semver.rcompare(a.version, b.version));
+    return c.json({
+      items,
+      description: crate?.description || "",
+      default_version:
+        items.find((x) => !semver.prerelease(x.version))?.version ||
+        items[0]?.version,
+    });
+  },
 );
-api.get("/apis/:id", async (c) => {
-  const item = await one(
-    c.env.DB,
-    `SELECT a.*,cr.name crate,rel.version,rel.yanked,ds.target,ds.features_json,ds.rustdoc_format FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN doc_snapshots ds ON ds.release_id=rel.id WHERE a.id=?`,
-    c.req.param("id"),
-  );
-  if (!item) throw new Fault(404, "api_not_found");
-  return c.json(item);
-});
-api.get("/apis/:id/claims", async (c) =>
-  c.json(
-    await listing(
-      c,
-      publicClaim + ` WHERE c.api_item_id=? AND ${activeReport} AND ${latest}`,
-      [c.req.param("id")],
-      [
-        { sql: "c.created_at", key: "created_at", desc: true },
-        { sql: "c.id", key: "id", desc: true },
-      ],
+api.get(
+  "/crates/:name/:version/apis",
+  ...operation(
+    "List crate APIs",
+    S.list(
+      S.apiItem.extend({ no_ub_count: S.integer, panic_count: S.integer }),
     ),
+    { tags: ["Crates"], auth: "optional", query: S.search },
   ),
+  async (c) => {
+    const count = (property: string) =>
+      `(SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id WHERE c.api_item_id=a.id AND c.property='${property}' AND ${activeReport} AND ${latest})`;
+    return c.json(
+      await listing(
+        c,
+        `SELECT a.*,${count("no_ub")} no_ub_count,${count("panic_contract")} panic_count FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND rel.version=? AND a.display_path LIKE ?`,
+        [
+          c.req.param("name"),
+          c.req.param("version"),
+          "%" + (c.req.query("q") || "") + "%",
+        ],
+        [
+          { sql: "a.display_path", key: "display_path" },
+          { sql: "a.id", key: "id" },
+        ],
+      ),
+    );
+  },
 );
-api.get("/reports/:id/revisions", async (c) => {
-  const p = await report(c);
-  return c.json(
-    await listing(
-      c,
-      "SELECT revision_no,created_at FROM report_revisions WHERE report_id=?",
-      [p.id],
-      [{ sql: "revision_no", key: "revision_no", desc: true }],
+api.get(
+  "/crates/:name/:version/reports",
+  ...operation("List reports for a crate release", S.list(S.report), {
+    tags: ["Crates"],
+    auth: "optional",
+    query: S.pagination,
+  }),
+  async (c) =>
+    c.json(
+      await listing(
+        c,
+        publicReport +
+          ` WHERE cr.name=? AND rel.version=? AND ${activeReport} AND ${reportLatest}`,
+        [c.req.param("name"), c.req.param("version")],
+        [{ sql: "p.id", key: "id", desc: true }],
+      ),
     ),
-  );
-});
+);
+api.get(
+  "/apis/:id",
+  ...operation("Read an API item", S.apiDetail, {
+    tags: ["APIs"],
+    auth: "optional",
+    errors: [404],
+  }),
+  async (c) => {
+    const item = await one(
+      c.env.DB,
+      `SELECT a.*,cr.name crate,rel.version,rel.yanked,ds.target,ds.features_json,ds.rustdoc_format FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN doc_snapshots ds ON ds.release_id=rel.id WHERE a.id=?`,
+      c.req.param("id"),
+    );
+    if (!item) throw new Fault(404, "api_not_found");
+    return c.json(item);
+  },
+);
+api.get(
+  "/apis/:id/claims",
+  ...operation("List claims for an API item", S.list(S.claim), {
+    tags: ["APIs"],
+    auth: "optional",
+    query: S.pagination,
+  }),
+  async (c) =>
+    c.json(
+      await listing(
+        c,
+        publicClaim +
+          ` WHERE c.api_item_id=? AND ${activeReport} AND ${latest}`,
+        [c.req.param("id")],
+        [
+          { sql: "c.created_at", key: "created_at", desc: true },
+          { sql: "c.id", key: "id", desc: true },
+        ],
+      ),
+    ),
+);
+api.get(
+  "/reports/:id/revisions",
+  ...operation(
+    "List report revisions",
+    S.list(S.z.object({ revision_no: S.integer, created_at: S.string })),
+    { tags: ["Reports"], auth: "optional", query: S.pagination, errors: [404] },
+  ),
+  async (c) => {
+    const p = await report(c);
+    return c.json(
+      await listing(
+        c,
+        "SELECT revision_no,created_at FROM report_revisions WHERE report_id=?",
+        [p.id],
+        [{ sql: "revision_no", key: "revision_no", desc: true }],
+      ),
+    );
+  },
+);
 async function reportDetail(c: Ctx, revision?: number) {
   const id = positive(c.req.param("id"));
   const user = c.get("user")?.id;
@@ -346,30 +511,53 @@ async function reportDetail(c: Ctx, revision?: number) {
     claims: claims.results.map((x) => ({ ...x, my_star: !!x.my_star })),
   });
 }
-api.get("/reports/:id", (c) => reportDetail(c));
-api.get("/reports/:id/revisions/:n", (c) =>
-  reportDetail(c, positive(c.req.param("n"))),
+api.get(
+  "/reports/:id",
+  ...operation("Read the latest report revision", S.reportDetail, {
+    tags: ["Reports"],
+    auth: "optional",
+    errors: [404],
+  }),
+  (c) => reportDetail(c),
 );
-api.get("/claims/:id", async (c) => {
-  const n = c.req.query("report_revision");
-  const item = await one(
-    c.env.DB,
-    publicClaim +
-      ` WHERE c.id=? AND p.visibility='public' AND r.report_revision=${n ? "?" : "(SELECT MAX(v.report_revision) FROM claim_revisions v WHERE v.claim_id=c.id)"}`,
-    c.req.param("id"),
-    ...(n ? [positive(n)] : []),
-  );
-  if (!item) throw new Fault(404, "claim_not_found");
-  return c.json({
-    ...item,
-    my_star: !!(await one(
+api.get(
+  "/reports/:id/revisions/:n",
+  ...operation("Read a report revision", S.reportDetail, {
+    tags: ["Reports"],
+    auth: "optional",
+    errors: [404],
+  }),
+  (c) => reportDetail(c, positive(c.req.param("n"))),
+);
+api.get(
+  "/claims/:id",
+  ...operation("Read a claim", S.claim.extend({ my_star: S.z.boolean() }), {
+    tags: ["Claims"],
+    auth: "optional",
+    query: S.z.object({ report_revision: S.string.optional() }),
+    errors: [404],
+  }),
+  async (c) => {
+    const n = c.req.query("report_revision");
+    const item = await one(
       c.env.DB,
-      "SELECT 1 FROM claim_stars WHERE claim_id=? AND user_id=?",
-      item.id,
-      c.get("user")?.id || "",
-    )),
-  });
-});
+      publicClaim +
+        ` WHERE c.id=? AND p.visibility='public' AND r.report_revision=${n ? "?" : "(SELECT MAX(v.report_revision) FROM claim_revisions v WHERE v.claim_id=c.id)"}`,
+      c.req.param("id"),
+      ...(n ? [positive(n)] : []),
+    );
+    if (!item) throw new Fault(404, "claim_not_found");
+    return c.json({
+      ...item,
+      my_star: !!(await one(
+        c.env.DB,
+        "SELECT 1 FROM claim_stars WHERE claim_id=? AND user_id=?",
+        item.id,
+        c.get("user")?.id || "",
+      )),
+    });
+  },
+);
 const optionalURL = (v: any) => (text(v, "Evidence URL", 1000) ? url(v) : "");
 async function validate(c: Ctx, b: any, existing?: any) {
   const rel = await one(
@@ -556,247 +744,343 @@ function revisionStatements(
   );
   return ss;
 }
-api.post("/reports/validate", async (c) => {
-  const u = requireUser(c),
-    b = await jsonBody(c);
-  let p;
-  if (b.report_id !== undefined) {
-    p = await visible(c.env.DB, positive(b.report_id));
-    if (!p || p.author_id !== u.id) throw new Fault(403, "not_author");
-  }
-  return c.json(await validate(c, b, p));
-});
-api.post("/reports", async (c) => {
-  const u = requireUser(c),
-    b = await jsonBody(c),
-    v = await validate(c, b);
-  await idempotent(c, "report", b, "pending", async (key) => [
-    activeGuard(c),
-    quota(c.env.DB, u.id, "report", 20),
-    stmt(
+api.post(
+  "/reports/validate",
+  ...operation("Validate a report without publishing", S.validatedReport, {
+    tags: ["Reports"],
+    body: S.reportInput.extend({ report_id: S.positiveInput.optional() }),
+    auth: "user",
+    write: true,
+    errors: [400],
+  }),
+  async (c) => {
+    const u = requireUser(c),
+      b = await jsonBody(c);
+    let p;
+    if (b.report_id !== undefined) {
+      p = await visible(c.env.DB, positive(b.report_id));
+      if (!p || p.author_id !== u.id) throw new Fault(403, "not_author");
+    }
+    return c.json(await validate(c, b, p));
+  },
+);
+api.post(
+  "/reports",
+  ...operation("Publish a report", S.z.object({ id: S.integer }), {
+    tags: ["Reports"],
+    body: S.reportInput,
+    auth: "user",
+    write: true,
+    idempotent: true,
+    status: 201,
+    errors: [400, 409, 428, 429],
+  }),
+  async (c) => {
+    const u = requireUser(c),
+      b = await jsonBody(c),
+      v = await validate(c, b);
+    await idempotent(c, "report", b, "pending", async (key) => [
+      activeGuard(c),
+      quota(c.env.DB, u.id, "report", 20),
+      stmt(
+        c.env.DB,
+        "INSERT INTO reports(create_key,release_id,author_id,created_at,updated_at) VALUES(?,?,?,?,?)",
+        key,
+        v.release_id,
+        u.id,
+        now(),
+        now(),
+      ),
+      ...revisionStatements(c, v, key, 1, true),
+      stmt(
+        c.env.DB,
+        "UPDATE idempotency_keys SET resource_id=(SELECT CAST(id AS TEXT) FROM reports WHERE create_key=?) WHERE user_id=? AND operation=? AND key=?",
+        key,
+        u.id,
+        "report",
+        c.req.header("Idempotency-Key"),
+      ),
+    ]);
+    const result = await one(
       c.env.DB,
-      "INSERT INTO reports(create_key,release_id,author_id,created_at,updated_at) VALUES(?,?,?,?,?)",
-      key,
-      v.release_id,
-      u.id,
-      now(),
-      now(),
-    ),
-    ...revisionStatements(c, v, key, 1, true),
-    stmt(
-      c.env.DB,
-      "UPDATE idempotency_keys SET resource_id=(SELECT CAST(id AS TEXT) FROM reports WHERE create_key=?) WHERE user_id=? AND operation=? AND key=?",
-      key,
+      "SELECT resource_id FROM idempotency_keys WHERE user_id=? AND operation=? AND key=?",
       u.id,
       "report",
       c.req.header("Idempotency-Key"),
-    ),
-  ]);
-  const result = await one(
-    c.env.DB,
-    "SELECT resource_id FROM idempotency_keys WHERE user_id=? AND operation=? AND key=?",
-    u.id,
-    "report",
-    c.req.header("Idempotency-Key"),
-  );
-  return c.json({ id: Number(result.resource_id) }, 201);
-});
-api.post("/reports/:id/revisions", async (c) => {
-  const p = await report(c),
-    u = requireUser(c);
-  if (p.author_id !== u.id) throw new Fault(403, "not_author");
-  if (p.withdrawn_at) throw new Fault(409, "report_withdrawn");
-  const b = await jsonBody(c),
-    v = await validate(c, b, p),
-    expected = positive(b.expected_revision),
-    n = expected + 1;
-  await idempotent(c, "report_revision:" + p.id, b, String(n), async () => [
-    activeGuard(c),
-    guard(
-      c.env.DB,
-      "(SELECT MAX(revision_no) FROM report_revisions WHERE report_id=?)=? AND EXISTS(SELECT 1 FROM reports WHERE id=? AND author_id=? AND visibility='public' AND withdrawn_at IS NULL)",
-      p.id,
-      expected,
-      p.id,
-      u.id,
-    ),
-    quota(c.env.DB, u.id, "report", 20),
-    ...revisionStatements(c, v, p.id, n),
-    stmt(c.env.DB, "UPDATE reports SET updated_at=? WHERE id=?", now(), p.id),
-  ]);
-  return c.json({ id: p.id, revision_no: n }, 201);
-});
-api.put("/reports/:id/withdrawal", async (c) => {
-  const p = await report(c),
-    u = requireUser(c);
-  if (p.author_id !== u.id) throw new Fault(403, "not_author");
-  await batch(c.env.DB, [
-    activeGuard(c),
-    stmt(
-      c.env.DB,
-      "UPDATE reports SET withdrawn_at=COALESCE(withdrawn_at,?) WHERE id=? AND author_id=?",
-      now(),
-      p.id,
-      u.id,
-    ),
-  ]);
-  return c.json({ ok: true });
-});
+    );
+    return c.json({ id: Number(result.resource_id) }, 201);
+  },
+);
+api.post(
+  "/reports/:id/revisions",
+  ...operation(
+    "Publish a report revision",
+    S.z.object({ id: S.integer, revision_no: S.integer }),
+    {
+      tags: ["Reports"],
+      body: S.reportInput.extend({ expected_revision: S.positiveInput }),
+      auth: "user",
+      write: true,
+      idempotent: true,
+      status: 201,
+      errors: [400, 404, 409, 428, 429],
+    },
+  ),
+  async (c) => {
+    const p = await report(c),
+      u = requireUser(c);
+    if (p.author_id !== u.id) throw new Fault(403, "not_author");
+    if (p.withdrawn_at) throw new Fault(409, "report_withdrawn");
+    const b = await jsonBody(c),
+      v = await validate(c, b, p),
+      expected = positive(b.expected_revision),
+      n = expected + 1;
+    await idempotent(c, "report_revision:" + p.id, b, String(n), async () => [
+      activeGuard(c),
+      guard(
+        c.env.DB,
+        "(SELECT MAX(revision_no) FROM report_revisions WHERE report_id=?)=? AND EXISTS(SELECT 1 FROM reports WHERE id=? AND author_id=? AND visibility='public' AND withdrawn_at IS NULL)",
+        p.id,
+        expected,
+        p.id,
+        u.id,
+      ),
+      quota(c.env.DB, u.id, "report", 20),
+      ...revisionStatements(c, v, p.id, n),
+      stmt(c.env.DB, "UPDATE reports SET updated_at=? WHERE id=?", now(), p.id),
+    ]);
+    return c.json({ id: p.id, revision_no: n }, 201);
+  },
+);
+api.put(
+  "/reports/:id/withdrawal",
+  ...operation("Withdraw a report", S.ok, {
+    tags: ["Reports"],
+    auth: "session",
+    write: true,
+    errors: [404],
+  }),
+  async (c) => {
+    const p = await report(c),
+      u = requireUser(c);
+    if (p.author_id !== u.id) throw new Fault(403, "not_author");
+    await batch(c.env.DB, [
+      activeGuard(c),
+      stmt(
+        c.env.DB,
+        "UPDATE reports SET withdrawn_at=COALESCE(withdrawn_at,?) WHERE id=? AND author_id=?",
+        now(),
+        p.id,
+        u.id,
+      ),
+    ]);
+    return c.json({ ok: true });
+  },
+);
 for (const kind of ["report", "claim"] as const) {
-  api.get(`/${kind}s/:id/stars`, async (c) => {
-    const item =
-      kind === "report"
-        ? await visible(c.env.DB, positive(c.req.param("id")))
-        : await one(
-            c.env.DB,
-            "SELECT c.* FROM claims c JOIN reports p ON p.id=c.report_id WHERE c.id=? AND p.visibility='public'",
-            c.req.param("id"),
-          );
-    if (!item) throw new Fault(404, kind + "_not_found");
+  api.get(
+    `/${kind}s/:id/stars`,
+    ...operation(`List ${kind} stars`, S.list(S.star), {
+      tags: [kind === "report" ? "Reports" : "Claims"],
+      auth: "optional",
+      query: S.pagination,
+      errors: [404],
+    }),
+    async (c) => {
+      const item =
+        kind === "report"
+          ? await visible(c.env.DB, positive(c.req.param("id")))
+          : await one(
+              c.env.DB,
+              "SELECT c.* FROM claims c JOIN reports p ON p.id=c.report_id WHERE c.id=? AND p.visibility='public'",
+              c.req.param("id"),
+            );
+      if (!item) throw new Fault(404, kind + "_not_found");
+      return c.json(
+        await listing(
+          c,
+          `SELECT u.id,u.username,s.created_at FROM ${kind}_stars s JOIN users u ON u.id=s.user_id WHERE s.${kind}_id=?`,
+          [item.id],
+          [
+            { sql: "s.created_at", key: "created_at", desc: true },
+            { sql: "u.id", key: "id" },
+          ],
+        ),
+      );
+    },
+  );
+  api.on(
+    ["PUT", "DELETE"],
+    `/${kind}s/:id/star`,
+    ...operation(`Set or remove a ${kind} star`, S.ok, {
+      tags: [kind === "report" ? "Reports" : "Claims"],
+      auth: "session",
+      write: true,
+      errors: [404],
+    }),
+    async (c) => {
+      const u = requireUser(c);
+      const item =
+        kind === "report"
+          ? await visible(c.env.DB, positive(c.req.param("id")))
+          : await one(
+              c.env.DB,
+              "SELECT c.* FROM claims c JOIN reports p ON p.id=c.report_id WHERE c.id=? AND p.visibility='public'",
+              c.req.param("id"),
+            );
+      if (!item) throw new Fault(404, kind + "_not_found");
+      await batch(c.env.DB, [
+        activeGuard(c),
+        guard(
+          c.env.DB,
+          "EXISTS(SELECT 1 FROM reports WHERE id=? AND visibility='public')",
+          kind === "report" ? item.id : item.report_id,
+        ),
+        c.req.method === "PUT"
+          ? stmt(
+              c.env.DB,
+              `INSERT INTO ${kind}_stars VALUES(?,?,?) ON CONFLICT DO NOTHING`,
+              item.id,
+              u.id,
+              now(),
+            )
+          : stmt(
+              c.env.DB,
+              `DELETE FROM ${kind}_stars WHERE ${kind}_id=? AND user_id=?`,
+              item.id,
+              u.id,
+            ),
+      ]);
+      return c.json({ ok: true });
+    },
+  );
+}
+const commentSelect = `SELECT cm.*,u.username,COALESCE((SELECT SUM(value) FROM report_comment_votes WHERE comment_id=cm.id),0) score,(SELECT value FROM report_comment_votes WHERE comment_id=cm.id AND user_id=?) my_vote,(SELECT COUNT(*) FROM report_comments ch WHERE ch.reply_to_id=cm.id) reply_count FROM report_comments cm LEFT JOIN users u ON u.id=cm.author_id`;
+api.get(
+  "/reports/:id/comments",
+  ...operation("List report comments or replies", S.list(S.comment), {
+    tags: ["Comments"],
+    auth: "optional",
+    query: S.pagination.extend({ parent_id: S.string.optional() }),
+    errors: [404],
+  }),
+  async (c) => {
+    const id = positive(c.req.param("id"));
     return c.json(
       await listing(
         c,
-        `SELECT u.id,u.username,s.created_at FROM ${kind}_stars s JOIN users u ON u.id=s.user_id WHERE s.${kind}_id=?`,
-        [item.id],
-        [
-          { sql: "s.created_at", key: "created_at", desc: true },
-          { sql: "u.id", key: "id" },
-        ],
+        commentSelect +
+          " WHERE cm.report_id=? AND cm.reply_to_id IS ? AND EXISTS(SELECT 1 FROM reports p WHERE p.id=cm.report_id AND p.visibility='public')",
+        [c.get("user")?.id || "", id, c.req.query("parent_id") || null],
+        [{ sql: "cm.sequence_no", key: "sequence_no" }],
+        publicComment,
+        {
+          statements: [
+            stmt(
+              c.env.DB,
+              "SELECT id FROM reports WHERE id=? AND visibility='public'",
+              id,
+            ),
+          ],
+          check: ([result]) => {
+            if (!result.results.length)
+              throw new Fault(404, "report_not_found");
+          },
+        },
       ),
     );
-  });
-  api.on(["PUT", "DELETE"], `/${kind}s/:id/star`, async (c) => {
-    const u = requireUser(c);
-    const item =
-      kind === "report"
-        ? await visible(c.env.DB, positive(c.req.param("id")))
-        : await one(
-            c.env.DB,
-            "SELECT c.* FROM claims c JOIN reports p ON p.id=c.report_id WHERE c.id=? AND p.visibility='public'",
-            c.req.param("id"),
-          );
-    if (!item) throw new Fault(404, kind + "_not_found");
-    await batch(c.env.DB, [
+  },
+);
+api.get(
+  "/comments/:id",
+  ...operation(
+    "Read a comment and its ancestors",
+    S.comment.extend({ ancestors: S.z.array(S.string) }),
+    { tags: ["Comments"], errors: [404] },
+  ),
+  async (c) => {
+    const cm = await one(
+      c.env.DB,
+      commentSelect + " WHERE cm.id=?",
+      c.get("user")?.id || "",
+      c.req.param("id"),
+    );
+    if (!cm || !(await visible(c.env.DB, cm.report_id)))
+      throw new Fault(404, "comment_not_found");
+    const ancestors = await rows(
+      c.env.DB,
+      `WITH RECURSIVE chain(id,reply_to_id,depth) AS (SELECT id,reply_to_id,0 FROM report_comments WHERE id=? UNION ALL SELECT p.id,p.reply_to_id,chain.depth+1 FROM report_comments p JOIN chain ON p.id=chain.reply_to_id) SELECT id FROM chain ORDER BY depth DESC`,
+      cm.id,
+    );
+    return c.json({
+      ...publicComment(cm),
+      ancestors: ancestors.map((x) => x.id),
+    });
+  },
+);
+api.post(
+  "/reports/:id/comments",
+  ...operation("Post a report comment", S.z.object({ id: S.string }), {
+    tags: ["Comments"],
+    body: S.createComment,
+    auth: "session",
+    write: true,
+    idempotent: true,
+    status: 201,
+    errors: [404, 409, 428, 429],
+  }),
+  async (c) => {
+    const q = await report(c),
+      u = requireUser(c),
+      b = await jsonBody(c),
+      body = text(b.body, "Comment", 5000, true),
+      rev = positive(b.revision_no),
+      parent = b.reply_to_id ? text(b.reply_to_id, "Reply", 100) : null,
+      id = uid(),
+      event = uid();
+    const resource = await idempotent(c, "comment:" + q.id, b, id, async () => [
       activeGuard(c),
       guard(
         c.env.DB,
         "EXISTS(SELECT 1 FROM reports WHERE id=? AND visibility='public')",
-        kind === "report" ? item.id : item.report_id,
+        q.id,
       ),
-      c.req.method === "PUT"
-        ? stmt(
-            c.env.DB,
-            `INSERT INTO ${kind}_stars VALUES(?,?,?) ON CONFLICT DO NOTHING`,
-            item.id,
-            u.id,
-            now(),
-          )
-        : stmt(
-            c.env.DB,
-            `DELETE FROM ${kind}_stars WHERE ${kind}_id=? AND user_id=?`,
-            item.id,
-            u.id,
-          ),
+      quota(c.env.DB, u.id, "comment", 100),
+      stmt(
+        c.env.DB,
+        "INSERT INTO report_comments(id,report_id,sequence_no,revision_no,author_id,reply_to_id,body,created_at) SELECT ?,?,COALESCE(MAX(sequence_no),0)+1,?,?,?,?,? FROM report_comments WHERE report_id=?",
+        id,
+        q.id,
+        rev,
+        u.id,
+        parent,
+        body,
+        now(),
+        q.id,
+      ),
+      stmt(
+        c.env.DB,
+        "INSERT INTO report_comment_history VALUES(?,1,?,?,?,?)",
+        id,
+        "create",
+        body,
+        u.id,
+        now(),
+      ),
+      stmt(
+        c.env.DB,
+        "INSERT INTO outbox_events(id,type,aggregate_id,dedupe_key,payload,created_at) VALUES(?,?,?,?,?,?)",
+        event,
+        "comment",
+        id,
+        "comment:" + id,
+        JSON.stringify({ comment_id: id }),
+        now(),
+      ),
     ]);
-    return c.json({ ok: true });
-  });
-}
-const commentSelect = `SELECT cm.*,u.username,COALESCE((SELECT SUM(value) FROM report_comment_votes WHERE comment_id=cm.id),0) score,(SELECT value FROM report_comment_votes WHERE comment_id=cm.id AND user_id=?) my_vote,(SELECT COUNT(*) FROM report_comments ch WHERE ch.reply_to_id=cm.id) reply_count FROM report_comments cm LEFT JOIN users u ON u.id=cm.author_id`;
-api.get("/reports/:id/comments", async (c) => {
-  const id = positive(c.req.param("id"));
-  return c.json(
-    await listing(
-      c,
-      commentSelect +
-        " WHERE cm.report_id=? AND cm.reply_to_id IS ? AND EXISTS(SELECT 1 FROM reports p WHERE p.id=cm.report_id AND p.visibility='public')",
-      [c.get("user")?.id || "", id, c.req.query("parent_id") || null],
-      [{ sql: "cm.sequence_no", key: "sequence_no" }],
-      publicComment,
-      {
-        statements: [
-          stmt(
-            c.env.DB,
-            "SELECT id FROM reports WHERE id=? AND visibility='public'",
-            id,
-          ),
-        ],
-        check: ([result]) => {
-          if (!result.results.length) throw new Fault(404, "report_not_found");
-        },
-      },
-    ),
-  );
-});
-api.get("/comments/:id", async (c) => {
-  const cm = await one(
-    c.env.DB,
-    commentSelect + " WHERE cm.id=?",
-    c.get("user")?.id || "",
-    c.req.param("id"),
-  );
-  if (!cm || !(await visible(c.env.DB, cm.report_id)))
-    throw new Fault(404, "comment_not_found");
-  const ancestors = await rows(
-    c.env.DB,
-    `WITH RECURSIVE chain(id,reply_to_id,depth) AS (SELECT id,reply_to_id,0 FROM report_comments WHERE id=? UNION ALL SELECT p.id,p.reply_to_id,chain.depth+1 FROM report_comments p JOIN chain ON p.id=chain.reply_to_id) SELECT id FROM chain ORDER BY depth DESC`,
-    cm.id,
-  );
-  return c.json({
-    ...publicComment(cm),
-    ancestors: ancestors.map((x) => x.id),
-  });
-});
-api.post("/reports/:id/comments", async (c) => {
-  const q = await report(c),
-    u = requireUser(c),
-    b = await jsonBody(c),
-    body = text(b.body, "Comment", 5000, true),
-    rev = positive(b.revision_no),
-    parent = b.reply_to_id ? text(b.reply_to_id, "Reply", 100) : null,
-    id = uid(),
-    event = uid();
-  const resource = await idempotent(c, "comment:" + q.id, b, id, async () => [
-    activeGuard(c),
-    guard(
-      c.env.DB,
-      "EXISTS(SELECT 1 FROM reports WHERE id=? AND visibility='public')",
-      q.id,
-    ),
-    quota(c.env.DB, u.id, "comment", 100),
-    stmt(
-      c.env.DB,
-      "INSERT INTO report_comments(id,report_id,sequence_no,revision_no,author_id,reply_to_id,body,created_at) SELECT ?,?,COALESCE(MAX(sequence_no),0)+1,?,?,?,?,? FROM report_comments WHERE report_id=?",
-      id,
-      q.id,
-      rev,
-      u.id,
-      parent,
-      body,
-      now(),
-      q.id,
-    ),
-    stmt(
-      c.env.DB,
-      "INSERT INTO report_comment_history VALUES(?,1,?,?,?,?)",
-      id,
-      "create",
-      body,
-      u.id,
-      now(),
-    ),
-    stmt(
-      c.env.DB,
-      "INSERT INTO outbox_events(id,type,aggregate_id,dedupe_key,payload,created_at) VALUES(?,?,?,?,?,?)",
-      event,
-      "comment",
-      id,
-      "comment:" + id,
-      JSON.stringify({ comment_id: id }),
-      now(),
-    ),
-  ]);
-  return c.json({ id: resource }, 201);
-});
+    return c.json({ id: resource }, 201);
+  },
+);
 async function editComment(c: Ctx, deleting: boolean) {
   const u = requireUser(c),
     b = await jsonBody(c),
@@ -846,206 +1130,329 @@ async function editComment(c: Ctx, deleting: boolean) {
   ]);
   return c.json({ ok: true, edit_version: expected + 1 });
 }
-api.patch("/comments/:id", (c) => editComment(c, false));
-api.delete("/comments/:id", (c) => editComment(c, true));
-api.on(["PUT", "DELETE"], "/comments/:id/vote", async (c) => {
-  const u = requireUser(c),
-    id = c.req.param("id");
-  const cm = await one(
-    c.env.DB,
-    "SELECT * FROM report_comments WHERE id=?",
-    id,
-  );
-  if (!cm || !(await visible(c.env.DB, cm.report_id)))
-    throw new Fault(404, "comment_not_found");
-  if (cm.author_id === u.id || cm.deleted_at || cm.visibility !== "public")
-    throw new Fault(403, "vote_forbidden");
-  const b = c.req.method === "PUT" ? await jsonBody(c) : {};
-  if (c.req.method === "PUT" && ![-1, 1].includes(b.value))
-    throw new Fault(400, "invalid_vote");
-  await batch(c.env.DB, [
-    activeGuard(c),
-    guard(
-      c.env.DB,
-      "EXISTS(SELECT 1 FROM reports WHERE id=? AND visibility='public')",
-      cm.report_id,
+api.patch(
+  "/comments/:id",
+  ...operation("Edit a comment", S.ok.extend({ edit_version: S.integer }), {
+    tags: ["Comments"],
+    body: S.editComment,
+    auth: "session",
+    write: true,
+    errors: [404, 409],
+  }),
+  (c) => editComment(c, false),
+);
+api.delete(
+  "/comments/:id",
+  ...operation("Delete a comment", S.ok.extend({ edit_version: S.integer }), {
+    tags: ["Comments"],
+    body: S.deleteComment,
+    auth: "session",
+    write: true,
+    errors: [404, 409],
+  }),
+  (c) => editComment(c, true),
+);
+for (const method of ["PUT", "DELETE"] as const)
+  api.on(
+    method,
+    "/comments/:id/vote",
+    ...operation(
+      method === "PUT" ? "Vote on a comment" : "Remove a comment vote",
+      S.ok,
+      {
+        tags: ["Comments"],
+        body:
+          method === "PUT"
+            ? S.z.object({
+                value: S.z.union([S.z.literal(-1), S.z.literal(1)]),
+              })
+            : undefined,
+        auth: "session",
+        write: true,
+        errors: [404],
+      },
     ),
-    c.req.method === "DELETE"
-      ? stmt(
+    async (c) => {
+      const u = requireUser(c),
+        id = c.req.param("id");
+      const cm = await one(
+        c.env.DB,
+        "SELECT * FROM report_comments WHERE id=?",
+        id,
+      );
+      if (!cm || !(await visible(c.env.DB, cm.report_id)))
+        throw new Fault(404, "comment_not_found");
+      if (cm.author_id === u.id || cm.deleted_at || cm.visibility !== "public")
+        throw new Fault(403, "vote_forbidden");
+      const b = c.req.method === "PUT" ? await jsonBody(c) : {};
+      if (c.req.method === "PUT" && ![-1, 1].includes(b.value))
+        throw new Fault(400, "invalid_vote");
+      await batch(c.env.DB, [
+        activeGuard(c),
+        guard(
           c.env.DB,
-          "DELETE FROM report_comment_votes WHERE comment_id=? AND user_id=?",
-          id,
-          u.id,
-        )
-      : stmt(
-          c.env.DB,
-          "INSERT INTO report_comment_votes VALUES(?,?,?,?) ON CONFLICT(comment_id,user_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
-          id,
-          u.id,
-          b.value,
-          now(),
+          "EXISTS(SELECT 1 FROM reports WHERE id=? AND visibility='public')",
+          cm.report_id,
         ),
-  ]);
-  return c.json({ ok: true });
-});
-api.get("/users/:id", async (c) => {
-  const u = await one(
-    c.env.DB,
-    "SELECT id,username,created_at FROM users WHERE id=? OR username=? ORDER BY id=? DESC LIMIT 1",
-    c.req.param("id"),
-    c.req.param("id"),
-    c.req.param("id"),
+        c.req.method === "DELETE"
+          ? stmt(
+              c.env.DB,
+              "DELETE FROM report_comment_votes WHERE comment_id=? AND user_id=?",
+              id,
+              u.id,
+            )
+          : stmt(
+              c.env.DB,
+              "INSERT INTO report_comment_votes VALUES(?,?,?,?) ON CONFLICT(comment_id,user_id) DO UPDATE SET value=excluded.value,updated_at=excluded.updated_at",
+              id,
+              u.id,
+              b.value,
+              now(),
+            ),
+      ]);
+      return c.json({ ok: true });
+    },
   );
-  if (!u) throw new Fault(404, "user_not_found");
-  return c.json({
-    ...u,
-    karma: await karmaPolicy.compute(c.env.DB, u.id),
-    algorithm_version: karmaPolicy.id,
-  });
-});
+api.get(
+  "/users/:id",
+  ...operation(
+    "Read a public user profile",
+    S.z.object({
+      id: S.string,
+      username: S.string,
+      created_at: S.string,
+      karma: S.integer,
+      algorithm_version: S.string,
+    }),
+    {
+      tags: ["Account"],
+      description: "Accepts a user ID or username.",
+      errors: [404],
+    },
+  ),
+  async (c) => {
+    const u = await one(
+      c.env.DB,
+      "SELECT id,username,created_at FROM users WHERE id=? OR username=? ORDER BY id=? DESC LIMIT 1",
+      c.req.param("id"),
+      c.req.param("id"),
+      c.req.param("id"),
+    );
+    if (!u) throw new Fault(404, "user_not_found");
+    return c.json({
+      ...u,
+      karma: await karmaPolicy.compute(c.env.DB, u.id),
+      algorithm_version: karmaPolicy.id,
+    });
+  },
+);
 for (const prefix of ["/users/:id", "/me"]) {
-  api.get(prefix + "/reports", async (c) =>
-    c.json(
-      await listing(
-        c,
-        publicReport +
-          ` WHERE p.author_id=? AND p.visibility='public' AND ${reportLatest}`,
-        [prefix === "/me" ? requireUser(c).id : c.req.param("id")],
-        [{ sql: "p.id", key: "id", desc: true }],
+  api.get(
+    prefix + "/reports",
+    ...operation("List reports by user", S.list(S.report), {
+      tags: ["Account"],
+      query: S.pagination,
+      auth: prefix === "/me" ? "user" : undefined,
+    }),
+    async (c) =>
+      c.json(
+        await listing(
+          c,
+          publicReport +
+            ` WHERE p.author_id=? AND p.visibility='public' AND ${reportLatest}`,
+          [prefix === "/me" ? requireUser(c).id : c.req.param("id")],
+          [{ sql: "p.id", key: "id", desc: true }],
+        ),
       ),
-    ),
   );
-  api.get(prefix + "/comments", async (c) =>
-    c.json(
-      await listing(
-        c,
-        commentSelect +
-          " JOIN reports c ON c.id=cm.report_id WHERE cm.author_id=? AND c.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL",
-        [
-          c.get("user")?.id || "",
-          prefix === "/me" ? requireUser(c).id : c.req.param("id"),
-        ],
-        [
-          { sql: "cm.created_at", key: "created_at", desc: true },
-          { sql: "cm.id", key: "id", desc: true },
-        ],
-        publicComment,
+  api.get(
+    prefix + "/comments",
+    ...operation("List comments by user", S.list(S.comment), {
+      tags: ["Comments"],
+      query: S.pagination,
+      auth: prefix === "/me" ? "session" : undefined,
+    }),
+    async (c) =>
+      c.json(
+        await listing(
+          c,
+          commentSelect +
+            " JOIN reports c ON c.id=cm.report_id WHERE cm.author_id=? AND c.visibility='public' AND cm.visibility='public' AND cm.deleted_at IS NULL",
+          [
+            c.get("user")?.id || "",
+            prefix === "/me" ? requireUser(c).id : c.req.param("id"),
+          ],
+          [
+            { sql: "cm.created_at", key: "created_at", desc: true },
+            { sql: "cm.id", key: "id", desc: true },
+          ],
+          publicComment,
+        ),
       ),
-    ),
   );
 }
 for (const kind of ["report", "claim"] as const) {
-  api.get(`/${kind}s/:id/stars`, async (c) => {
-    const item =
-      kind === "report"
-        ? await visible(c.env.DB, positive(c.req.param("id")))
-        : await one(
-            c.env.DB,
-            "SELECT c.* FROM claims c JOIN reports p ON p.id=c.report_id WHERE c.id=? AND p.visibility='public'",
-            c.req.param("id"),
-          );
-    if (!item) throw new Fault(404, kind + "_not_found");
+  api.get(
+    "/me/starred-" + kind + "s",
+    ...operation(
+      `List my starred ${kind}s`,
+      S.list(
+        (kind === "report" ? S.report : S.claim).extend({
+          starred_at: S.string,
+        }),
+      ),
+      { tags: ["Account"], query: S.pagination, auth: "session" },
+    ),
+    async (c) =>
+      c.json(
+        await listing(
+          c,
+          (kind === "report"
+            ? publicReport.replace(
+                "SELECT ",
+                "SELECT s.created_at starred_at,",
+              ) +
+              ` JOIN report_stars s ON s.report_id=p.id WHERE ${reportLatest}`
+            : publicClaim.replace(
+                "SELECT ",
+                "SELECT s.created_at starred_at,",
+              ) +
+              ` JOIN claim_stars s ON s.claim_id=c.id WHERE r.report_revision=(SELECT MAX(v.report_revision) FROM claim_revisions v WHERE v.claim_id=c.id)`) +
+            " AND s.user_id=? AND p.visibility='public'",
+          [requireUser(c).id],
+          [
+            { sql: "s.created_at", key: "starred_at", desc: true },
+            { sql: kind === "report" ? "p.id" : "c.id", key: "id", desc: true },
+          ],
+        ),
+      ),
+  );
+}
+api.get(
+  "/tools",
+  ...operation(
+    "List verification tools and versions",
+    S.z.object({
+      items: S.z.array(S.tool),
+      versions: S.z.array(S.toolVersion),
+    }),
+    { tags: ["Tools"], auth: "optional" },
+  ),
+  async (c) => {
+    const [items, versions] = await c.env.DB.batch<any>([
+      stmt(c.env.DB, "SELECT * FROM tools ORDER BY name"),
+      stmt(c.env.DB, "SELECT * FROM tool_versions ORDER BY tool_id,version"),
+    ]);
+    return c.json({ items: items.results, versions: versions.results });
+  },
+);
+api.get(
+  "/tool-versions/:id",
+  ...operation(
+    "Read a tool version",
+    S.toolVersion.extend({ tool: S.string }),
+    { tags: ["Tools"], errors: [404] },
+  ),
+  async (c) => {
+    const version = await one(
+      c.env.DB,
+      "SELECT tv.*,t.name tool FROM tool_versions tv JOIN tools t ON t.id=tv.tool_id WHERE tv.id=?",
+      c.req.param("id"),
+    );
+    if (!version) throw new Fault(404, "tool_version_not_found");
+    return c.json(version);
+  },
+);
+api.get(
+  "/tool-versions/:id/reports",
+  ...operation("List reports for a tool version", S.list(S.report), {
+    tags: ["Reports"],
+    query: S.pagination,
+    errors: [404],
+  }),
+  async (c) => {
+    const id = c.req.param("id");
     return c.json(
       await listing(
         c,
-        `SELECT u.id,u.username,s.created_at FROM ${kind}_stars s JOIN users u ON u.id=s.user_id WHERE s.${kind}_id=?`,
-        [item.id],
-        [
-          { sql: "s.created_at", key: "created_at", desc: true },
-          { sql: "u.id", key: "id" },
-        ],
+        publicReport + ` WHERE tv.id=? AND ${activeReport} AND ${reportLatest}`,
+        [id],
+        [{ sql: "p.id", key: "id", desc: true }],
+        undefined,
+        {
+          statements: [
+            stmt(c.env.DB, "SELECT id FROM tool_versions WHERE id=?", id),
+          ],
+          check: ([result]) => {
+            if (!result.results.length)
+              throw new Fault(404, "tool_version_not_found");
+          },
+        },
       ),
     );
-  });
-  api.get("/me/starred-" + kind + "s", async (c) =>
+  },
+);
+api.get(
+  "/tools/:slug",
+  ...operation(
+    "Read a tool and its versions",
+    S.tool.extend({ versions: S.z.array(S.toolVersion) }),
+    { tags: ["Tools"], auth: "optional", errors: [404] },
+  ),
+  async (c) => {
+    const id = c.req.param("slug");
+    const [tools, versions] = await c.env.DB.batch<any>([
+      stmt(c.env.DB, "SELECT * FROM tools WHERE id=?", id),
+      stmt(c.env.DB, "SELECT * FROM tool_versions WHERE tool_id=?", id),
+    ]);
+    const t = tools.results[0];
+    if (!t) throw new Fault(404, "tool_not_found");
+    return c.json({ ...t, versions: versions.results });
+  },
+);
+api.get(
+  "/tools/:slug/reports",
+  ...operation("List reports for a tool", S.list(S.report), {
+    tags: ["Reports"],
+    auth: "optional",
+    query: S.pagination,
+  }),
+  async (c) =>
     c.json(
       await listing(
         c,
-        (kind === "report"
-          ? publicReport.replace("SELECT ", "SELECT s.created_at starred_at,") +
-            ` JOIN report_stars s ON s.report_id=p.id WHERE ${reportLatest}`
-          : publicClaim.replace("SELECT ", "SELECT s.created_at starred_at,") +
-            ` JOIN claim_stars s ON s.claim_id=c.id WHERE r.report_revision=(SELECT MAX(v.report_revision) FROM claim_revisions v WHERE v.claim_id=c.id)`) +
-          " AND s.user_id=? AND p.visibility='public'",
-        [requireUser(c).id],
-        [
-          { sql: "s.created_at", key: "starred_at", desc: true },
-          { sql: kind === "report" ? "p.id" : "c.id", key: "id", desc: true },
-        ],
+        publicReport + ` WHERE t.id=? AND ${activeReport} AND ${reportLatest}`,
+        [c.req.param("slug")],
+        [{ sql: "p.id", key: "id", desc: true }],
       ),
     ),
-  );
-}
-api.get("/tools", async (c) => {
-  const [items, versions] = await c.env.DB.batch<any>([
-    stmt(c.env.DB, "SELECT * FROM tools ORDER BY name"),
-    stmt(c.env.DB, "SELECT * FROM tool_versions ORDER BY tool_id,version"),
-  ]);
-  return c.json({ items: items.results, versions: versions.results });
-});
-api.get("/tool-versions/:id", async (c) => {
-  const version = await one(
-    c.env.DB,
-    "SELECT tv.*,t.name tool FROM tool_versions tv JOIN tools t ON t.id=tv.tool_id WHERE tv.id=?",
-    c.req.param("id"),
-  );
-  if (!version) throw new Fault(404, "tool_version_not_found");
-  return c.json(version);
-});
-api.get("/tool-versions/:id/reports", async (c) => {
-  const id = c.req.param("id");
-  return c.json(
-    await listing(
-      c,
-      publicReport + ` WHERE tv.id=? AND ${activeReport} AND ${reportLatest}`,
-      [id],
-      [{ sql: "p.id", key: "id", desc: true }],
-      undefined,
-      {
-        statements: [
-          stmt(c.env.DB, "SELECT id FROM tool_versions WHERE id=?", id),
-        ],
-        check: ([result]) => {
-          if (!result.results.length)
-            throw new Fault(404, "tool_version_not_found");
-        },
-      },
-    ),
-  );
-});
-api.get("/tools/:slug", async (c) => {
-  const id = c.req.param("slug");
-  const [tools, versions] = await c.env.DB.batch<any>([
-    stmt(c.env.DB, "SELECT * FROM tools WHERE id=?", id),
-    stmt(c.env.DB, "SELECT * FROM tool_versions WHERE tool_id=?", id),
-  ]);
-  const t = tools.results[0];
-  if (!t) throw new Fault(404, "tool_not_found");
-  return c.json({ ...t, versions: versions.results });
-});
-api.get("/tools/:slug/reports", async (c) =>
-  c.json(
-    await listing(
-      c,
-      publicReport + ` WHERE t.id=? AND ${activeReport} AND ${reportLatest}`,
-      [c.req.param("slug")],
-      [{ sql: "p.id", key: "id", desc: true }],
-    ),
-  ),
 );
-api.get("/resolve-api", async (c) => {
-  const name = c.req.query("crate") || "",
-    version = c.req.query("version") || "",
-    path = c.req.query("path") || "";
-  const a = await one(
-    c.env.DB,
-    `SELECT a.id FROM api_items a JOIN releases r ON r.id=a.release_id JOIN crates cr ON cr.id=r.crate_id JOIN doc_snapshots ds ON ds.release_id=r.id WHERE cr.name=? AND r.version=? AND a.display_path IN (?,?)`,
-    name,
-    version,
-    path,
-    name.replaceAll("-", "_") + "::" + path,
-  );
-  if (!a) throw new Fault(404, "api_not_found");
-  return c.json(a);
-});
+api.get(
+  "/resolve-api",
+  ...operation(
+    "Resolve a crate API path to its ID",
+    S.z.object({ id: S.string }),
+    {
+      tags: ["APIs"],
+      auth: "optional",
+      query: S.z.object({ crate: S.string, version: S.string, path: S.string }),
+      errors: [404],
+    },
+  ),
+  async (c) => {
+    const name = c.req.query("crate") || "",
+      version = c.req.query("version") || "",
+      path = c.req.query("path") || "";
+    const a = await one(
+      c.env.DB,
+      `SELECT a.id FROM api_items a JOIN releases r ON r.id=a.release_id JOIN crates cr ON cr.id=r.crate_id JOIN doc_snapshots ds ON ds.release_id=r.id WHERE cr.name=? AND r.version=? AND a.display_path IN (?,?)`,
+      name,
+      version,
+      path,
+      name.replaceAll("-", "_") + "::" + path,
+    );
+    if (!a) throw new Fault(404, "api_not_found");
+    return c.json(a);
+  },
+);
 export default api;

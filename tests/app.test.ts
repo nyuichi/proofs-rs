@@ -1,3 +1,4 @@
+import { assertResponseContract } from "./api-contract";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { DatabaseSync } from "node:sqlite";
@@ -193,7 +194,17 @@ export async function fixture(seedTools = true) {
       },
       env,
     );
-    return { status: response.status, body: (await response.json()) as any };
+    const result = {
+      status: response.status,
+      body: (await response.json()) as any,
+    };
+    await assertResponseContract(
+      "/api/v1" + path,
+      method,
+      result.status,
+      result.body,
+    );
+    return result;
   }
   return { db, env, request };
 }
@@ -1003,10 +1014,15 @@ test("device expiry, token expiry, suspension, quotas, and user erasure", async 
   assert.equal(db.prepare("SELECT COUNT(*) n FROM api_tokens").get()!.n, 0);
 });
 
-test("OpenAPI covers non-admin routes and excludes administrative schemas", () => {
-  const spec = JSON.parse(
-    readFileSync(new URL("../public/openapi.json", import.meta.url), "utf8"),
+test("OpenAPI covers non-admin routes and excludes administrative schemas", async () => {
+  const { env } = await fixture();
+  const response = await app.request(
+    "https://example.test/openapi.json",
+    {},
+    env,
   );
+  assert.equal(response.status, 200);
+  const spec: any = await response.json();
   const actual = new Set(
     app.routes
       .filter(
@@ -1014,6 +1030,7 @@ test("OpenAPI covers non-admin routes and excludes administrative schemas", () =
           r.method !== "ALL" &&
           !r.path.includes("*") &&
           !r.path.startsWith("/api/v1/admin/") &&
+          !r.path.startsWith("/api/docs") &&
           (r.path.startsWith("/api/") || r.path.startsWith("/auth/")),
       )
       .map(
@@ -2968,4 +2985,67 @@ test("catalogue, crate and comment reads batch database round trips without chan
     [],
   );
   assert.equal((await read("/crates")).body.total_count, 0);
+});
+
+test("public request schemas reject malformed bodies without changing transport and auth guards", async () => {
+  const { env, db } = await fixture();
+  const call = (
+    body: string,
+    contentType = "application/json",
+    csrf = "csrf",
+  ) =>
+    app.request(
+      "https://example.test/api/v1/me/notification-preferences",
+      {
+        method: "PATCH",
+        headers: {
+          Origin: env.APP_ORIGIN,
+          Cookie: "__Host-proofsr_session=alice",
+          "X-CSRF-Token": csrf,
+          "Content-Type": contentType,
+        },
+        body,
+      },
+      env,
+    );
+  for (const [body, contentType, status, error] of [
+    ["{", "application/json", 400, "invalid_json"],
+    ["[]", "application/json", 400, "invalid_json"],
+    ["{}", "text/plain", 415, "json_required"],
+    [
+      JSON.stringify({ replies: "yes", report_comments: false }),
+      "application/json",
+      400,
+      "invalid_field",
+    ],
+    ["x".repeat(131073), "application/json", 413, "payload_too_large"],
+  ] as const) {
+    const r = await call(body, contentType);
+    assert.equal(r.status, status);
+    assert.equal(((await r.json()) as any).error, error);
+  }
+  const denied = await call("{}", "application/json", "wrong");
+  assert.equal(denied.status, 403);
+  assert.equal(((await denied.json()) as any).error, "invalid_csrf");
+  assert.equal(
+    db
+      .prepare(
+        "SELECT replies FROM notification_preferences WHERE user_id='alice'",
+      )
+      .get()!.replies,
+    1,
+  );
+  assert.equal(
+    (await call(JSON.stringify({ replies: false, report_comments: true })))
+      .status,
+    200,
+  );
+  assert.equal(
+    db
+      .prepare(
+        "SELECT replies FROM notification_preferences WHERE user_id='alice'",
+      )
+      .get()!.replies,
+    0,
+  );
 });
