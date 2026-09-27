@@ -1,3 +1,6 @@
+import { generateSpecs } from "hono-openapi";
+import { Scalar } from "@scalar/hono-api-reference";
+import { documentation } from "./openapi";
 import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { App, Env, Fault, uid, requireUser } from "./core";
@@ -9,6 +12,8 @@ import { queue, dispatch, backup } from "./jobs";
 import { admin } from "./admin";
 import { deviceRoutes, tokenRoutes, publicDevicePaths } from "./device";
 const app = new Hono<App>();
+// Only public routes participate in OpenAPI generation.
+const publicRoutes = new Hono<App>();
 app.use("*", async (c, next) => {
   c.set("requestId", uid());
   await next();
@@ -18,7 +23,9 @@ app.use("*", async (c, next) => {
   c.header("X-Frame-Options", "DENY");
   c.header(
     "Content-Security-Policy",
-    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
+    c.req.path === "/api/docs"
+      ? `default-src 'self'; script-src 'self' 'nonce-${c.get("requestId")}' https://cdn.jsdelivr.net; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'self'; worker-src blob:; frame-ancestors 'none'; base-uri 'none'; form-action 'self'`
+      : "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'",
   );
   if (c.env.ENVIRONMENT !== "production")
     c.header("X-Robots-Tag", "noindex, nofollow");
@@ -33,6 +40,35 @@ app.use("*", async (c, next) =>
     onError: (c) => c.json({ error: "payload_too_large" }, 413),
   })(c, next),
 );
+// Documentation is public and independent of cookies, tokens and database access.
+app.get("/openapi.json", async (c) =>
+  c.json(
+    await generateSpecs(
+      publicRoutes,
+      {
+        documentation,
+        includeEmptyPaths: false,
+      },
+      c,
+    ),
+  ),
+);
+app.get(
+  "/api/docs",
+  Scalar<App>((c) => ({
+    url: "/openapi.json",
+    pageTitle: "proofs.rs API",
+    operationTitleSource: "path",
+    cdn: "https://cdn.jsdelivr.net/npm/@scalar/api-reference@1.72.1/dist/browser/standalone.js",
+    nonce: c.get("requestId"),
+    theme: "default",
+    withDefaultFonts: false,
+    persistAuth: false,
+  })),
+);
+app.get("/api/docs/", (c) => c.redirect("/api/docs", 308));
+for (const path of ["/docs/api", "/docs/api/", "/docs/api/index.html"])
+  app.get(path, (c) => c.redirect("/api/docs", 308));
 app.use("/api/*", async (c, next) => {
   await authenticate(c);
   await next();
@@ -108,18 +144,14 @@ app.use("/api/*", async (c, next) => {
   )
     c.executionCtx.waitUntil(dispatch(c.env));
 });
-app.route("/auth", authRoutes());
-app.route("/auth", deviceRoutes);
-app.route("/api/v1", tokenRoutes);
-app.route("/api/v1", api);
-app.route("/api/v1", importRoutes);
+publicRoutes.route("/auth", authRoutes());
+publicRoutes.route("/auth", deviceRoutes);
+publicRoutes.route("/api/v1", tokenRoutes);
+publicRoutes.route("/api/v1", api);
+publicRoutes.route("/api/v1", importRoutes);
+app.route("/", publicRoutes);
 app.route("/api/v1/admin", admin);
 app.all("/api/*", (c) => c.json({ error: "not_found" }, 404));
-app.get("/docs/api", (c) =>
-  c.env.ASSETS.fetch(
-    new Request(new URL("/docs/api/index.html", c.req.url), c.req.raw),
-  ),
-);
 app.get("*", (c) => c.env.ASSETS.fetch(c.req.raw));
 app.onError((e, c) => {
   if (e instanceof Fault)
