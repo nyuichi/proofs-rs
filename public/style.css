@@ -639,7 +639,7 @@ textarea {
   overflow-wrap: anywhere;
 }
 .api-category {
-  margin-top: 24px;
+  margin-top: var(--api-category-gap, 24px);
 }
 .api-category h3 {
   font-size: 21px;
@@ -648,7 +648,7 @@ textarea {
 .api-impl h4 {
   border-bottom: 1px solid #bbb;
   padding: 10px 0 6px;
-  margin: 20px 0 0;
+  margin: var(--api-impl-gap, 20px) 0 0;
   font-weight: normal;
 }
 .api-impl > .catalog-row,
@@ -729,15 +729,15 @@ textarea {
   margin: 8px 0;
 }
 .report-api-claims {
-  margin: 0 0 16px 20px;
-  padding-left: 14px;
-  border-left: 2px solid #ddd;
+  margin: 0;
+  padding: 0 0 6px 20px;
+  border-bottom: 1px solid #ccc;
 }
 .report-api-claim {
-  padding: 4px 0;
+  padding: 2px 0;
 }
 .report-api-claim p {
-  margin: 6px 0;
+  margin: 2px 0;
   overflow-wrap: anywhere;
 }
 .report-limitations .tool-limitations {
@@ -747,4 +747,26 @@ textarea {
 .report-apis .catalog-row,
 .report-apis .api-family > summary {
   grid-template-columns: minmax(0, 1fr);
+}
+
+/* Share the catalogue hierarchy; a report row includes its claims. */
+.report-apis {
+  --api-category-gap: 16px;
+  --api-impl-gap: 8px;
+}
+.report-apis .api-category h3 {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+.report-apis .catalog-row {
+  border-bottom: 0;
+  padding: 6px 0 2px;
+}
+.report-apis .api-impl > .report-api-claims {
+  margin-left: 20px;
+}
+@media (max-width: 600px) {
+  .report-apis .api-impl > .report-api-claims {
+    margin-left: 8px;
+  }
 }
