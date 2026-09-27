@@ -22,7 +22,7 @@ Required GitHub Actions secrets:
 Optional integration settings (missing integrations are visibly marked, not silently simulated):
 
 - Repository variable `STAGING_GITHUB_CLIENT_ID`, secret `STAGING_GITHUB_CLIENT_SECRET`. OAuth callback: the deployed origin plus `/auth/github/callback`. Use a separate staging OAuth app.
-- Variable `ADMIN_GITHUB_IDS`, comma-separated GitHub numeric IDs. Defaults to repository owner nyuichi (`540144`).
+- Variable `ADMIN_GITHUB_IDS`, comma-separated GitHub numeric IDs. Defaults to nyuichi (`540144`).
 - `STAGING_EMAIL_FROM`, `STAGING_EMAIL_ALLOWLIST`, `STAGING_EMAIL_DOMAIN`, `STAGING_EMAIL_EVENT_SUBSCRIPTION`: variables after Email Service onboarding and event subscription to `proofs-rs-staging-email-events`. Staging delivers only to the explicit allowlist.
 - Secret `CLOUDFLARE_D1_BACKUP_TOKEN`, with D1 export permission. This is separate from the deploy token.
 - Optional secret `STAGING_TOKEN_SECRET`. A random Worker-only secret is generated on first deployment and preserved on subsequent deployments. It signs unsubscribe URLs.
