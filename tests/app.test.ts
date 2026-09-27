@@ -1321,7 +1321,7 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     );
     assert.equal(
       w.document.querySelector(".breadcrumbs")!.textContent,
-      "crates / sample 1.0.0 / Reports / Report #1 v1 /",
+      "crates / sample 1.0.0 / reports / Report #1 v1 /",
     );
     assert.ok(
       w.document.querySelector('.breadcrumbs a[href="#/report/1?v=1"]'),
@@ -1367,7 +1367,7 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     assert.equal(w.document.querySelector('[data-star="claim"]'), null);
     assert.equal(
       w.document.querySelector(".breadcrumbs")!.textContent,
-      "crates / sample 1.0.0 / Reports /",
+      "crates / sample 1.0.0 / reports /",
     );
     assert.ok(w.document.querySelector('.title-row [data-star="report"]'));
     (
