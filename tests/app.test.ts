@@ -2798,3 +2798,157 @@ test("claim numbers follow each report revision while UUID identity and old numb
     1,
   );
 });
+
+test("catalogue, crate and comment reads batch database round trips without changing API semantics", async () => {
+  const { env, db, request } = await fixture();
+  const made = await request("/reports", "POST", reportInput);
+  assert.equal(made.status, 201);
+  const id = made.body.id;
+  for (let n = 1; n <= 35; n++) {
+    db.prepare(
+      "INSERT INTO report_comments(id,report_id,sequence_no,revision_no,author_id,body,created_at) VALUES(?,?,?,1,'alice',?,'2026-01-01')",
+    ).run(`comment-${n}`, id, n, `Body ${n}`);
+  }
+  db.prepare(
+    "UPDATE report_comments SET visibility='hidden' WHERE id='comment-2'",
+  ).run();
+  db.prepare(
+    "UPDATE report_comments SET deleted_at='2026-01-02' WHERE id='comment-3'",
+  ).run();
+  db.prepare(
+    "INSERT INTO tool_versions(id,tool_id,version,selectable) VALUES('kani-retired','kani','0.1',0)",
+  ).run();
+  db.prepare(
+    "INSERT INTO tools VALUES('empty','Empty','No versions','https://example.test',1)",
+  ).run();
+  const original = env.DB;
+  let calls = 0;
+  env.DB = {
+    prepare(sql: string) {
+      const q = original.prepare(sql);
+      const wrap = (s: any): any => ({
+        bind: (...values: any[]) => wrap(s.bind(...values)),
+        first: (...args: any[]) => {
+          calls++;
+          return s.first(...args);
+        },
+        all: (...args: any[]) => {
+          calls++;
+          return s.all(...args);
+        },
+        run: (...args: any[]) => {
+          calls++;
+          return s.run(...args);
+        },
+      });
+      return wrap(q);
+    },
+    async batch(statements: any[]) {
+      // The fixture executes each statement via run(); count only the outer call.
+      const before = calls;
+      const result = await original.batch(statements);
+      calls = before + 1;
+      return result;
+    },
+  } as any;
+
+  async function read(path: string, user = "") {
+    calls = 0;
+    const r = await request(path, "GET", undefined, user);
+    assert.equal(calls, user ? 2 : 1, path); // authentication stays separate
+    return r;
+  }
+  for (const user of ["", "bob"]) {
+    const tools = await read("/tools", user);
+    assert.deepEqual(
+      tools.body.items.map((x: any) => x.id),
+      ["empty", "kani"],
+    );
+    assert.deepEqual(
+      tools.body.versions.map((x: any) => x.id),
+      ["kani-retired", "kani-0.68.0"],
+    );
+    const detail = await read("/tools/kani", user);
+    assert.equal(detail.body.id, "kani");
+    assert.equal(detail.body.versions.length, 2);
+    assert.deepEqual((await read("/tools/empty", user)).body.versions, []);
+    assert.equal(
+      (await read("/tools/missing", user)).body.error,
+      "tool_not_found",
+    );
+    const crates = await read("/crates?q=sample", user);
+    assert.equal(crates.body.total_count, 1);
+    assert.equal(crates.body.matching_count, 1);
+    assert.deepEqual(
+      crates.body.items.map((x: any) => x.name),
+      ["sample"],
+    );
+    const empty = await read("/crates?q=%25", user);
+    assert.equal(empty.body.total_count, 1);
+    assert.equal(empty.body.matching_count, 0);
+    assert.deepEqual(empty.body.items, []);
+    const reports = await read("/tool-versions/kani-0.68.0/reports", user);
+    assert.deepEqual(
+      reports.body.items.map((x: any) => x.id),
+      [id],
+    );
+    assert.deepEqual(
+      (await read("/tool-versions/kani-retired/reports", user)).body.items,
+      [],
+    );
+    const first = await read(`/reports/${id}/comments`, user);
+    assert.equal(first.body.items.length, 30);
+    assert.equal(first.body.items[1].body, null);
+    assert.equal(first.body.items[1].username, null);
+    assert.equal(first.body.items[2].body, null);
+    const second = await read(
+      `/reports/${id}/comments?cursor=${encodeURIComponent(first.body.next_cursor)}`,
+      user,
+    );
+    assert.equal(second.body.items.length, 5);
+    assert.equal(second.body.next_cursor, null);
+    assert.deepEqual(
+      [...first.body.items, ...second.body.items].map(
+        (x: any) => x.sequence_no,
+      ),
+      Array.from({ length: 35 }, (_, i) => i + 1),
+    );
+    assert.deepEqual(
+      (await read(`/reports/${id}/comments?parent_id=comment-1`, user)).body
+        .items,
+      [],
+    );
+  }
+  for (const path of [
+    "/crates",
+    `/reports/${id}/comments`,
+    "/tool-versions/kani-0.68.0/reports",
+  ]) {
+    const r = await read(path + "?cursor=!");
+    assert.equal(r.status, 400);
+    assert.equal(r.body.error, "invalid_cursor");
+  }
+  db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(id);
+  for (const path of [
+    `/reports/${id}/comments`,
+    "/reports/999/comments",
+    "/tool-versions/missing/reports",
+  ]) {
+    for (const query of ["", "?cursor=!"]) {
+      const r = await read(path + query);
+      assert.equal(r.status, 404);
+      assert.equal(
+        r.body.error,
+        path.startsWith("/reports/")
+          ? "report_not_found"
+          : "tool_version_not_found",
+      );
+      assert.equal(r.body.items, undefined);
+    }
+  }
+  assert.deepEqual(
+    (await read("/tool-versions/kani-0.68.0/reports")).body.items,
+    [],
+  );
+  assert.equal((await read("/crates")).body.total_count, 0);
+});
