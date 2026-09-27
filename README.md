@@ -88,7 +88,8 @@ Recorded verification requires CLI 0.3.0: commit and push the source and Cargo.l
 ### Crate API catalogue display metadata
 
 The crate API endpoint now returns the complete catalogue (`next_cursor: null`),
-with distinct active-public-report counts and report IDs for family aggregation.
+with current claim counts by property for active public reports. Family rows sum
+claim counts across their implementations; zero claims display as an em dash.
 The Web UI groups functions, associated functions, inherent methods, and trait
 implementations; blanket implementations are a separate subsection. Single
 implementations link directly, while multiple implementations start collapsed.

@@ -1390,7 +1390,7 @@
         "tags": [
           "Registry"
         ],
-        "description": "Returns the complete catalogue in deterministic path order. No pagination. Report counts include distinct active public reports with current claims. Display metadata is null for catalogues awaiting refresh.",
+        "description": "Returns the complete catalogue in deterministic path order. No pagination. Claim counts include current claims of active public reports, split by property. Display metadata is null for catalogues awaiting refresh.",
         "security": [
           {},
           {
@@ -1453,16 +1453,6 @@
                               "panic_count": {
                                 "type": "integer"
                               },
-                              "report_count": {
-                                "type": "integer"
-                              },
-                              "report_ids": {
-                                "type": "array",
-                                "items": {
-                                  "type": "integer",
-                                  "minimum": 1
-                                }
-                              },
                               "category": {
                                 "enum": [
                                   "function",
@@ -1500,8 +1490,6 @@
                             "required": [
                               "no_ub_count",
                               "panic_count",
-                              "report_count",
-                              "report_ids",
                               "category",
                               "trait_path",
                               "self_type",

@@ -641,7 +641,7 @@ textarea {
 .catalog-row,
 .api-family > summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 120px;
+  grid-template-columns: minmax(0, 1fr) minmax(140px, 30%);
   gap: 16px;
   align-items: baseline;
 }
@@ -687,8 +687,8 @@ textarea {
     14px "Times New Roman",
     serif;
 }
-.api-report-count {
-  white-space: nowrap;
+.api-claim-count {
+  overflow-wrap: anywhere;
 }
 .api-family > summary {
   cursor: pointer;
@@ -721,10 +721,10 @@ textarea {
   .catalog-columns,
   .catalog-row,
   .api-family > summary {
-    grid-template-columns: minmax(0, 1fr) 76px;
+    grid-template-columns: minmax(0, 1fr) minmax(100px, 35%);
     gap: 8px;
   }
-  .api-report-count {
+  .api-claim-count {
     font-size: 14px;
   }
   .implementation-count {

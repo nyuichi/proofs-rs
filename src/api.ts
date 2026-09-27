@@ -239,9 +239,7 @@ api.get("/crates/:name/:version/apis", async (c) => {
   const items = await rows(
     c.env.DB,
     `SELECT a.*,m.category,m.trait_path,m.self_type,m.method_name,m.is_blanket,
-      ${count("no_ub")} no_ub_count,${count("panic_contract")} panic_count,
-      (SELECT COUNT(DISTINCT p.id) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id WHERE c.api_item_id=a.id AND ${activeReport} AND ${latest}) report_count,
-      (SELECT GROUP_CONCAT(DISTINCT p.id) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id WHERE c.api_item_id=a.id AND ${activeReport} AND ${latest}) report_ids
+      ${count("no_ub")} no_ub_count,${count("panic_contract")} panic_count
      FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id
      LEFT JOIN api_item_metadata m ON m.api_item_id=a.id
      WHERE cr.name=? AND rel.version=? AND a.display_path LIKE ? ORDER BY a.display_path,a.id`,
@@ -250,10 +248,7 @@ api.get("/crates/:name/:version/apis", async (c) => {
     "%" + (c.req.query("q") || "") + "%",
   );
   return c.json({
-    items: items.map((item: any) => ({
-      ...item,
-      report_ids: item.report_ids ? item.report_ids.split(",").map(Number) : [],
-    })),
+    items,
     next_cursor: null,
   });
 });

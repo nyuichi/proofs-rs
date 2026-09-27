@@ -10,11 +10,11 @@ const api = (overrides: Partial<CatalogAPI>): CatalogAPI => ({
   kind: "function",
   signature: "pub fn f()",
   is_unsafe: 0,
-  report_count: 0,
-  report_ids: [],
+  panic_count: 0,
+  no_ub_count: 0,
   ...overrides,
 });
-test("catalogue groups methods, links single implementations and deduplicates family reports", () => {
+test("catalogue groups methods, links single implementations and aggregates family claims", () => {
   const items = [
     api({ id: "f" }),
     api({
@@ -43,8 +43,8 @@ test("catalogue groups methods, links single implementations and deduplicates fa
         trait_path: "sample::Read",
         self_type: self,
         method_name: "read",
-        report_count: 1,
-        report_ids: [7],
+        panic_count: 1,
+        no_ub_count: 2,
         is_unsafe: 1,
       }),
     ),
@@ -68,11 +68,13 @@ test("catalogue groups methods, links single implementations and deduplicates fa
       "Blanket implementations",
     ],
   );
+  assert.equal(d.querySelector(".catalog-columns")!.textContent, "APIClaims");
+  assert.equal(d.querySelector(".api-claim-count")!.textContent, "—");
   assert.equal(d.querySelectorAll("details").length, 1);
   assert.equal(d.querySelectorAll("details[open]").length, 0);
   assert.match(
     d.querySelector("summary")!.textContent!,
-    /2 implementations.*1 report/,
+    /2 implementations.*Panic contract \(2\) \/ No undefined behavior \(4\)/,
   );
   assert(d.querySelector("summary .unsafe"));
   assert.equal(d.querySelectorAll("details a").length, 2);
@@ -98,8 +100,8 @@ test("hex metadata keeps identities and renders 160 FromHex impls plus direct To
     ...a,
     ...metadata.get(a.canonical_key),
     id: String(i),
-    report_count: 0,
-    report_ids: [],
+    panic_count: 0,
+    no_ub_count: 0,
   }));
   const d = new JSDOM(renderAPICatalog(items, "hex")).window.document;
   assert.equal(d.querySelectorAll("details").length, 1);

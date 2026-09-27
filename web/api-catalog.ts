@@ -9,8 +9,8 @@ export interface CatalogAPI {
   self_type?: string | null;
   method_name?: string | null;
   is_blanket?: number | null;
-  report_count: number;
-  report_ids?: number[];
+  panic_count: number;
+  no_ub_count: number;
 }
 const esc = (value: string) =>
   value.replace(
@@ -51,12 +51,19 @@ export function renderAPICatalog(apis: CatalogAPI[], crate: string): string {
     s.startsWith(prefix) ? s.slice(prefix.length) : s;
   const unsafe = (yes: boolean) =>
     yes ? ' <strong class="unsafe">unsafe</strong>' : "";
-  const reportCount = (n: number) =>
-    `<span class="api-report-count${n ? "" : " muted"}">${n} ${n === 1 ? "report" : "reports"}</span>`;
+  const claimCounts = (a: Pick<CatalogAPI, "panic_count" | "no_ub_count">) => {
+    const text = [
+      a.panic_count ? `Panic contract (${a.panic_count})` : "",
+      a.no_ub_count ? `No undefined behavior (${a.no_ub_count})` : "",
+    ]
+      .filter(Boolean)
+      .join(" / ");
+    return `<span class="api-claim-count${text ? "" : " muted"}">${text || "—"}</span>`;
+  };
   const link = (a: CatalogAPI, text: string) =>
     `<a class="api-name" href="#/api/${encodeURIComponent(a.id)}">${esc(text)}</a>`;
   const row = (a: CatalogAPI, text: string, keyword = "fn ") =>
-    `<div class="catalog-row"><span><span class="api-keyword">${keyword}</span>${link(a, text)}${unsafe(!!a.is_unsafe)}</span>${reportCount(a.report_count)}</div>`;
+    `<div class="catalog-row"><span><span class="api-keyword">${keyword}</span>${link(a, text)}${unsafe(!!a.is_unsafe)}</span>${claimCounts(a)}</div>`;
   const data = apis
     .map(describe)
     .sort(
@@ -104,10 +111,14 @@ export function renderAPICatalog(apis: CatalogAPI[], crate: string): string {
           .sort(([a], [b]) => cmp(a, b))
           .map(([name, impls]) => {
             if (impls.length === 1) return row(impls[0].api, name);
-            const reports = new Set(
-              impls.flatMap((a) => a.api.report_ids || []),
+            const counts = impls.reduce(
+              (sum, a) => ({
+                panic_count: sum.panic_count + a.api.panic_count,
+                no_ub_count: sum.no_ub_count + a.api.no_ub_count,
+              }),
+              { panic_count: 0, no_ub_count: 0 },
             );
-            return `<details class="api-family"><summary><span><span class="api-keyword">fn </span><code>${esc(name)}</code>${unsafe(impls.some((a) => !!a.api.is_unsafe))}<span class="implementation-count">${impls.length} implementations</span></span>${reportCount(reports.size)}</summary><div class="api-implementations">${impls
+            return `<details class="api-family"><summary><span><span class="api-keyword">fn </span><code>${esc(name)}</code>${unsafe(impls.some((a) => !!a.api.is_unsafe))}<span class="implementation-count">${impls.length} implementations</span></span>${claimCounts(counts)}</summary><div class="api-implementations">${impls
               .sort((a, b) => cmp(a.self, b.self) || cmp(a.api.id, b.api.id))
               .map((a) => row(a.api, `impl ${trait} for ${local(a.self)}`, ""))
               .join("")}</div></details>`;
@@ -120,7 +131,7 @@ export function renderAPICatalog(apis: CatalogAPI[], crate: string): string {
   if (!apis.length) return "<p>No APIs.</p>";
   const blanket = traits(true);
   return (
-    '<div class="catalog-columns"><span>API</span><span>Reports</span></div>' +
+    '<div class="catalog-columns"><span>API</span><span>Claims</span></div>' +
     section(
       "Functions",
       data

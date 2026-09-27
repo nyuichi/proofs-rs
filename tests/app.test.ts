@@ -2971,7 +2971,7 @@ test("catalogue, crate and comment reads batch database round trips without chan
   assert.equal((await read("/crates")).body.total_count, 0);
 });
 
-test("crate API catalogue returns all entries and counts distinct active reports", async () => {
+test("crate API catalogue returns all entries and counts active claims", async () => {
   const { db, request } = await fixture();
   for (let n = 0; n < 40; n++)
     db.prepare("INSERT INTO api_items VALUES(?,?,?,?,?,?,?,?)").run(
@@ -2991,13 +2991,13 @@ test("crate API catalogue returns all entries and counts distinct active reports
   assert.equal(result.body.items.length, 42);
   assert.equal(result.body.next_cursor, null);
   const safe = result.body.items.find((a: any) => a.id === "safe");
-  assert.equal(safe.report_count, 1);
-  assert.deepEqual(safe.report_ids, [published.body.id]);
+  assert.equal(safe.no_ub_count, 1);
+  assert.equal(safe.panic_count, 0);
   db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(
     published.body.id,
   );
   assert.equal(
-    (await read()).body.items.find((a: any) => a.id === "safe").report_count,
+    (await read()).body.items.find((a: any) => a.id === "safe").no_ub_count,
     0,
   );
   assert.equal(
