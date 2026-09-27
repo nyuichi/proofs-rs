@@ -4,6 +4,8 @@ language = "en"
 src = "src"
 
 [output.html]
+default-theme = "light"
+preferred-dark-theme = "light"
 site-url = "/book/"
 no-section-label = true
 smart-punctuation = false
