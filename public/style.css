@@ -730,11 +730,11 @@ textarea {
 }
 .report-api-claims {
   margin: 0;
-  padding: 0 0 6px 20px;
+  padding: 0 0 8px 20px;
   border-bottom: 1px solid #ccc;
 }
 .report-api-claim {
-  padding: 2px 0;
+  padding: 3px 0;
 }
 .report-api-claim p {
   margin: 2px 0;

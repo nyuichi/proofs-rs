@@ -163,6 +163,14 @@ test("report body removes redundant labels and groups claims by API with revisio
   );
   assert.equal(d.querySelectorAll('a[href="#/api/api-1"]').length, 1);
   assert.equal(d.querySelectorAll(".report-api-claim").length, 2);
+  assert.equal(
+    d.querySelector(".report-api-claim a").textContent,
+    "Panic contract",
+  );
+  assert(!d.querySelector(".report-api-claims").textContent.includes("stars"));
+  assert(
+    !d.querySelector(".report-api-claims").textContent.includes("Claim 1"),
+  );
   assert.equal(d.querySelectorAll('a[href$="?report_revision=3"]').length, 2);
   assert(
     ![...d.querySelectorAll("h2")].some((n: any) =>
