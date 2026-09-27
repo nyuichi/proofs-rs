@@ -734,9 +734,6 @@ textarea {
   border-bottom: 1px solid #ccc;
 }
 .report-api-claim {
-  padding: 3px 0;
-}
-.report-api-claim p {
   margin: 2px 0;
   overflow-wrap: anywhere;
 }

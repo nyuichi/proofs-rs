@@ -456,12 +456,23 @@ function reportAPIs(c: any) {
       hideCounts: true,
       expandFamilies: true,
       details: (api) =>
-        `<div class="report-api-claims">${groups
-          .get(api.id)!
-          .map(
-            (claim) =>
-              `<article class="report-api-claim"><p><a href="#/claim/${enc(claim.id)}?report_revision=${enc(String(claim.report_revision))}">Claim #${esc(claim.claim_number)} · ${esc(prop(claim.property))}</a></p>${claim.explanation ? `<p class="plain-text">${esc(claim.explanation)}</p>` : ""}</article>`,
-          )
+        `<div class="report-api-claims">${["panic_contract", "no_ub"]
+          .map((property) => {
+            const claims = groups
+              .get(api.id)!
+              .filter((claim) => claim.property === property);
+            if (!claims.length) return "";
+            const label =
+              property === "panic_contract"
+                ? "Panic contracts"
+                : "No undefined behavior";
+            return `<p class="report-api-claim">${label}: ${claims
+              .map(
+                (claim) =>
+                  `<a href="#/claim/${enc(claim.id)}?report_revision=${enc(String(claim.report_revision))}">Claim #${esc(claim.claim_number)}</a>`,
+              )
+              .join(", ")}</p>`;
+          })
           .join("")}</div>`,
     },
   )}</section>`;
