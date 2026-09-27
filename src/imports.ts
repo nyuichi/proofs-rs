@@ -242,7 +242,12 @@ function resolveEmptyPaths(value: any, paths: any): any {
   return result;
 }
 
-export function extractAPIs(doc: any, crate: string, version: string) {
+export function extractAPIs(
+  doc: any,
+  crate: string,
+  version: string,
+  metadata?: Map<string, any>,
+) {
   if (!FORMATS.includes(doc.format_version))
     throw new Fault(422, "unsupported_rustdoc_format");
   if (doc.crate_version && doc.crate_version !== version)
@@ -310,6 +315,28 @@ export function extractAPIs(doc: any, crate: string, version: string) {
       signature: sig,
       upstream_url: link,
     });
+    if (metadata) {
+      const imp = owner && canonicalPaths(owner.impl);
+      const trait = owner?.trait
+        ? index[owner.impl.trait?.id]?.inner?.trait
+          ? owner.trait
+          : (imp.trait?.path || owner.trait.replace(/<.*$/, "")) +
+            args(imp.trait?.args)
+        : null;
+      metadata.set(name, {
+        category: owner?.trait
+          ? "trait"
+          : !owner
+            ? "function"
+            : fn.sig.inputs?.[0]?.[0] === "self"
+              ? "method"
+              : "associated",
+        trait_path: trait,
+        self_type: owner ? owner.selfType || typ(imp.for) : null,
+        method_name: path.at(-1),
+        is_blanket: owner?.trait && owner.impl.blanket_impl != null ? 1 : 0,
+      });
+    }
     if (output.size > 20000) throw new Fault(422, "api_catalog_too_large");
   }
   function walk(
@@ -537,10 +564,12 @@ export async function refreshCatalog(env: Env, releaseId: number) {
   if (!snapshot) throw new Fault(404, "snapshot_not_found");
   const object = await env.ARCHIVE.get(snapshot.r2_key);
   if (!object) throw new Fault(502, "snapshot_missing");
+  const metadata = new Map<string, any>();
   const apis = extractAPIs(
     JSON.parse(await object.text()),
     snapshot.name,
     snapshot.version,
+    metadata,
   );
   let added = 0;
   for (let i = 0; i < apis.length; i += 50) {
@@ -567,6 +596,7 @@ export async function refreshCatalog(env: Env, releaseId: number) {
       0,
     );
   }
+  await saveMetadata(env.DB, releaseId, metadata);
   return { indexed: apis.length, added };
 }
 importRoutes.post(
@@ -774,9 +804,10 @@ export async function importJob(env: Env, id: string) {
         new Response(bytes).body!.pipeThrough(new DecompressionStream("gzip")),
         30 * 1024 * 1024,
       );
+    const metadata = new Map<string, any>();
     const raw = new TextDecoder().decode(bytes),
       doc = JSON.parse(raw),
-      apis = extractAPIs(doc, rel.name, rel.version),
+      apis = extractAPIs(doc, rel.name, rel.version, metadata),
       digest = await hash(raw),
       r2key = `rustdoc/${rel.name}/${rel.version}/${digest}.json`;
     await env.ARCHIVE.put(r2key, raw, {
@@ -804,6 +835,7 @@ export async function importJob(env: Env, id: string) {
             ),
           ),
       );
+    await saveMetadata(db, rel.id, metadata);
     await batch(db, [
       stmt(
         db,
@@ -856,5 +888,34 @@ export async function importJob(env: Env, id: string) {
       id,
     ).run();
     return !retry;
+  }
+}
+
+async function saveMetadata(
+  db: D1Database,
+  releaseId: number,
+  metadata: Map<string, any>,
+) {
+  const entries = [...metadata];
+  for (let i = 0; i < entries.length; i += 50) {
+    await db.batch(
+      await Promise.all(
+        entries
+          .slice(i, i + 50)
+          .map(async ([key, m]) =>
+            stmt(
+              db,
+              "INSERT INTO api_item_metadata(api_item_id,category,trait_path,self_type,method_name,is_blanket) SELECT id,?,?,?,?,? FROM api_items WHERE release_id=? AND canonical_key=? ON CONFLICT(api_item_id) DO UPDATE SET category=excluded.category,trait_path=excluded.trait_path,self_type=excluded.self_type,method_name=excluded.method_name,is_blanket=excluded.is_blanket",
+              m.category,
+              m.trait_path,
+              m.self_type,
+              m.method_name,
+              m.is_blanket,
+              releaseId,
+              key,
+            ),
+          ),
+      ),
+    );
   }
 }

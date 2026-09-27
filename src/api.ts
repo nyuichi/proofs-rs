@@ -362,28 +362,40 @@ api.get(
   ...operation(
     "List crate APIs",
     S.list(
-      S.apiItem.extend({ no_ub_count: S.integer, panic_count: S.integer }),
+      S.apiItem.extend({
+        no_ub_count: S.integer,
+        panic_count: S.integer,
+        category: S.nullableString,
+        trait_path: S.nullableString,
+        self_type: S.nullableString,
+        method_name: S.nullableString,
+        is_blanket: S.flag.nullable(),
+      }),
     ),
-    { tags: ["Crates"], auth: "optional", query: S.search },
+    {
+      tags: ["Crates"],
+      auth: "optional",
+      query: S.z.object({ q: S.string.optional() }),
+    },
   ),
   async (c) => {
     const count = (property: string) =>
       `(SELECT COUNT(*) FROM claims c JOIN reports p ON p.id=c.report_id JOIN claim_revisions r ON r.claim_id=c.id WHERE c.api_item_id=a.id AND c.property='${property}' AND ${activeReport} AND ${latest})`;
-    return c.json(
-      await listing(
-        c,
-        `SELECT a.*,${count("no_ub")} no_ub_count,${count("panic_contract")} panic_count FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id WHERE cr.name=? AND rel.version=? AND a.display_path LIKE ?`,
-        [
-          c.req.param("name"),
-          c.req.param("version"),
-          "%" + (c.req.query("q") || "") + "%",
-        ],
-        [
-          { sql: "a.display_path", key: "display_path" },
-          { sql: "a.id", key: "id" },
-        ],
-      ),
+    const items = await rows(
+      c.env.DB,
+      `SELECT a.*,m.category,m.trait_path,m.self_type,m.method_name,m.is_blanket,
+      ${count("no_ub")} no_ub_count,${count("panic_contract")} panic_count
+     FROM api_items a JOIN releases rel ON rel.id=a.release_id JOIN crates cr ON cr.id=rel.crate_id
+     LEFT JOIN api_item_metadata m ON m.api_item_id=a.id
+     WHERE cr.name=? AND rel.version=? AND a.display_path LIKE ? ORDER BY a.display_path,a.id`,
+      c.req.param("name"),
+      c.req.param("version"),
+      "%" + (c.req.query("q") || "") + "%",
     );
+    return c.json({
+      items,
+      next_cursor: null,
+    });
   },
 );
 api.get(
