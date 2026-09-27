@@ -312,16 +312,26 @@ async function cratePage(name: string) {
   async function load() {
     const data = await request(`/crates/${enc(name)}/${enc(version)}/apis`);
     box.innerHTML = renderAPICatalog(data.items, name);
+    root.querySelector("#apis-heading")!.textContent =
+      `APIs (${data.items.length})`;
   }
-  const results = await Promise.allSettled([
-    load(),
-    claimsList(
-      `/crates/${enc(name)}/${enc(version)}/reports`,
-      root.querySelector<HTMLElement>("#crate-reports")!,
-      0,
-      (report: any) => reportSummary(report, true),
-    ),
-  ]);
+  async function loadReports() {
+    const reports: any[] = [];
+    let cursor: string | number | null = 0;
+    do {
+      const page = await request(
+        `/crates/${enc(name)}/${enc(version)}/reports?cursor=${enc(String(cursor))}`,
+      );
+      reports.push(...page.items);
+      cursor = page.next_cursor ?? null;
+    } while (cursor !== null);
+    root.querySelector("#reports-heading")!.textContent =
+      `Reports (${reports.length})`;
+    root.querySelector("#crate-reports")!.innerHTML =
+      reports.map((report) => reportSummary(report, true)).join("") ||
+      "<p>No results.</p>";
+  }
+  const results = await Promise.allSettled([load(), loadReports()]);
   for (const result of results)
     if (result.status === "rejected") throw result.reason;
   if (section === "apis" || section === "reports") {
