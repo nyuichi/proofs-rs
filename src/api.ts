@@ -182,11 +182,7 @@ api.get("/crates", async (c) => {
   const published = `EXISTS(SELECT 1 FROM releases rel JOIN reports p ON p.release_id=rel.id WHERE rel.crate_id=cr.id AND ${activeReport})`;
   const filter = "cr.name LIKE ? ESCAPE '\\'";
   const query = "%" + (c.req.query("q") || "").replace(/[\\%_]/g, "\\$&") + "%";
-  const counts = await one(
-    c.env.DB,
-    `SELECT COUNT(*) total_count,COALESCE(SUM(${filter}),0) matching_count FROM crates cr WHERE ${published}`,
-    query,
-  );
+  let counts: any;
   const data = await listing(
     c,
     `SELECT cr.*,
@@ -197,6 +193,19 @@ api.get("/crates", async (c) => {
     FROM crates cr WHERE ${filter} AND ${published}`,
     [query],
     [{ sql: "cr.name", key: "name" }],
+    undefined,
+    {
+      statements: [
+        stmt(
+          c.env.DB,
+          `SELECT COUNT(*) total_count,COALESCE(SUM(${filter}),0) matching_count FROM crates cr WHERE ${published}`,
+          query,
+        ),
+      ],
+      check: ([result]) => {
+        counts = result.results[0];
+      },
+    },
   );
   return c.json({ ...data, ...counts });
 });
@@ -694,14 +703,27 @@ for (const kind of ["report", "claim"] as const) {
 }
 const commentSelect = `SELECT cm.*,u.username,COALESCE((SELECT SUM(value) FROM report_comment_votes WHERE comment_id=cm.id),0) score,(SELECT value FROM report_comment_votes WHERE comment_id=cm.id AND user_id=?) my_vote,(SELECT COUNT(*) FROM report_comments ch WHERE ch.reply_to_id=cm.id) reply_count FROM report_comments cm LEFT JOIN users u ON u.id=cm.author_id`;
 api.get("/reports/:id/comments", async (c) => {
-  const q = await report(c);
+  const id = positive(c.req.param("id"));
   return c.json(
     await listing(
       c,
-      commentSelect + " WHERE cm.report_id=? AND cm.reply_to_id IS ?",
-      [c.get("user")?.id || "", q.id, c.req.query("parent_id") || null],
+      commentSelect +
+        " WHERE cm.report_id=? AND cm.reply_to_id IS ? AND EXISTS(SELECT 1 FROM reports p WHERE p.id=cm.report_id AND p.visibility='public')",
+      [c.get("user")?.id || "", id, c.req.query("parent_id") || null],
       [{ sql: "cm.sequence_no", key: "sequence_no" }],
       publicComment,
+      {
+        statements: [
+          stmt(
+            c.env.DB,
+            "SELECT id FROM reports WHERE id=? AND visibility='public'",
+            id,
+          ),
+        ],
+        check: ([result]) => {
+          if (!result.results.length) throw new Fault(404, "report_not_found");
+        },
+      },
     ),
   );
 });
@@ -954,15 +976,13 @@ for (const kind of ["report", "claim"] as const) {
     ),
   );
 }
-api.get("/tools", async (c) =>
-  c.json({
-    items: await rows(c.env.DB, "SELECT * FROM tools ORDER BY name"),
-    versions: await rows(
-      c.env.DB,
-      "SELECT * FROM tool_versions ORDER BY tool_id,version",
-    ),
-  }),
-);
+api.get("/tools", async (c) => {
+  const [items, versions] = await c.env.DB.batch<any>([
+    stmt(c.env.DB, "SELECT * FROM tools ORDER BY name"),
+    stmt(c.env.DB, "SELECT * FROM tool_versions ORDER BY tool_id,version"),
+  ]);
+  return c.json({ items: items.results, versions: versions.results });
+});
 api.get("/tool-versions/:id", async (c) => {
   const version = await one(
     c.env.DB,
@@ -974,32 +994,34 @@ api.get("/tool-versions/:id", async (c) => {
 });
 api.get("/tool-versions/:id/reports", async (c) => {
   const id = c.req.param("id");
-  if (!(await one(c.env.DB, "SELECT id FROM tool_versions WHERE id=?", id)))
-    throw new Fault(404, "tool_version_not_found");
   return c.json(
     await listing(
       c,
       publicReport + ` WHERE tv.id=? AND ${activeReport} AND ${reportLatest}`,
       [id],
       [{ sql: "p.id", key: "id", desc: true }],
+      undefined,
+      {
+        statements: [
+          stmt(c.env.DB, "SELECT id FROM tool_versions WHERE id=?", id),
+        ],
+        check: ([result]) => {
+          if (!result.results.length)
+            throw new Fault(404, "tool_version_not_found");
+        },
+      },
     ),
   );
 });
 api.get("/tools/:slug", async (c) => {
-  const t = await one(
-    c.env.DB,
-    "SELECT * FROM tools WHERE id=?",
-    c.req.param("slug"),
-  );
+  const id = c.req.param("slug");
+  const [tools, versions] = await c.env.DB.batch<any>([
+    stmt(c.env.DB, "SELECT * FROM tools WHERE id=?", id),
+    stmt(c.env.DB, "SELECT * FROM tool_versions WHERE tool_id=?", id),
+  ]);
+  const t = tools.results[0];
   if (!t) throw new Fault(404, "tool_not_found");
-  return c.json({
-    ...t,
-    versions: await rows(
-      c.env.DB,
-      "SELECT * FROM tool_versions WHERE tool_id=?",
-      t.id,
-    ),
-  });
+  return c.json({ ...t, versions: versions.results });
 });
 api.get("/tools/:slug/reports", async (c) =>
   c.json(

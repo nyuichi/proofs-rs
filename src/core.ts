@@ -268,8 +268,38 @@ export const reportJoins = `FROM reports p JOIN report_revisions rr ON rr.report
 export const publicReport = `SELECT ${reportColumns} ${reportJoins}`;
 export const publicClaim = `SELECT c.id,(r.position+1) claim_number,c.report_id,c.api_item_id,c.property,c.created_at,r.report_revision,r.position,r.title,r.precondition,r.explanation,r.trusted_assumptions,r.evidence_url,r.limitations,a.display_path,a.is_unsafe,a.signature,a.upstream_url,p.author_id,p.withdrawn_at,p.visibility,rr.title report_title,rr.explanation shared_explanation,rr.trusted_assumptions shared_trusted_assumptions,rr.evidence_url shared_evidence_url,rr.limitations shared_limitations,rr.environment,rr.tool_version_id,cr.name crate,rel.version,u.username,t.name tool,tv.version tool_version,tv.limitations tool_limitations,tv.limitations_updated_at tool_limitations_updated_at,(SELECT MAX(v.revision_no) FROM report_revisions v WHERE v.report_id=p.id) latest_report_revision,(SELECT COUNT(*) FROM claim_stars s WHERE s.claim_id=c.id) star_count,(SELECT COUNT(*) FROM report_stars s WHERE s.report_id=p.id) report_star_count,(SELECT COUNT(*) FROM report_comments cm WHERE cm.report_id=p.id AND cm.deleted_at IS NULL AND cm.visibility='public') report_comment_count,${karmaPolicy.sql("p.author_id")} author_karma,EXISTS(SELECT 1 FROM claim_revisions x WHERE x.claim_id=c.id AND x.report_revision=(SELECT MAX(v.revision_no) FROM report_revisions v WHERE v.report_id=p.id)) in_current_report FROM claims c JOIN claim_revisions r ON r.claim_id=c.id JOIN api_items a ON a.id=c.api_item_id JOIN reports p ON p.id=c.report_id JOIN report_revisions rr ON rr.report_id=p.id AND rr.revision_no=r.report_revision JOIN releases rel ON rel.id=p.release_id JOIN crates cr ON cr.id=rel.crate_id LEFT JOIN users u ON u.id=p.author_id JOIN tool_versions tv ON tv.id=rr.tool_version_id JOIN tools t ON t.id=tv.tool_id`;
 export const latest = `r.report_revision=(SELECT MAX(v.revision_no) FROM report_revisions v WHERE v.report_id=p.id)`;
-// Keyset cursors keep pagination stable when new rows are inserted between requests.
+// Preflight reads share the listing transaction; check runs before rows are exposed.
+type ListingPreflight = {
+  statements: D1PreparedStatement[];
+  check: (results: D1Result<any>[]) => void;
+};
 export async function listing(
+  c: Ctx,
+  sql: string,
+  bindings: unknown[],
+  order: { sql: string; key: string; desc?: boolean }[],
+  map: (row: any) => any = (x) => x,
+  preflight?: ListingPreflight,
+) {
+  let query: ReturnType<typeof prepareListing>;
+  try {
+    query = prepareListing(c, sql, bindings, order, map);
+  } catch (error) {
+    // Preserve not-found precedence over malformed cursors on guarded routes.
+    if (preflight) preflight.check(await c.env.DB.batch(preflight.statements));
+    throw error;
+  }
+  if (!preflight)
+    return query.finish((await query.statement.all<any>()).results);
+  const results = await c.env.DB.batch<any>([
+    ...preflight.statements,
+    query.statement,
+  ]);
+  preflight.check(results.slice(0, -1));
+  return query.finish(results.at(-1)!.results);
+}
+// Keyset cursors keep pagination stable when new rows are inserted between requests.
+function prepareListing(
   c: Ctx,
   sql: string,
   bindings: unknown[],
@@ -317,23 +347,27 @@ export async function listing(
     " ORDER BY " +
     order.map((o) => o.sql + (o.desc ? " DESC" : " ASC")).join(",") +
     " LIMIT 31";
-  const result = await rows(c.env.DB, sql, ...bindings),
-    items = result.slice(0, 30),
-    last = items.at(-1);
   return {
-    items: items.map(map),
-    next_cursor:
-      result.length > 30
-        ? btoa(
-            String.fromCharCode(
-              ...new TextEncoder().encode(
-                JSON.stringify(order.map((o) => last[o.key])),
-              ),
-            ),
-          )
-            .replace(/\+/g, "-")
-            .replace(/\//g, "_")
-            .replace(/=+$/, "")
-        : null,
+    statement: stmt(c.env.DB, sql, ...bindings),
+    finish(result: any[]) {
+      const items = result.slice(0, 30),
+        last = items.at(-1);
+      return {
+        items: items.map(map),
+        next_cursor:
+          result.length > 30
+            ? btoa(
+                String.fromCharCode(
+                  ...new TextEncoder().encode(
+                    JSON.stringify(order.map((o) => last[o.key])),
+                  ),
+                ),
+              )
+                .replace(/\+/g, "-")
+                .replace(/\//g, "_")
+                .replace(/=+$/, "")
+            : null,
+      };
+    },
   };
 }
