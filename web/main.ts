@@ -332,7 +332,7 @@ async function cratePage(name: string) {
 }
 async function apiPage(id: string) {
   const a = await request("/apis/" + enc(id));
-  root.innerHTML = `${breadcrumbs(crateCrumbs(a, "apis"))}<h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}" target="_blank" rel="noopener noreferrer">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="#/publish">Publish a report</a></p><h2>Claims</h2><div id="claims"></div>`;
+  root.innerHTML = `${breadcrumbs(crateCrumbs(a, "apis"))}<h1 class="code">${esc(a.display_path)}</h1>${a.is_unsafe ? "<p><strong>unsafe API — callers must uphold its safety requirements.</strong></p>" : ""}<pre class="signature">${esc(a.signature)}</pre><p><a href="${esc(a.upstream_url)}" target="_blank" rel="noopener noreferrer">Documentation on docs.rs</a></p><p class="meta">Target: ${esc(a.target)}. Catalogue uses the docs.rs build configuration.</p><p><a href="/book/publish-a-report.html">Publish a report</a></p><h2>Claims</h2><div id="claims"></div>`;
   await claimsList(
     "/apis/" + enc(id) + "/claims",
     root.querySelector("#claims")!,
@@ -783,42 +783,6 @@ async function toolsPage(id?: string) {
       )
       .join("") || "<p>No tools have been registered yet.</p>";
 }
-function publishGuide() {
-  root.innerHTML = `<section class="publish-guide"><h1>Publish a report</h1>
-<p>Publish your verification reports with <code>cargo proofs</code>.</p>
-<h2>Getting started with Kani</h2>
-<h3>1. Install</h3>
-<pre><code>cargo install cargo-proofs --locked</code></pre>
-<p class="meta">Requires Rust 1.91 or newer.</p>
-<h3>2. Set up your report</h3>
-<p>Run inside the crate you verified.</p>
-<pre><code>cargo proofs init --tool kani</code></pre>
-<p>Discovers <code>#[kani::proof_for_contract(...)]</code> harnesses and creates No UB and Panic contract claims.</p>
-<p>Edit <code>proofs.toml</code> to set the report title and check the tool version used for verification. You can also add an explanation, assumptions, limitations, and environment.</p>
-<details><summary>Example proofs.toml</summary><pre><code>[report]
-title = "Contract verification of my crate"
-# explanation = "What this report covers"
-# trusted_assumptions = "Assumptions used in verification"
-# limitations = "Scope restrictions"
-# environment = "Verification environment"
-
-[tool]
-name = "kani"
-version = "0.66.0" # Version used for verification</code></pre></details>
-<h3>3. Sign in</h3>
-<pre><code>cargo proofs login</code></pre>
-<p>Authorize the CLI in your browser with your GitHub account.</p>
-<h3>4. Preview and publish</h3>
-<p>Commit and push your source and Cargo.lock before recording verification.</p>
-<pre><code>cargo proofs run -- cargo kani</code></pre>
-<p>Only SARIF results with embedded logs are uploaded. Source stays on GitHub. No additional push is needed between run and publish.</p>
-<pre><code>cargo proofs publish --dry-run
-cargo proofs publish</code></pre>
-<p>The CLI prints a link to your published report. Run <code>cargo proofs publish</code> again to update the same report.</p>
-<p>Using another tool? See <a href="#/tools">Tools</a> for supported tools and instructions.</p>
-<p><a href="https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md" target="_blank" rel="noopener noreferrer">CLI documentation →</a></p>
-</section>`;
-}
 async function unsubscribe() {
   const p = current().searchParams;
   root.innerHTML =
@@ -864,10 +828,15 @@ async function route() {
         .filter(Boolean)
         .map(decodeURIComponent),
       [p, id] = parts;
+    if (p === "about" || p === "publish") {
+      const target = p === "about" ? "/book/" : "/book/publish-a-report.html";
+      root.innerHTML = `<p><a href="${target}">Continue in the Book</a></p>`;
+      location.replace(target);
+      return;
+    }
     pageShell(p, id);
     const publicPage =
       !p ||
-      p === "publish" ||
       [
         "crates",
         "crate",
@@ -928,8 +897,7 @@ async function route() {
     else if (p === "reports") {
       root.innerHTML = `<h1>Reports</h1><div id="reports">${loading}</div>`;
       await claimsList("/reports", root.querySelector("#reports")!);
-    } else if (p === "publish") publishGuide();
-    else if (p === "login") login();
+    } else if (p === "login") login();
     else if (p === "signup") await signup();
     else if (p === "terms-update") await termsUpdate();
     else if (p === "user") await activity(id);
