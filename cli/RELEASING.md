@@ -14,6 +14,33 @@ The `Release cargo-proofs` workflow publishes only `cli/` to crates.io. It does 
 
 The crate must already exist before crates.io accepts a Trusted Publisher configuration. See https://crates.io/docs/trusted-publishing.
 
+## After transferring the GitHub repository
+
+Transferring the repository does not update the crate's Trusted Publisher registration.
+The existing `cargo-proofs` crate does not need another bootstrap publication.
+
+Before the next release, open https://crates.io/crates/cargo-proofs/settings and
+replace the former `nyuichi/proofs-rs` publisher with:
+
+- Repository owner: `proofs-rs` (GitHub organization ID `334381853`)
+- Repository name: `proofs-rs`
+- Workflow filename: `release-cli.yml`
+- Environment name: `crates-io`
+
+Add and verify the new registration before removing the old publisher. The owner
+ID is part of the trust boundary; GitHub URL redirects do not migrate this trust.
+Keep the crate owner account separate from the Trusted Publisher repository owner.
+
+Confirm that the transferred repository still has the `crates-io` environment
+and that Actions permits `rust-lang/crates-io-auth-action@v1`. The publish job
+already requests `id-token: write` and uses that environment. Keep `bootstrap`
+disabled; do not create a long-lived token to work around a mismatched publisher.
+
+A successful package dry run does not test OIDC authentication. Verify the first
+new version's Trusted Publishing run after migration; do not replay an already
+published tag as a smoke test. The updated `repository` metadata reaches crates.io
+with the next published version.
+
 ## Subsequent releases
 
 1. Update `cli/Cargo.toml` and the package version in `cli/Cargo.lock` together in a PR. Keep the README current; crate contents are public even if the Git repository is private.
