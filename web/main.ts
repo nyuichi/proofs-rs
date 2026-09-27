@@ -1,3 +1,4 @@
+import { renderAPICatalog } from "./api-catalog";
 import { reproduceSection, bindReproduce } from "./reproduce";
 import { legal } from "./legal";
 const root = document.querySelector<HTMLElement>("#app")!;
@@ -145,7 +146,10 @@ function claimItem(c: any) {
   return `<article class="claim-item"><a href="#/claim/${enc(c.id)}?report_revision=${c.report_revision}">Claim #${esc(c.claim_number)} — ${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""} · ${c.star_count} stars</div><p class="meta"><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)} · v${c.report_revision}</a> · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)} · ${c.author_karma} karma${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
 }
 function reportItem(c: any) {
-  return `<article class="claim-item"><a href="#/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${esc(c.crate)} ${esc(c.version)} · ${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.star_count} stars · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
+  return reportSummary(c);
+}
+function reportSummary(c: any, hideCrate = false) {
+  return `<article class="claim-item"><a href="#/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${hideCrate ? "" : `${esc(c.crate)} ${esc(c.version)} · `}${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.star_count} stars · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
 }
 function pager(data: any, fn: (cursor: number) => any, container: HTMLElement) {
   if (data.next_cursor !== null && data.next_cursor !== undefined) {
@@ -165,7 +169,12 @@ function pager(data: any, fn: (cursor: number) => any, container: HTMLElement) {
     container.append(b);
   }
 }
-async function claimsList(path: string, container: HTMLElement, cursor = 0) {
+async function claimsList(
+  path: string,
+  container: HTMLElement,
+  cursor = 0,
+  renderReport = reportItem,
+) {
   const data = await request(
     path + (path.includes("?") ? "&" : "?") + "cursor=" + cursor,
   );
@@ -176,11 +185,11 @@ async function claimsList(path: string, container: HTMLElement, cursor = 0) {
       .map(
         path.endsWith("/claims") || path === "/me/starred-claims"
           ? claimItem
-          : reportItem,
+          : renderReport,
       )
       .join("") || (!cursor ? "<p>No results.</p>" : ""),
   );
-  pager(data, (n) => claimsList(path, container, n), container);
+  pager(data, (n) => claimsList(path, container, n, renderReport), container);
 }
 const loading = '<p data-loading role="status">Loading…</p>';
 async function adminCatalogs() {
@@ -284,7 +293,7 @@ async function cratePage(name: string) {
   const section = current().searchParams.get("section");
   const d = await request("/crates/" + enc(name) + "/releases");
   const version = current().searchParams.get("version") || d.default_version;
-  root.innerHTML = `${breadcrumbs([{ label: "crates", href: "#/crates" }])}<h1>${esc(name)}${version ? " " + esc(version) : ""}</h1>${d.description ? `<p>${esc(d.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(name)}${version ? "/" + enc(version) : ""}" target="_blank" rel="noopener noreferrer">crates.io</a></p>${version ? `<label>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label><h2 id="apis-heading" tabindex="-1">APIs</h2><div id="apis"><div class="table-wrap"><table><thead><tr><th>API</th><th>Claims</th></tr></thead><tbody id="api-rows"></tbody></table></div></div><h2 id="reports-heading" tabindex="-1">Reports</h2><div id="crate-reports">${loading}</div>` : "<p>No published versions.</p>"}`;
+  root.innerHTML = `${breadcrumbs([{ label: "crates", href: "#/crates" }])}<h1>${esc(name)}${version ? " " + esc(version) : ""}</h1>${d.description ? `<p>${esc(d.description)}</p>` : ""}<p><a href="https://crates.io/crates/${enc(name)}${version ? "/" + enc(version) : ""}" target="_blank" rel="noopener noreferrer">crates.io</a></p>${version ? `<label>Version <select id="version" aria-label="Version">${d.items.map((r: any) => `<option value="${esc(r.version)}" ${r.version === version ? "selected" : ""}>${esc(r.version)}${r.yanked ? " (yanked)" : ""}</option>`).join("")}</select></label><h2 id="apis-heading" tabindex="-1">APIs</h2><div id="apis">${loading}</div><h2 id="reports-heading" tabindex="-1">Reports</h2><div id="crate-reports">${loading}</div>` : "<p>No published versions.</p>"}`;
   if (!version) return;
   root
     .querySelector("#version")!
@@ -300,37 +309,17 @@ async function cratePage(name: string) {
       ),
     );
   const box = root.querySelector<HTMLElement>("#apis")!;
-  const body = root.querySelector<HTMLElement>("#api-rows")!;
-  async function load(cursor: any = 0) {
-    const data = await request(
-      `/crates/${enc(name)}/${enc(version)}/apis?cursor=${enc(String(cursor))}`,
-    );
-    body.insertAdjacentHTML(
-      "beforeend",
-      data.items
-        .map((a: any) => {
-          const counts =
-            [
-              a.panic_count ? `Panic contract (${a.panic_count})` : "",
-              a.no_ub_count ? `No undefined behavior (${a.no_ub_count})` : "",
-            ]
-              .filter(Boolean)
-              .join(" / ") || "—";
-          const prefix = name.replaceAll("-", "_") + "::";
-          const path = a.display_path.startsWith(prefix)
-            ? a.display_path.slice(prefix.length)
-            : a.display_path;
-          return `<tr><td><a class="api-name" href="#/api/${enc(a.id)}">${esc(path)}</a>${a.is_unsafe ? ' · <strong class="unsafe">unsafe</strong>' : ""}</td><td>${counts}</td></tr>`;
-        })
-        .join("") || (!cursor ? '<tr><td colspan="2">No APIs.</td></tr>' : ""),
-    );
-    pager(data, load, box);
+  async function load() {
+    const data = await request(`/crates/${enc(name)}/${enc(version)}/apis`);
+    box.innerHTML = renderAPICatalog(data.items, name);
   }
   const results = await Promise.allSettled([
     load(),
     claimsList(
       `/crates/${enc(name)}/${enc(version)}/reports`,
       root.querySelector<HTMLElement>("#crate-reports")!,
+      0,
+      (report: any) => reportSummary(report, true),
     ),
   ]);
   for (const result of results)

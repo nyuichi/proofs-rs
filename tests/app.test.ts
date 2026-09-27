@@ -1262,6 +1262,15 @@ test("frontend Book redirects, revision links and nested comment deletion", asyn
     )
     .replace(/import \{ legal \} from "\.\/legal";/, "")
     .replace(
+      /import \{ renderAPICatalog \} from "\.\/api-catalog";/,
+      "const renderAPICatalog = (() => {" +
+        readFileSync(
+          new URL("../web/api-catalog.ts", import.meta.url),
+          "utf8",
+        ).replaceAll("export ", "") +
+        "; return renderAPICatalog; })();",
+    )
+    .replace(
       /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
       "const {reproduceSection,bindReproduce}=(()=>{" +
         readFileSync(
@@ -1354,7 +1363,7 @@ test("frontend Book redirects, revision links and nested comment deletion", asyn
     (
       w.document.querySelector('.breadcrumbs a[href$="&section=apis"]') as any
     ).click();
-    await until("#api-rows");
+    await until("#apis .catalog-row");
     assert.equal(w.location.hash, "#/crate/sample?version=1.0.0&section=apis");
     assert.equal(scrolled.at(-1), "apis-heading");
     assert.equal(w.document.activeElement?.id, "apis-heading");
@@ -1788,6 +1797,15 @@ test("static page content renders before requests, remains usable, and survives 
       "document.body.dataset.bookRedirect = target",
     )
     .replace(/import \{ legal \} from "\.\/legal";/, "")
+    .replace(
+      /import \{ renderAPICatalog \} from "\.\/api-catalog";/,
+      "const renderAPICatalog = (() => {" +
+        readFileSync(
+          new URL("../web/api-catalog.ts", import.meta.url),
+          "utf8",
+        ).replaceAll("export ", "") +
+        "; return renderAPICatalog; })();",
+    )
     .replace(
       /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
       "const {reproduceSection,bindReproduce}=(()=>{" +
@@ -2968,4 +2986,40 @@ test("catalogue, crate and comment reads batch database round trips without chan
     [],
   );
   assert.equal((await read("/crates")).body.total_count, 0);
+});
+
+test("crate API catalogue returns all entries and counts active claims", async () => {
+  const { db, request } = await fixture();
+  for (let n = 0; n < 40; n++)
+    db.prepare("INSERT INTO api_items VALUES(?,?,?,?,?,?,?,?)").run(
+      `extra-${n}`,
+      1,
+      `sample::extra${n}`,
+      `sample::extra${n}`,
+      "function",
+      0,
+      "pub fn extra()",
+      "https://docs.rs",
+    );
+  const published = await request("/reports", "POST", reportInput);
+  assert.equal(published.status, 201);
+  const read = () => request("/crates/sample/1.0.0/apis", "GET", undefined, "");
+  const result = await read();
+  assert.equal(result.body.items.length, 42);
+  assert.equal(result.body.next_cursor, null);
+  const safe = result.body.items.find((a: any) => a.id === "safe");
+  assert.equal(safe.no_ub_count, 1);
+  assert.equal(safe.panic_count, 0);
+  db.prepare("UPDATE reports SET visibility='hidden' WHERE id=?").run(
+    published.body.id,
+  );
+  assert.equal(
+    (await read()).body.items.find((a: any) => a.id === "safe").no_ub_count,
+    0,
+  );
+  assert.equal(
+    (await request("/crates/sample/1.0.0/apis?q=extra", "GET", undefined, ""))
+      .body.items.length,
+    40,
+  );
 });
