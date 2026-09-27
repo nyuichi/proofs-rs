@@ -460,7 +460,7 @@ function reportAPIs(c: any) {
           .get(api.id)!
           .map(
             (claim) =>
-              `<article class="report-api-claim"><p><a href="#/claim/${enc(claim.id)}?report_revision=${enc(String(claim.report_revision))}">${esc(prop(claim.property))}</a></p>${claim.explanation ? `<p class="plain-text">${esc(claim.explanation)}</p>` : ""}</article>`,
+              `<article class="report-api-claim"><p><a href="#/claim/${enc(claim.id)}?report_revision=${enc(String(claim.report_revision))}">Claim #${esc(claim.claim_number)} · ${esc(prop(claim.property))}</a></p>${claim.explanation ? `<p class="plain-text">${esc(claim.explanation)}</p>` : ""}</article>`,
           )
           .join("")}</div>`,
     },
