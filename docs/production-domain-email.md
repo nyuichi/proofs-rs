@@ -1,8 +1,8 @@
 # Production domain and email activation
 
-Prepared in code; Cloudflare onboarding and owner deployment still required.
-Staging remains email-disabled. The Production workflow continues to require
-nyuichi to run it from main after that exact commit passes Staging.
+Cloudflare domain, OAuth and email onboarding must be configured before enabling those integrations.
+Staging remains email-disabled. The Production workflow deploys main automatically after CLI and service CI pass.
+Staging verification is optional and manual.
 
 ## Domain and OAuth
 
@@ -47,7 +47,8 @@ To pause sending, set `PRODUCTION_EMAIL_ENABLED=false` and run Production again.
 
 ## Activate
 
-After Staging succeeds, nyuichi runs Actions → Production → Run workflow → main.
+Merge the reviewed PR to main; Production runs CI and deploys automatically.
+For deployment-variable changes, use Actions → Production → Run workflow → main.
 No test mail is sent by deployment. It performs public read-only HTTP checks.
 Check `https://proofs.rs/api/v1/config` reports production, OAuth configured,
 email_disabled=false and email_configured=true after email activation.

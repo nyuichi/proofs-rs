@@ -20,9 +20,16 @@ the same paths and security headers as deployment. The book build externalizes
 mdBook’s inline scripts and styles to preserve the site’s Content Security Policy.
 CI and deployment workflows install the same pinned mdBook version.
 
+## CI and production
+
+Pull requests run CLI and service checks. Updates to `main` run the same checks,
+then automatically deploy production if every check succeeds. Protect `main` with
+required pull requests and CI checks. Production can also be rerun manually on
+`main`, including after changing deployment variables. See [operations](docs/operations.md#production-deployment-and-proofsrs).
+
 ## Staging
 
-Pushes to `main` run `.github/workflows/deploy.yml`. `scripts/provision.mjs` creates/reuses only resources named `proofs-rs-staging-*` and writes the ignored `wrangler.staging.json`. Staging is public on workers.dev, with no Cloudflare Access gate and `noindex` headers. Old Worker and database resources are not modified. The custom domain is intentionally left unconfigured.
+Run Actions → Staging → Run workflow and select the PR branch when staging verification is needed. This shared environment is overwritten by each run; only deploy trusted branches from this repository because the workflow uses staging credentials. Staging is not a production gate. `scripts/provision.mjs` creates/reuses only resources named `proofs-rs-staging-*` and writes the ignored `wrangler.staging.json`. Staging is public on workers.dev, with no Cloudflare Access gate and `noindex` headers. Old Worker and database resources are not modified. The custom domain is intentionally left unconfigured.
 
 Required GitHub Actions secrets:
 

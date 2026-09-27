@@ -1,7 +1,6 @@
 name: CLI and service checks
 on:
-  push:
-    branches: [main]
+  workflow_call:
   pull_request:
 permissions:
   contents: read

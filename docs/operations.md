@@ -77,33 +77,37 @@ staging alone gets fixture tools. Live import/email tests remain excluded.
 The Production workflow uses `wrangler.production.base.json`, generates an ignored
 `wrangler.production.json`, and creates `proofs-rs-production-reports-v1` D1/R2 plus
 `proofs-rs-production-reports-jobs`/`proofs-rs-production-reports-dead` Queues. Staging data is not
-copied. Email remains disabled. Production deploys require explicit approval from nyuichi
-and are dispatched through Actions (`Production` → `Run workflow`, branch `main`).
-An explicit request from nyuichi to an agent to deploy to production counts as that
-approval: the agent may dispatch the workflow on nyuichi's behalf using the authorized
-nyuichi account. No additional confirmation immediately before dispatch is required
-for the same approved scope. This is task-scoped delegation, not standing approval
-for unrelated deployments or destructive data operations. Pushes never deploy production.
-Only GitHub user ID `540144` (nyuichi), with triggering actor `nyuichi`, may execute
-or rerun Production. Before production credentials are accessed, a separate job
-checks that the exact selected commit has a successful Staging run from this repository
-on main. A newer push does not change the commit of an already approved run.
-If staging has not passed for the selected commit, Production fails without deploying;
-wait for Staging and start Production again. This promotes source commits, rebuilding
-with npm ci and the committed lockfile; it does not reuse a staging build artifact.
+copied. Email is controlled by `PRODUCTION_EMAIL_ENABLED`.
 
-Daily flow: push main → inspect Staging → follow the production link in its summary →
-nyuichi or an agent explicitly instructed by nyuichi dispatches Run workflow on main.
-If main advanced, first inspect that newer staging version and confirm that the selected
-changes remain within the approved scope. The authorization summary records the selected SHA and successful staging run.
+Daily flow: PR → CLI and service CI → merge to main → the same CI → automatic
+production deployment. `.github/workflows/cli.yml` runs on pull requests and is
+reused by Production through `workflow_call`, without passing deployment secrets.
+All CLI matrix jobs and the service job must succeed before deployment. The deploy
+job rebuilds the same SHA with the committed lockfile, then applies migrations,
+deploys the Worker, refreshes catalogues, configures secrets and runs smoke checks.
+Staging success and manual owner approval are not required.
 
-This workflow-level approval works while the repository is private. GitHub Free/Pro/Team
-only support environment required reviewers on public repositories. After making this
-repository public, native environment approval can replace manual dispatch: required
-reviewer nyuichi only, administrator bypass disabled, self-review allowed (otherwise the
-sole reviewer cannot approve their own push). Repository administrators and users able to
-change workflows/secrets can change this policy; the actor check does not replace GitHub
-repository access controls. Do not grant workflow write access to untrusted accounts.
+For optional PR verification, run Actions → Staging → Run workflow and select the
+PR branch in this repository. Staging is shared and each run replaces it. Deploy
+only trusted branches: staging workflows use credentials. Fork PRs need a reviewed
+branch in this repository before staging deployment.
+
+Production also supports Run workflow on main for operational configuration changes.
+Non-main runs cannot deploy. Production runs share a concurrency group and running
+deployments are not cancelled. Before any provisioning or migration, a run checks
+that its SHA is still the current main tip; outdated runs fail rather than redeploy
+an older commit. A newer push during deployment is handled by the subsequent run.
+
+Protect main with required PRs and successful service and CLI checks, including for
+administrators. The production environment must not require reviewer approval for
+automatic deployment. Repository administrators can still change workflows and
+protection settings; grant repository write access only to trusted contributors.
+
+For an incident, merge a fix or revert PR and let Production redeploy. There is no
+rollback workflow. Reverting code does not undo D1 migrations, R2 changes or sent
+email. Keep migrations backward-compatible with the previous application version;
+perform destructive schema changes separately after old code no longer needs them.
+A failed post-deployment smoke check does not automatically restore the prior version.
 
 Before custom-domain activation:
 

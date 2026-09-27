@@ -1,7 +1,5 @@
 name: Staging
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
@@ -60,4 +58,3 @@ jobs:
         run: |
           echo 'Staging deployed to ${{ steps.resources.outputs.url }}' >> "$GITHUB_STEP_SUMMARY"
           echo 'Commit: `${{ github.sha }}`' >> "$GITHUB_STEP_SUMMARY"
-          echo '[Approve production deployment](https://github.com/proofs-rs/proofs-rs/actions/workflows/production.yml): nyuichi selects **Run workflow** on **main** after reviewing staging. Production requires a successful staging run for the exact selected commit.' >> "$GITHUB_STEP_SUMMARY"
