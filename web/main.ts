@@ -266,7 +266,7 @@ function crateCrumbs(c: any, section: "apis" | "reports"): Crumb[] {
     { label: "crates", href: "#/crates" },
     { label: `${c.crate} ${c.version}`, href },
     {
-      label: section === "apis" ? "APIs" : "Reports",
+      label: section === "apis" ? "APIs" : "reports",
       href: `${href}&section=${section}`,
     },
   ];
