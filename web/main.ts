@@ -414,7 +414,46 @@ async function toolVersionPage(id: string) {
   );
 }
 function reportContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p><a href="${crateHref(c.crate, c.version)}">${esc(c.crate)} ${esc(c.version)}</a> · ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p class="report-tool">${toolLink(c)}</p>`;
+}
+function reportBody(c: any) {
+  return `${c.explanation ? `<div class="report-explanation plain-text">${esc(c.explanation)}</div>` : ""}
+    ${c.trusted_assumptions ? `<section class="report-section"><h2>Assumptions</h2><p class="plain-text">${esc(c.trusted_assumptions)}</p></section>` : ""}
+    ${c.evidence_url ? `<section class="report-section"><h2>Evidence</h2><p><a href="${esc(c.evidence_url)}" target="_blank" rel="noopener noreferrer">${esc(c.evidence_url)}</a></p></section>` : ""}
+    ${c.limitations || c.tool_limitations ? `<section class="report-section report-limitations"><h2>Limitations</h2>${c.limitations ? `<p class="plain-text">${esc(c.limitations)}</p>` : ""}${toolLimitations(c)}</section>` : ""}
+    ${c.environment ? `<details class="report-environment"><summary>Environment</summary><p class="plain-text">${esc(c.environment)}</p></details>` : ""}`;
+}
+function reportAPIs(c: any) {
+  const groups = new Map<string, any[]>();
+  for (const claim of c.claims) {
+    if (!groups.has(claim.api_item_id)) groups.set(claim.api_item_id, []);
+    groups.get(claim.api_item_id)!.push(claim);
+  }
+  const apis = [...groups].map(([id, claims]) => ({
+    ...claims[0],
+    id,
+    kind:
+      claims[0].kind ||
+      (claims[0].signature?.startsWith("impl") ? "method" : "function"),
+    panic_count: claims.filter((c) => c.property === "panic_contract").length,
+    no_ub_count: claims.filter((c) => c.property === "no_ub").length,
+  }));
+  return `<section class="report-apis"><h2>APIs (${apis.length})</h2>${renderAPICatalog(
+    apis,
+    c.crate,
+    {
+      hideEmpty: true,
+      expandFamilies: true,
+      details: (api) =>
+        `<div class="report-api-claims">${groups
+          .get(api.id)!
+          .map(
+            (claim) =>
+              `<article class="report-api-claim"><p><a href="#/claim/${enc(claim.id)}?report_revision=${enc(String(claim.report_revision))}">Claim #${esc(claim.claim_number)} — ${esc(claim.title || prop(claim.property))}</a> <span class="meta">· ${esc(prop(claim.property))} · ${claim.star_count} stars</span></p>${claim.precondition ? `<p class="claim-precondition"><strong>Preconditions</strong> <span class="plain-text">${esc(claim.precondition)}</span></p>` : ""}${claim.explanation ? `<p class="plain-text">${esc(claim.explanation)}</p>` : ""}</article>`,
+          )
+          .join("")}</div>`,
+    },
+  )}</section>`;
 }
 function claimContent(c: any, stars = false) {
   return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}<p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
@@ -438,7 +477,7 @@ async function reportPage(id: number) {
   const version = c.revision_no;
   const history = [{ revision_no: version }];
   commentReply = null;
-  root.innerHTML = `${breadcrumbs(crateCrumbs(c, "reports"))}${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p id="revision-history">Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== c.latest_revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reproduceSection(c.run_ids)}<h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${c.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `${breadcrumbs(crateCrumbs(c, "reports"))}${reportContent(c, true)}<p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p class="meta" id="revision-history">Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== c.latest_revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reportBody(c)}${reproduceSection(c.run_ids)}${reportAPIs(c)}<section class="discussion" id="discussion"><h2>Comments (${c.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
   const historyBox = root.querySelector<HTMLElement>("#revision-history")!;
   const revisionSelect = root.querySelector<HTMLSelectElement>(
     '[name="revision_no"]',

@@ -7463,6 +7463,40 @@
             "type": "integer",
             "minimum": 1,
             "description": "One-based position within this report revision. Renumbered when claims are reordered in a new revision; use id for permanent identity."
+          },
+          "kind": {
+            "type": "string",
+            "maxLength": 10000
+          },
+          "category": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "trait_path": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "self_type": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "method_name": {
+            "type": [
+              "string",
+              "null"
+            ]
+          },
+          "is_blanket": {
+            "type": [
+              "integer",
+              "null"
+            ]
           }
         },
         "required": [
@@ -7506,7 +7540,13 @@
           "username",
           "withdrawn_at",
           "tool_limitations_updated_at",
-          "claim_number"
+          "claim_number",
+          "kind",
+          "category",
+          "trait_path",
+          "self_type",
+          "method_name",
+          "is_blanket"
         ]
       },
       "ClaimDetail": {

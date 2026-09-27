@@ -715,3 +715,42 @@ textarea {
     margin-left: 8px;
   }
 }
+
+.report-explanation {
+  margin: 24px 0;
+}
+.report-section {
+  margin: 24px 0;
+}
+.report-section h2 {
+  margin-bottom: 8px;
+}
+.report-section > p {
+  margin: 8px 0;
+}
+.report-environment {
+  color: #555;
+  font-size: 14px;
+  margin: 20px 0;
+}
+.report-environment summary {
+  cursor: pointer;
+}
+.report-api-claims {
+  margin: 0 0 16px 20px;
+  padding-left: 14px;
+  border-left: 2px solid #ddd;
+}
+.report-api-claim {
+  padding: 4px 0;
+}
+.report-api-claim p {
+  margin: 6px 0;
+  overflow-wrap: anywhere;
+}
+.claim-precondition {
+  font-size: 14px;
+}
+.report-limitations .tool-limitations {
+  margin-top: 12px;
+}

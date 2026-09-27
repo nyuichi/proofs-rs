@@ -45,7 +45,15 @@ function describe(a: CatalogAPI) {
     blanket: a.is_blanket === 1,
   };
 }
-export function renderAPICatalog(apis: CatalogAPI[], crate: string): string {
+export function renderAPICatalog(
+  apis: CatalogAPI[],
+  crate: string,
+  options: {
+    hideEmpty?: boolean;
+    expandFamilies?: boolean;
+    details?: (api: CatalogAPI) => string;
+  } = {},
+): string {
   const prefix = crate.replaceAll("-", "_") + "::";
   const local = (s: string) =>
     s.startsWith(prefix) ? s.slice(prefix.length) : s;
@@ -63,7 +71,7 @@ export function renderAPICatalog(apis: CatalogAPI[], crate: string): string {
   const link = (a: CatalogAPI, text: string) =>
     `<a class="api-name" href="#/api/${encodeURIComponent(a.id)}">${esc(text)}</a>`;
   const row = (a: CatalogAPI, text: string, keyword = "fn ") =>
-    `<div class="catalog-row"><span><span class="api-keyword">${keyword}</span>${link(a, text)}${unsafe(!!a.is_unsafe)}</span>${claimCounts(a)}</div>`;
+    `<div class="catalog-row"><span><span class="api-keyword">${keyword}</span>${link(a, text)}${unsafe(!!a.is_unsafe)}</span>${claimCounts(a)}</div>${options.details?.(a) || ""}`;
   const data = apis
     .map(describe)
     .sort(
@@ -71,6 +79,7 @@ export function renderAPICatalog(apis: CatalogAPI[], crate: string): string {
         cmp(a.api.display_path, b.api.display_path) || cmp(a.api.id, b.api.id),
     );
   function section(title: string, content: string, empty: string) {
+    if (!content && options.hideEmpty) return "";
     return `<section class="api-category"><h3>${title}</h3>${content || `<p class="muted">${empty}</p>`}</section>`;
   }
   function inherent(category: string) {
@@ -118,7 +127,7 @@ export function renderAPICatalog(apis: CatalogAPI[], crate: string): string {
               }),
               { panic_count: 0, no_ub_count: 0 },
             );
-            return `<details class="api-family"><summary><span><span class="api-keyword">fn </span><code>${esc(name)}</code>${unsafe(impls.some((a) => !!a.api.is_unsafe))}<span class="implementation-count">${impls.length} implementations</span></span>${claimCounts(counts)}</summary><div class="api-implementations">${impls
+            return `<details class="api-family"${options.expandFamilies ? " open" : ""}><summary><span><span class="api-keyword">fn </span><code>${esc(name)}</code>${unsafe(impls.some((a) => !!a.api.is_unsafe))}<span class="implementation-count">${impls.length} implementations</span></span>${claimCounts(counts)}</summary><div class="api-implementations">${impls
               .sort((a, b) => cmp(a.self, b.self) || cmp(a.api.id, b.api.id))
               .map((a) => row(a.api, `impl ${trait} for ${local(a.self)}`, ""))
               .join("")}</div></details>`;
