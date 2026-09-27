@@ -146,7 +146,10 @@ function claimItem(c: any) {
   return `<article class="claim-item"><a href="#/claim/${enc(c.id)}?report_revision=${c.report_revision}">Claim #${esc(c.claim_number)} — ${esc(c.title)}</a><div class="meta"><code>${esc(c.display_path)}</code> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""} · ${c.star_count} stars</div><p class="meta"><a href="#/report/${c.report_id}?v=${c.report_revision}">${esc(c.report_title)} · v${c.report_revision}</a> · ${c.report_star_count} stars · <a href="#/report/${c.report_id}?discussion=1">${c.report_comment_count} comments</a> · ${user(c.author_id, c.username)} · ${c.author_karma} karma${!c.in_current_report ? " · Removed from current report" : ""}${c.withdrawn_at ? " · Withdrawn" : ""}</p></article>`;
 }
 function reportItem(c: any) {
-  return `<article class="claim-item"><a href="#/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${esc(c.crate)} ${esc(c.version)} · ${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.star_count} stars · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
+  return reportSummary(c);
+}
+function reportSummary(c: any, hideCrate = false) {
+  return `<article class="claim-item"><a href="#/report/${c.id}">#${c.id} ${esc(c.title)}</a>${c.withdrawn_at ? " · Withdrawn" : ""}<div class="meta">${hideCrate ? "" : `${esc(c.crate)} ${esc(c.version)} · `}${esc(c.tool)} ${esc(c.tool_version)} · ${c.claim_count} claims</div><p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${c.star_count} stars · ${c.comment_count} comments · ${date(c.created_at)}</p></article>`;
 }
 function pager(data: any, fn: (cursor: number) => any, container: HTMLElement) {
   if (data.next_cursor !== null && data.next_cursor !== undefined) {
@@ -166,7 +169,12 @@ function pager(data: any, fn: (cursor: number) => any, container: HTMLElement) {
     container.append(b);
   }
 }
-async function claimsList(path: string, container: HTMLElement, cursor = 0) {
+async function claimsList(
+  path: string,
+  container: HTMLElement,
+  cursor = 0,
+  renderReport = reportItem,
+) {
   const data = await request(
     path + (path.includes("?") ? "&" : "?") + "cursor=" + cursor,
   );
@@ -177,11 +185,11 @@ async function claimsList(path: string, container: HTMLElement, cursor = 0) {
       .map(
         path.endsWith("/claims") || path === "/me/starred-claims"
           ? claimItem
-          : reportItem,
+          : renderReport,
       )
       .join("") || (!cursor ? "<p>No results.</p>" : ""),
   );
-  pager(data, (n) => claimsList(path, container, n), container);
+  pager(data, (n) => claimsList(path, container, n, renderReport), container);
 }
 const loading = '<p data-loading role="status">Loading…</p>';
 async function adminCatalogs() {
@@ -310,6 +318,8 @@ async function cratePage(name: string) {
     claimsList(
       `/crates/${enc(name)}/${enc(version)}/reports`,
       root.querySelector<HTMLElement>("#crate-reports")!,
+      0,
+      (report: any) => reportSummary(report, true),
     ),
   ]);
   for (const result of results)
