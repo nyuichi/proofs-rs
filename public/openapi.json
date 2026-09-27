@@ -1386,11 +1386,11 @@
     "/api/v1/crates/{name}/{version}/apis": {
       "get": {
         "operationId": "get_api_v1_crates_name_version_apis",
-        "summary": "List imported public functions and concrete methods",
+        "summary": "List all imported public functions and concrete methods",
         "tags": [
           "Registry"
         ],
-        "description": "",
+        "description": "Returns the complete catalogue in deterministic path order. No pagination. Report counts include distinct active public reports with current claims. Display metadata is null for catalogues awaiting refresh.",
         "security": [
           {},
           {
@@ -1417,16 +1417,6 @@
             "schema": {
               "type": "string",
               "maxLength": 10000
-            }
-          },
-          {
-            "name": "cursor",
-            "in": "query",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "maxLength": 10000,
-              "description": "Opaque next_cursor from the preceding response. Page size is 30."
             }
           },
           {
@@ -1462,22 +1452,68 @@
                               },
                               "panic_count": {
                                 "type": "integer"
+                              },
+                              "report_count": {
+                                "type": "integer"
+                              },
+                              "report_ids": {
+                                "type": "array",
+                                "items": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                }
+                              },
+                              "category": {
+                                "enum": [
+                                  "function",
+                                  "associated",
+                                  "method",
+                                  "trait",
+                                  null
+                                ]
+                              },
+                              "trait_path": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "self_type": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "method_name": {
+                                "type": [
+                                  "string",
+                                  "null"
+                                ]
+                              },
+                              "is_blanket": {
+                                "type": [
+                                  "integer",
+                                  "null"
+                                ]
                               }
                             },
                             "required": [
                               "no_ub_count",
-                              "panic_count"
+                              "panic_count",
+                              "report_count",
+                              "report_ids",
+                              "category",
+                              "trait_path",
+                              "self_type",
+                              "method_name",
+                              "is_blanket"
                             ]
                           }
                         ]
                       }
                     },
                     "next_cursor": {
-                      "type": [
-                        "string",
-                        "null"
-                      ],
-                      "description": "Opaque keyset cursor; pass unchanged. Null means no more results."
+                      "type": "null"
                     }
                   },
                   "required": [

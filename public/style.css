@@ -635,3 +635,104 @@ textarea {
   cursor: pointer;
   text-decoration: underline;
 }
+
+/* Crate API catalogue: rustdoc structure with the site's native typography. */
+.catalog-columns,
+.catalog-row,
+.api-family > summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 120px;
+  gap: 16px;
+  align-items: baseline;
+}
+.catalog-columns {
+  border-bottom: 2px solid #bbb;
+  padding: 8px 0;
+  font-weight: bold;
+}
+.catalog-row,
+.api-family > summary {
+  border-bottom: 1px solid #ccc;
+  padding: 8px 0;
+}
+.catalog-row > span:first-child,
+.api-impl h4 {
+  overflow-wrap: anywhere;
+}
+.api-category {
+  margin-top: 24px;
+}
+.api-category h3 {
+  font-size: 21px;
+  margin-bottom: 8px;
+}
+.api-impl h4 {
+  border-bottom: 1px solid #bbb;
+  padding: 10px 0 6px;
+  margin: 20px 0 0;
+  font-weight: normal;
+}
+.api-impl > .catalog-row,
+.api-family {
+  margin-left: 20px;
+}
+.api-keyword,
+.implementation-count {
+  color: #555;
+  font-weight: normal;
+}
+.implementation-count {
+  margin-left: 16px;
+  font:
+    14px "Times New Roman",
+    serif;
+}
+.api-report-count {
+  white-space: nowrap;
+}
+.api-family > summary {
+  cursor: pointer;
+  list-style: none;
+}
+.api-family > summary::-webkit-details-marker {
+  display: none;
+}
+.api-family > summary > span:first-child::before {
+  content: "▸";
+  display: inline-block;
+  width: 18px;
+}
+.api-family[open] > summary > span:first-child::before {
+  content: "▾";
+}
+.api-family > summary:hover {
+  background: #f7f7f7;
+}
+.api-family > summary:focus-visible {
+  outline: 2px solid navy;
+  outline-offset: 2px;
+}
+.api-implementations {
+  margin-left: 18px;
+  padding-left: 12px;
+  border-left: 2px solid #ddd;
+}
+@media (max-width: 600px) {
+  .catalog-columns,
+  .catalog-row,
+  .api-family > summary {
+    grid-template-columns: minmax(0, 1fr) 76px;
+    gap: 8px;
+  }
+  .api-report-count {
+    font-size: 14px;
+  }
+  .implementation-count {
+    display: block;
+    margin-left: 18px;
+  }
+  .api-impl > .catalog-row,
+  .api-family {
+    margin-left: 8px;
+  }
+}
