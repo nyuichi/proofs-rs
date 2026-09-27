@@ -6,10 +6,10 @@ The `Release cargo-proofs` workflow publishes only `cli/` to crates.io. It does 
 
 1. The CLI is licensed under `MIT OR Apache-2.0`; both license files are included in the package. This does not set the service's license.
 2. Log into crates.io and complete account/email verification. Create a short-lived API token with permission to publish `cargo-proofs` (including creation of the new crate). Do not paste it into an issue, chat, or commit.
-3. In `nyuichi/proofs-rs`, create the GitHub Actions environment `crates-io` and store that token as its `CARGO_REGISTRY_TOKEN` secret.
+3. In `proofs-rs/proofs-rs`, create the GitHub Actions environment `crates-io` and store that token as its `CARGO_REGISTRY_TOKEN` secret.
 4. Merge the release preparation into main after the CLI checks, including the package dry run, pass. Create and push `cargo-proofs-v0.1.0` at that commit. Before Trusted Publishing is configured, the automatic tag run will fail at authentication; no package is published by that failed run.
 5. In Actions → Release cargo-proofs → Run workflow, select **main**, set `tag` to `cargo-proofs-v0.1.0`, and enable `bootstrap`. This explicit option uses the initial token; ordinary releases never fall back to it.
-6. Once publication succeeds, configure crates.io → cargo-proofs → Settings → Trusted Publishing with owner `nyuichi`, repository `proofs-rs`, workflow filename `release-cli.yml`, and environment `crates-io`.
+6. Once publication succeeds, configure crates.io → cargo-proofs → Settings → Trusted Publishing with owner `proofs-rs`, repository `proofs-rs`, workflow filename `release-cli.yml`, and environment `crates-io`.
 7. Revoke the initial API token and delete its GitHub secret. Future releases use short-lived OIDC credentials.
 
 The crate must already exist before crates.io accepts a Trusted Publisher configuration. See https://crates.io/docs/trusted-publishing.
