@@ -784,7 +784,7 @@ async function toolsPage(id?: string) {
       root.querySelector("#items")!,
     );
   }
-  root.innerHTML = `<h1>Verification tools</h1><p><a href="https://github.com/nyuichi/proofs-rs/blob/main/cli/README.md" target="_blank" rel="noopener noreferrer">CLI setup and usage instructions</a></p><div id="tool-list">${loading}</div><p><a href="https://github.com/nyuichi/proofs-rs/issues/new">Request a tool or version</a></p>`;
+  root.innerHTML = `<h1>Verification tools</h1><p><a href="https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md" target="_blank" rel="noopener noreferrer">CLI setup and usage instructions</a></p><div id="tool-list">${loading}</div><p><a href="https://github.com/proofs-rs/proofs-rs/issues/new">Request a tool or version</a></p>`;
   const d = await request("/tools");
   root.querySelector("#tool-list")!.innerHTML =
     d.items
@@ -827,7 +827,7 @@ version = "0.66.0" # Version used for verification</code></pre></details>
 cargo proofs publish</code></pre>
 <p>The CLI prints a link to your published report. Run <code>cargo proofs publish</code> again to update the same report.</p>
 <p>Using another tool? See <a href="#/tools">Tools</a> for supported tools and instructions.</p>
-<p><a href="https://github.com/nyuichi/proofs-rs/blob/main/cli/README.md" target="_blank" rel="noopener noreferrer">CLI documentation →</a></p>
+<p><a href="https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md" target="_blank" rel="noopener noreferrer">CLI documentation →</a></p>
 </section>`;
 }
 async function unsubscribe() {
