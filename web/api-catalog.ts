@@ -50,6 +50,7 @@ export function renderAPICatalog(
   crate: string,
   options: {
     hideEmpty?: boolean;
+    hideCounts?: boolean;
     expandFamilies?: boolean;
     details?: (api: CatalogAPI) => string;
   } = {},
@@ -60,6 +61,7 @@ export function renderAPICatalog(
   const unsafe = (yes: boolean) =>
     yes ? ' <strong class="unsafe">unsafe</strong>' : "";
   const claimCounts = (a: Pick<CatalogAPI, "panic_count" | "no_ub_count">) => {
+    if (options.hideCounts) return "";
     const text = [
       a.panic_count ? `Panic contract (${a.panic_count})` : "",
       a.no_ub_count ? `No undefined behavior (${a.no_ub_count})` : "",
@@ -140,7 +142,9 @@ export function renderAPICatalog(
   if (!apis.length) return "<p>No APIs.</p>";
   const blanket = traits(true);
   return (
-    '<div class="catalog-columns"><span>API</span><span>Claims</span></div>' +
+    (options.hideCounts
+      ? ""
+      : '<div class="catalog-columns"><span>API</span><span>Claims</span></div>') +
     section(
       "Functions",
       data

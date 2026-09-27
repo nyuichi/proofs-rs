@@ -105,6 +105,7 @@ test("report body removes redundant labels and groups claims by API with revisio
     limitations: "Report limit",
     tool_limitations: "Tool limit",
     environment: "Machine details",
+    evidence_url: "https://example.test/evidence",
     claims: [1, 2].map((n) => ({
       id: "claim-" + n,
       api_item_id: "api-1",
@@ -142,12 +143,24 @@ test("report body removes redundant labels and groups claims by API with revisio
   );
   assert.equal(d.querySelector("script"), null);
   assert.equal(d.querySelector("dt"), null);
-  assert.equal(d.querySelector(".report-environment").open, false);
+  assert.equal(d.querySelector(".report-environment").tagName, "SECTION");
+  assert.equal(
+    d
+      .querySelector(".report-explanation")
+      .nextElementSibling.querySelector("h2").textContent,
+    "Evidence",
+  );
+  assert.equal(d.querySelector(".api-claim-count"), null);
+  assert.equal(d.querySelector(".catalog-columns"), null);
+  assert(!d.body.textContent.includes("Preconditions"));
   assert.match(
     d.querySelector(".report-limitations").textContent,
     /Report limit.*Tool limit/s,
   );
-  assert.equal(d.querySelector(".report-apis h2").textContent, "APIs (1)");
+  assert.equal(
+    d.querySelector(".report-apis h2").textContent,
+    "Verified APIs (1)",
+  );
   assert.equal(d.querySelectorAll('a[href="#/api/api-1"]').length, 1);
   assert.equal(d.querySelectorAll(".report-api-claim").length, 2);
   assert.equal(d.querySelectorAll('a[href$="?report_revision=3"]').length, 2);
@@ -157,5 +170,45 @@ test("report body removes redundant labels and groups claims by API with revisio
     ),
   );
   assert(!d.body.textContent.includes("Shared"));
+  dom.window.close();
+});
+
+test("report comments fetch every page and reply without a More button", async () => {
+  const source = readFileSync(
+    new URL("../web/main.ts", import.meta.url),
+    "utf8",
+  );
+  const fn = source.slice(
+    source.indexOf("async function loadComments("),
+    source.indexOf("function renderComment("),
+  );
+  const dom = new JSDOM("<main></main>", { runScripts: "outside-only" });
+  const w = dom.window as any;
+  const calls: string[] = [];
+  w.request = async (path: string) => {
+    calls.push(path);
+    if (path.includes("parent_id"))
+      return { items: [{ id: "reply", reply_count: 0 }], next_cursor: null };
+    if (path.includes("cursor=0"))
+      return { items: [{ id: "first", reply_count: 1 }], next_cursor: 20 };
+    return { items: [{ id: "last", reply_count: 0 }], next_cursor: null };
+  };
+  w.eval(
+    transpileModule(
+      `const enc=encodeURIComponent; const renderComment=(cm,box)=>{const el=document.createElement('article');el.textContent=cm.id;box.append(el);return el;};` +
+        fn +
+        `;window.finished=loadComments(3,null,document.querySelector('main'));`,
+      {
+        compilerOptions: {
+          module: ModuleKind.None,
+          target: ScriptTarget.ES2022,
+        },
+      },
+    ).outputText,
+  );
+  await w.finished;
+  assert.equal(calls.length, 3);
+  assert.equal(w.document.querySelectorAll("article").length, 3);
+  assert.equal(w.document.querySelector("button"), null);
   dom.window.close();
 });

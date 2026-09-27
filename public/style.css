@@ -728,14 +728,6 @@ textarea {
 .report-section > p {
   margin: 8px 0;
 }
-.report-environment {
-  color: #555;
-  font-size: 14px;
-  margin: 20px 0;
-}
-.report-environment summary {
-  cursor: pointer;
-}
 .report-api-claims {
   margin: 0 0 16px 20px;
   padding-left: 14px;
@@ -748,9 +740,11 @@ textarea {
   margin: 6px 0;
   overflow-wrap: anywhere;
 }
-.claim-precondition {
-  font-size: 14px;
-}
 .report-limitations .tool-limitations {
   margin-top: 12px;
+}
+
+.report-apis .catalog-row,
+.report-apis .api-family > summary {
+  grid-template-columns: minmax(0, 1fr);
 }

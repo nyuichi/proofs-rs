@@ -418,10 +418,10 @@ function reportContent(c: any, stars = false) {
 }
 function reportBody(c: any) {
   return `${c.explanation ? `<div class="report-explanation plain-text">${esc(c.explanation)}</div>` : ""}
-    ${c.trusted_assumptions ? `<section class="report-section"><h2>Assumptions</h2><p class="plain-text">${esc(c.trusted_assumptions)}</p></section>` : ""}
     ${c.evidence_url ? `<section class="report-section"><h2>Evidence</h2><p><a href="${esc(c.evidence_url)}" target="_blank" rel="noopener noreferrer">${esc(c.evidence_url)}</a></p></section>` : ""}
+    ${c.trusted_assumptions ? `<section class="report-section"><h2>Assumptions</h2><p class="plain-text">${esc(c.trusted_assumptions)}</p></section>` : ""}
     ${c.limitations || c.tool_limitations ? `<section class="report-section report-limitations"><h2>Limitations</h2>${c.limitations ? `<p class="plain-text">${esc(c.limitations)}</p>` : ""}${toolLimitations(c)}</section>` : ""}
-    ${c.environment ? `<details class="report-environment"><summary>Environment</summary><p class="plain-text">${esc(c.environment)}</p></details>` : ""}`;
+    ${c.environment ? `<section class="report-section report-environment"><h2>Environment</h2><p class="plain-text">${esc(c.environment)}</p></section>` : ""}`;
 }
 function reportAPIs(c: any) {
   const groups = new Map<string, any[]>();
@@ -438,18 +438,19 @@ function reportAPIs(c: any) {
     panic_count: claims.filter((c) => c.property === "panic_contract").length,
     no_ub_count: claims.filter((c) => c.property === "no_ub").length,
   }));
-  return `<section class="report-apis"><h2>APIs (${apis.length})</h2>${renderAPICatalog(
+  return `<section class="report-apis"><h2>Verified APIs (${apis.length})</h2>${renderAPICatalog(
     apis,
     c.crate,
     {
       hideEmpty: true,
+      hideCounts: true,
       expandFamilies: true,
       details: (api) =>
         `<div class="report-api-claims">${groups
           .get(api.id)!
           .map(
             (claim) =>
-              `<article class="report-api-claim"><p><a href="#/claim/${enc(claim.id)}?report_revision=${enc(String(claim.report_revision))}">Claim #${esc(claim.claim_number)} — ${esc(claim.title || prop(claim.property))}</a> <span class="meta">· ${esc(prop(claim.property))} · ${claim.star_count} stars</span></p>${claim.precondition ? `<p class="claim-precondition"><strong>Preconditions</strong> <span class="plain-text">${esc(claim.precondition)}</span></p>` : ""}${claim.explanation ? `<p class="plain-text">${esc(claim.explanation)}</p>` : ""}</article>`,
+              `<article class="report-api-claim"><p><a href="#/claim/${enc(claim.id)}?report_revision=${enc(String(claim.report_revision))}">Claim #${esc(claim.claim_number)} — ${esc(claim.title || prop(claim.property))}</a> <span class="meta">· ${esc(prop(claim.property))} · ${claim.star_count} stars</span></p>${claim.explanation ? `<p class="plain-text">${esc(claim.explanation)}</p>` : ""}</article>`,
           )
           .join("")}</div>`,
     },
@@ -585,7 +586,8 @@ async function loadComments(
   }
   if (!parentID && !d.items.length && !cursor)
     container.insertAdjacentHTML("beforeend", "<p>No comments.</p>");
-  pager(d, (n) => loadComments(claimID, parentID, container, n), container);
+  if (d.next_cursor !== null && d.next_cursor !== undefined)
+    await loadComments(claimID, parentID, container, d.next_cursor);
 }
 function renderComment(cm: any, container: HTMLElement, claimID: number) {
   const article = document.createElement("article");

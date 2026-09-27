@@ -17,10 +17,7 @@ export function bindReproduce(root: HTMLElement, report: any) {
   const section = root.querySelector<HTMLDetailsElement>("#reproduce");
   if (!section) return;
   const body = section.querySelector<HTMLElement>(".reproduce-body")!;
-  let loaded = false;
-  section.addEventListener("toggle", async () => {
-    if (!section.open || loaded) return;
-    loaded = true;
+  const load = async () => {
     body.textContent = "Loading recorded runs…";
     try {
       const rendered = await Promise.all(
@@ -130,13 +127,18 @@ export function bindReproduce(root: HTMLElement, report: any) {
       body.innerHTML = rendered.join("");
     } catch (e) {
       body.textContent = String(e);
-      loaded = false;
+      const retry = document.createElement("button");
+      retry.textContent = "Retry";
+      retry.onclick = () => {
+        void load();
+      };
+      body.append(retry);
     }
-  });
+  };
+  return load();
 }
 async function getJSON(path: string) {
   const r = await fetch(path);
-  if (!r.ok)
-    throw Error("Unable to load recorded run. Close and reopen to retry.");
+  if (!r.ok) throw Error("Unable to load recorded run.");
   return r.json();
 }
