@@ -1218,7 +1218,7 @@ test("device login, one-time exchange, scope isolation, ownership and revocation
   );
 });
 
-test("frontend CLI guide, revision links and nested comment deletion", async () => {
+test("frontend Book redirects, revision links and nested comment deletion", async () => {
   const { JSDOM } = await import("jsdom");
   const { transpileModule, ModuleKind, ScriptTarget } =
     await import("typescript");
@@ -1256,6 +1256,10 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     "utf8",
   ).replace("export const legal", "const legal");
   const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
+    .replace(
+      "location.replace(target)",
+      "document.body.dataset.bookRedirect = target",
+    )
     .replace(/import \{ legal \} from "\.\/legal";/, "")
     .replace(
       /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
@@ -1296,7 +1300,22 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
       new w.Event("submit", { bubbles: true, cancelable: true }),
     );
   try {
-    await until(".publish-guide");
+    await until('#app a[href="/book/publish-a-report.html"]');
+    assert.equal(
+      w.document.body.dataset.bookRedirect,
+      "/book/publish-a-report.html",
+    );
+    for (const selector of ["nav a", "footer a"]) {
+      for (const link of w.document.querySelectorAll(selector)) {
+        if (link.textContent === "About")
+          assert.equal(link.getAttribute("href"), "/book/");
+        if (link.textContent === "Publish")
+          assert.equal(
+            link.getAttribute("href"),
+            "/book/publish-a-report.html",
+          );
+      }
+    }
     assert.equal(w.document.querySelector("#report-form"), null);
     const made = await request("/reports", "POST", reportInput);
     assert.equal(made.status, 201);
@@ -1399,7 +1418,7 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
       /Nested reply/,
     );
     w.location.hash = "/publish?update=1";
-    await until(".publish-guide");
+    await until('#app a[href="/book/publish-a-report.html"]');
     assert.equal(w.document.querySelector("#report-form"), null);
     const existing = (await request("/reports/1")).body;
     const revised = await request("/reports/1/revisions", "POST", {
@@ -1558,15 +1577,12 @@ test("frontend CLI guide, revision links and nested comment deletion", async () 
     assert.equal(w.document.querySelector(".signin-notice"), null);
     w.location.hash = "/publish";
     await new Promise((resolve) => setTimeout(resolve, 10));
-    await until(".publish-guide");
-    assert.match(
-      w.document.querySelector(".publish-guide")!.textContent!,
-      /cargo install cargo-proofs --locked/,
-    );
+    await until('#app a[href="/book/publish-a-report.html"]');
+    assert.equal(w.document.querySelector(".publish-guide"), null);
     assert.equal(w.document.querySelector('a[href*="manual=1"]'), null);
     w.location.hash = "/publish?manual=1";
     await new Promise((resolve) => setTimeout(resolve, 10));
-    await until(".publish-guide");
+    await until('#app a[href="/book/publish-a-report.html"]');
     assert.equal(w.document.querySelector("#report-form"), null);
     assert.equal(w.document.querySelector("#prepare"), null);
     assert.equal(w.document.querySelector('#app a[href="#/terms"]'), null);
@@ -1767,6 +1783,10 @@ test("static page content renders before requests, remains usable, and survives 
     "utf8",
   ).replace("export const legal", "const legal");
   const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
+    .replace(
+      "location.replace(target)",
+      "document.body.dataset.bookRedirect = target",
+    )
     .replace(/import \{ legal \} from "\.\/legal";/, "")
     .replace(
       /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
@@ -1808,12 +1828,8 @@ test("static page content renders before requests, remains usable, and survives 
     assert.ok(pending.has("/api/v1/me"));
     w.location.hash = "/publish";
     await tick();
-    assert.ok(d.querySelector(".publish-guide"));
-    assert.match(
-      d.querySelector(".publish-guide")!.textContent!,
-      /Getting started with Kani/,
-    );
-    assert.ok(d.querySelector('.publish-guide a[href="#/tools"]'));
+    assert.ok(d.querySelector('#app a[href="/book/publish-a-report.html"]'));
+    assert.equal(d.body.dataset.bookRedirect, "/book/publish-a-report.html");
     assert.equal(d.querySelector("[data-loading]"), null);
     w.location.hash = "/tools";
     await tick();
@@ -1845,12 +1861,13 @@ test("static page content renders before requests, remains usable, and survives 
     assert.equal(d.querySelector("h1")!.textContent, "Crates");
     w.location.hash = "/about";
     await tick();
-    assert.equal(d.querySelector("h1")!.textContent, "About proofs.rs");
+    assert.equal(d.body.dataset.bookRedirect, "/book/");
+    assert.ok(d.querySelector('#app a[href="/book/"]'));
     finish("/config", { oauth_configured: true, terms_version: "test" });
     finish("/me", { user: null });
     await tick();
     assert.ok(d.querySelector('#account-nav a[href="/auth/github"]'));
-    assert.equal(d.querySelector("h1")!.textContent, "About proofs.rs");
+    assert.ok(d.querySelector('#app a[href="/book/"]'));
     finish("/crates?q=sample&cursor=0", {
       items: [],
       total_count: 0,
@@ -1858,7 +1875,7 @@ test("static page content renders before requests, remains usable, and survives 
       next_cursor: null,
     });
     await tick();
-    assert.equal(d.querySelector("h1")!.textContent, "About proofs.rs");
+    assert.ok(d.querySelector('#app a[href="/book/"]'));
     for (const path of [
       "/report/8",
       "/claim/example",
