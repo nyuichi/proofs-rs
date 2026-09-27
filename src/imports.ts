@@ -485,7 +485,7 @@ async function safeFetch(url: string, hosts: string[], signal: AbortSignal) {
       redirect: "manual",
       signal,
       headers: {
-        "User-Agent": "proofs.rs/0.1 (https://github.com/nyuichi/proofs-rs)",
+        "User-Agent": "proofs.rs/0.1 (https://github.com/proofs-rs/proofs-rs)",
       },
     });
     if ([301, 302, 303, 307, 308].includes(r.status)) {
