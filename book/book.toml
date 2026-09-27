@@ -1,0 +1,15 @@
+[book]
+title = "proofs.rs Book"
+language = "en"
+src = "src"
+
+[output.html]
+site-url = "/book/"
+no-section-label = true
+smart-punctuation = false
+
+[output.html.playground]
+runnable = false
+
+[output.html.print]
+enable = false

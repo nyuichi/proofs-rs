@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "wrangler dev",
-    "build": "vite build",
+    "build": "vite build && npm run build:book",
+    "build:book": "node scripts/build-book.mjs",
     "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.web.json",
     "test": "node --import tsx --test tests/*.test.ts",
     "db:local": "wrangler d1 migrations apply DB --local",
