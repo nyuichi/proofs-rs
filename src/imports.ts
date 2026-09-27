@@ -1,3 +1,5 @@
+import { operation } from "./openapi";
+import * as S from "./schemas";
 import { Hono } from "hono";
 import semver from "semver";
 import {
@@ -597,108 +599,153 @@ export async function refreshCatalog(env: Env, releaseId: number) {
   await saveMetadata(env.DB, releaseId, metadata);
   return { indexed: apis.length, added };
 }
-importRoutes.post("/publish/prepare", async (c) => {
-  const u = requireUser(c),
-    b = await jsonBody(c),
-    name = text(b.crate, "Crate", 64, true),
-    version = text(b.version, "Version", 100, true);
-  if (
-    !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name) ||
-    !semver.valid(version) ||
-    semver.valid(version) !== version
-  )
-    throw new Fault(400, "exact_crate_version_required");
-  if (
-    (
-      await one(
-        c.env.DB,
-        "SELECT value FROM settings WHERE key='imports_paused'",
-      )
-    )?.value === "1"
-  )
-    throw new Fault(503, "imports_paused");
-  const db = c.env.DB;
-  await batch(db, [
-    stmt(db, "INSERT INTO crates(name) VALUES(?) ON CONFLICT DO NOTHING", name),
-    stmt(
-      db,
-      "INSERT INTO releases(crate_id,version,created_at) SELECT id,?,? FROM crates WHERE name=? ON CONFLICT DO NOTHING",
-      version,
-      now(),
-      name,
-    ),
-  ]);
-  const rel = await one(
-    db,
-    "SELECT r.* FROM releases r JOIN crates cr ON cr.id=r.crate_id WHERE cr.name=? AND r.version=?",
-    name,
-    version,
-  );
-  if (await one(db, "SELECT 1 FROM doc_snapshots WHERE release_id=?", rel.id))
-    return c.json({ status: "ready", crate: name, version });
-  const running = await one(
-    db,
-    "SELECT id,status FROM import_jobs WHERE release_id=? AND status IN ('pending','running','retry')",
-    rel.id,
-  );
-  if (running) return c.json(running, 202);
-  const id = uid();
-  try {
+importRoutes.post(
+  "/publish/prepare",
+  ...operation(
+    "Prepare a crate release for publishing",
+    S.z.object({
+      status: S.z.literal("ready"),
+      crate: S.string,
+      version: S.string,
+    }),
+    {
+      tags: ["Imports"],
+      body: S.z.object({
+        crate: S.string.trim().min(1).max(64),
+        version: S.string.trim().min(1).max(100),
+      }),
+      additionalResponses: {
+        202: S.z.object({
+          id: S.string,
+          status: S.z.enum(["pending", "running", "retry"]),
+        }),
+      },
+      auth: "user",
+      write: true,
+      errors: [400, 428, 429, 503],
+    },
+  ),
+  async (c) => {
+    const u = requireUser(c),
+      b = await jsonBody(c),
+      name = text(b.crate, "Crate", 64, true),
+      version = text(b.version, "Version", 100, true);
+    if (
+      !/^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(name) ||
+      !semver.valid(version) ||
+      semver.valid(version) !== version
+    )
+      throw new Fault(400, "exact_crate_version_required");
+    if (
+      (
+        await one(
+          c.env.DB,
+          "SELECT value FROM settings WHERE key='imports_paused'",
+        )
+      )?.value === "1"
+    )
+      throw new Fault(503, "imports_paused");
+    const db = c.env.DB;
     await batch(db, [
-      guard(
+      stmt(
         db,
-        "EXISTS(SELECT 1 FROM users WHERE id=? AND status='active' AND accepted_terms_version=?)",
-        u.id,
-        c.env.TERMS_VERSION,
-      ),
-      quota(db, u.id, "import", 5),
-      quota(
-        db,
-        await hash(c.req.header("cf-connecting-ip") || u.id),
-        "import_ip",
-        50,
+        "INSERT INTO crates(name) VALUES(?) ON CONFLICT DO NOTHING",
+        name,
       ),
       stmt(
         db,
-        "INSERT INTO import_jobs(id,release_id,requested_by,status,created_at) VALUES(?,?,?,?,?)",
-        id,
-        rel.id,
-        u.id,
-        "pending",
+        "INSERT INTO releases(crate_id,version,created_at) SELECT id,?,? FROM crates WHERE name=? ON CONFLICT DO NOTHING",
+        version,
         now(),
-      ),
-      stmt(
-        db,
-        "INSERT INTO outbox_events(id,type,aggregate_id,dedupe_key,payload,created_at) VALUES(?,?,?,?,?,?)",
-        uid(),
-        "import",
-        id,
-        "import:" + id,
-        JSON.stringify({ job_id: id }),
-        now(),
+        name,
       ),
     ]);
-  } catch (e) {
-    const job = await one(
+    const rel = await one(
+      db,
+      "SELECT r.* FROM releases r JOIN crates cr ON cr.id=r.crate_id WHERE cr.name=? AND r.version=?",
+      name,
+      version,
+    );
+    if (await one(db, "SELECT 1 FROM doc_snapshots WHERE release_id=?", rel.id))
+      return c.json({ status: "ready", crate: name, version });
+    const running = await one(
       db,
       "SELECT id,status FROM import_jobs WHERE release_id=? AND status IN ('pending','running','retry')",
       rel.id,
     );
-    if (job) return c.json(job, 202);
-    throw e;
-  }
-  return c.json({ id, status: "pending" }, 202);
-});
-importRoutes.get("/imports/:id", async (c) => {
-  requireUser(c);
-  const job = await one(
-    c.env.DB,
-    "SELECT j.id,j.status,j.error_code,cr.name crate,r.version FROM import_jobs j JOIN releases r ON r.id=j.release_id JOIN crates cr ON cr.id=r.crate_id WHERE j.id=?",
-    c.req.param("id"),
-  );
-  if (!job) throw new Fault(404, "import_not_found");
-  return c.json(job);
-});
+    if (running) return c.json(running, 202);
+    const id = uid();
+    try {
+      await batch(db, [
+        guard(
+          db,
+          "EXISTS(SELECT 1 FROM users WHERE id=? AND status='active' AND accepted_terms_version=?)",
+          u.id,
+          c.env.TERMS_VERSION,
+        ),
+        quota(db, u.id, "import", 5),
+        quota(
+          db,
+          await hash(c.req.header("cf-connecting-ip") || u.id),
+          "import_ip",
+          50,
+        ),
+        stmt(
+          db,
+          "INSERT INTO import_jobs(id,release_id,requested_by,status,created_at) VALUES(?,?,?,?,?)",
+          id,
+          rel.id,
+          u.id,
+          "pending",
+          now(),
+        ),
+        stmt(
+          db,
+          "INSERT INTO outbox_events(id,type,aggregate_id,dedupe_key,payload,created_at) VALUES(?,?,?,?,?,?)",
+          uid(),
+          "import",
+          id,
+          "import:" + id,
+          JSON.stringify({ job_id: id }),
+          now(),
+        ),
+      ]);
+    } catch (e) {
+      const job = await one(
+        db,
+        "SELECT id,status FROM import_jobs WHERE release_id=? AND status IN ('pending','running','retry')",
+        rel.id,
+      );
+      if (job) return c.json(job, 202);
+      throw e;
+    }
+    return c.json({ id, status: "pending" }, 202);
+  },
+);
+importRoutes.get(
+  "/imports/:id",
+  ...operation(
+    "Read crate import status",
+    S.z.object({
+      id: S.string,
+      status: S.string,
+      error_code: S.nullableString,
+      crate: S.string,
+      version: S.string,
+    }),
+    { tags: ["Imports"], auth: "user", errors: [404] },
+  ),
+  async (c) => {
+    requireUser(c);
+    const job = await one(
+      c.env.DB,
+      "SELECT j.id,j.status,j.error_code,cr.name crate,r.version FROM import_jobs j JOIN releases r ON r.id=j.release_id JOIN crates cr ON cr.id=r.crate_id WHERE j.id=?",
+      c.req.param("id"),
+    );
+    if (!job) throw new Fault(404, "import_not_found");
+    return c.json(job);
+  },
+);
 export async function importJob(env: Env, id: string) {
   const db = env.DB;
   if (
