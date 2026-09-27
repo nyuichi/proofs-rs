@@ -6,9 +6,19 @@ Cloudflare Workers (Hono/TypeScript), D1, private R2, Queues, Cron, Workers Asse
 
 ## Development
 
-Requires Node 24. `npm ci`, `npm run build`, `npm run db:local`, then `npm run dev`. Copy `.dev.vars.example` to `.dev.vars` and configure a development GitHub OAuth app to enable sign-in. Callback: `http://localhost:8787/auth/github/callback`. No local auth bypass is exposed by the Worker. `npm test` uses an in-memory SQLite adapter and fixture rustdoc JSON, never a live docs.rs request or email send.
+Requires Node 24 and mdBook 0.4.45 (`cargo install mdbook --version 0.4.45 --locked`). `npm ci`, `npm run build`, `npm run db:local`, then `npm run dev`. Copy `.dev.vars.example` to `.dev.vars` and configure a development GitHub OAuth app to enable sign-in. Callback: `http://localhost:8787/auth/github/callback`. No local auth bypass is exposed by the Worker. `npm test` uses an in-memory SQLite adapter and fixture rustdoc JSON, never a live docs.rs request or email send.
 
 `npm run typecheck`, `npm test`, `npm run build` are the deployment gates. The first migration creates immutable revisions, transaction guards, comment history, independent report/claim stars, comment votes, outbox events and delivery states. A keyset cursor is used for lists. The tool catalogue starts empty. Tools and versions are stored in D1 and can be added or updated through the audited admin API without a deployment.
+
+## Book
+
+The mdBook sources live in `book/src/`, with chapter order in `SUMMARY.md`.
+`npm run build` builds the app first, then the book into `dist/book/`; the existing
+static asset binding serves it at `/book/` (and redirects `/book` there).
+`npm run build:book` rebuilds just the book. Preview through `npm run dev` to use
+the same paths and security headers as deployment. The book build externalizes
+mdBook’s inline scripts and styles to preserve the site’s Content Security Policy.
+CI and deployment workflows install the same pinned mdBook version.
 
 ## Staging
 

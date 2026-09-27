@@ -23,6 +23,9 @@ jobs:
         with:
           node-version: "24"
           cache: npm
+      - uses: peaceiris/actions-mdbook@v2
+        with:
+          mdbook-version: "0.4.45"
       - run: npm ci
       - run: npm run typecheck && npm test && npm run build
       - name: Compare temporary read-only Workers against the same staging database
