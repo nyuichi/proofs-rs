@@ -6841,7 +6841,8 @@
           },
           "trusted_assumptions": {
             "type": "string",
-            "maxLength": 10000
+            "maxLength": 10000,
+            "description": "Displayed as What is trusted. The serialized field name remains stable."
           },
           "evidence_url": {
             "type": "string",
@@ -6850,7 +6851,8 @@
           },
           "limitations": {
             "type": "string",
-            "maxLength": 10000
+            "maxLength": 10000,
+            "description": "Displayed as Technical limitations. The serialized field name remains stable."
           }
         },
         "required": [
@@ -6887,7 +6889,8 @@
           },
           "trusted_assumptions": {
             "type": "string",
-            "maxLength": 10000
+            "maxLength": 10000,
+            "description": "Displayed as What is trusted. The serialized field name remains stable."
           },
           "environment": {
             "type": "string",
@@ -6899,7 +6902,8 @@
           },
           "limitations": {
             "type": "string",
-            "maxLength": 10000
+            "maxLength": 10000,
+            "description": "Displayed as Technical limitations. The serialized field name remains stable."
           },
           "claims": {
             "type": "array",
@@ -7002,7 +7006,8 @@
           },
           "trusted_assumptions": {
             "type": "string",
-            "maxLength": 10000
+            "maxLength": 10000,
+            "description": "Displayed as What is trusted. The serialized field name remains stable."
           },
           "evidence_url": {
             "type": "string",
@@ -7011,7 +7016,8 @@
           },
           "limitations": {
             "type": "string",
-            "maxLength": 10000
+            "maxLength": 10000,
+            "description": "Displayed as Technical limitations. The serialized field name remains stable."
           },
           "display_path": {
             "type": "string",
@@ -7064,7 +7070,8 @@
           },
           "trusted_assumptions": {
             "type": "string",
-            "maxLength": 10000
+            "maxLength": 10000,
+            "description": "Displayed as What is trusted. The serialized field name remains stable."
           },
           "environment": {
             "type": "string",
@@ -7076,7 +7083,8 @@
           },
           "limitations": {
             "type": "string",
-            "maxLength": 10000
+            "maxLength": 10000,
+            "description": "Displayed as Technical limitations. The serialized field name remains stable."
           },
           "claims": {
             "type": "array",

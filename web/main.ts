@@ -409,14 +409,14 @@ function toolLink(c: any) {
 }
 function toolLimitations(c: any) {
   if (!c.tool_limitations) return "";
-  return `<details class="tool-limitations"><summary>Tool limitations</summary><div class="tool-limitations-body"><p class="plain-text">${esc(c.tool_limitations)}</p>${c.tool_limitations_updated_at ? `<p class="meta">Updated ${date(c.tool_limitations_updated_at)}</p>` : ""}<p><a href="#/tool-version/${enc(c.tool_version_id)}">${esc(c.tool)} ${esc(c.tool_version)} — version details</a></p></div></details>`;
+  return `<details class="tool-limitations"><summary>Tool technical limitations</summary><div class="tool-limitations-body"><p class="plain-text">${esc(c.tool_limitations)}</p>${c.tool_limitations_updated_at ? `<p class="meta">Updated ${date(c.tool_limitations_updated_at)}</p>` : ""}<p><a href="#/tool-version/${enc(c.tool_version_id)}">${esc(c.tool)} ${esc(c.tool_version)} — version details</a></p></div></details>`;
 }
 async function toolVersionPage(id: string) {
   const v = await request("/tool-versions/" + enc(id));
   root.innerHTML = `${breadcrumbs([
     { label: "Tools", href: "#/tools" },
     { label: v.tool, href: `#/tool/${enc(v.tool_id)}` },
-  ])}<h1>${esc(v.tool)} ${esc(v.version)}</h1>${v.selectable ? "" : "<p>This version is retired from new submissions.</p>"}${v.limitations ? `<h2>Known limitations</h2><p class="plain-text">${esc(v.limitations)}</p>${v.limitations_updated_at ? `<p class="meta">Updated ${date(v.limitations_updated_at)}</p>` : ""}` : ""}<h2>Reports</h2><div id="items">${loading}</div>`;
+  ])}<h1>${esc(v.tool)} ${esc(v.version)}</h1>${v.selectable ? "" : "<p>This version is retired from new submissions.</p>"}${v.limitations ? `<h2>Technical limitations</h2><p class="plain-text">${esc(v.limitations)}</p>${v.limitations_updated_at ? `<p class="meta">Updated ${date(v.limitations_updated_at)}</p>` : ""}` : ""}<h2>Reports</h2><div id="items">${loading}</div>`;
   await claimsList(
     "/tool-versions/" + enc(id) + "/reports",
     root.querySelector("#items")!,
@@ -428,8 +428,8 @@ function reportContent(c: any, stars = false) {
 function reportBody(c: any) {
   return `${c.explanation ? `<div class="report-explanation plain-text">${esc(c.explanation)}</div>` : ""}
     ${c.evidence_url ? `<section class="report-section"><h2>Evidence</h2><p><a href="${esc(c.evidence_url)}" target="_blank" rel="noopener noreferrer">${esc(c.evidence_url)}</a></p></section>` : ""}
-    ${c.trusted_assumptions ? `<section class="report-section"><h2>Assumptions</h2><p class="plain-text">${esc(c.trusted_assumptions)}</p></section>` : ""}
-    ${c.limitations || c.tool_limitations ? `<section class="report-section report-limitations"><h2>Limitations</h2>${c.limitations ? `<p class="plain-text">${esc(c.limitations)}</p>` : ""}${toolLimitations(c)}</section>` : ""}
+    ${c.trusted_assumptions ? `<section class="report-section"><h2>What is trusted</h2><p class="plain-text">${esc(c.trusted_assumptions)}</p></section>` : ""}
+    ${c.limitations || c.tool_limitations ? `<section class="report-section report-limitations"><h2>Technical limitations</h2>${c.limitations ? `<p class="plain-text">${esc(c.limitations)}</p>` : ""}${toolLimitations(c)}</section>` : ""}
     ${c.environment ? `<section class="report-section report-environment"><h2>Environment</h2><p class="plain-text">${esc(c.environment)}</p></section>` : ""}`;
 }
 function reportAPIs(c: any) {
@@ -473,7 +473,7 @@ function reportAPIs(c: any) {
   )}</section>`;
 }
 function claimContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}<p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}<p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("What is trusted (report)", c.shared_trusted_assumptions)}${field("What is trusted (claim)", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Technical limitations (report)", c.shared_limitations)}${field("Technical limitations (claim)", c.limitations)}</dl>`;
 }
 async function claimPage(id: string) {
   const n = current().searchParams.get("report_revision");

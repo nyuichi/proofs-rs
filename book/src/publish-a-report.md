@@ -70,3 +70,7 @@ The CLI prints a link to your published report. Run `cargo proofs publish` again
 Using another tool? See [Tools](/#/tools) for supported tools and instructions.
 
 [CLI documentation →](https://github.com/proofs-rs/proofs-rs/blob/main/cli/README.md)
+
+### Field names and page labels
+
+The pages display `trusted_assumptions` as **What is trusted** and `limitations` as **Technical limitations**. The JSON and CLI configuration keys remain unchanged. Report-level and claim-level fields retain their existing scope; tool limitations are maintained separately. This is a display-name change, not a change to the meaning or contents of existing reports.
