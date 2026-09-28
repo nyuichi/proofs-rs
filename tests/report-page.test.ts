@@ -175,7 +175,7 @@ test("report body removes redundant labels and groups claims by API with revisio
   assert.equal(d.querySelectorAll('a[href$="?report_revision=3"]').length, 3);
   assert.equal(
     d.querySelector(".report-api-claim").textContent,
-    "Panic contract: Claim #1, Claim #2",
+    "Panic contractClaim #1, Claim #2",
   );
   assert(
     ![...d.querySelectorAll("h2")].some((n: any) =>

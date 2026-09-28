@@ -1,3 +1,4 @@
+import { prop } from "./properties";
 export interface CatalogAPI {
   id: string;
   display_path: string;
@@ -63,8 +64,8 @@ export function renderAPICatalog(
   const claimCounts = (a: Pick<CatalogAPI, "panic_count" | "no_ub_count">) => {
     if (options.hideCounts) return "";
     const text = [
-      a.panic_count ? `Panic contract (${a.panic_count})` : "",
-      a.no_ub_count ? `No undefined behavior (${a.no_ub_count})` : "",
+      a.panic_count ? `${esc(prop("panic_contract"))} (${a.panic_count})` : "",
+      a.no_ub_count ? `${esc(prop("no_ub"))} (${a.no_ub_count})` : "",
     ]
       .filter(Boolean)
       .join(" / ");

@@ -80,10 +80,15 @@ test("Reproduce starts collapsed, loads immediately, links claims and safely ren
   };
   w.eval(
     transpileModule(
-      readFileSync(
-        new URL("../web/reproduce.ts", import.meta.url),
-        "utf8",
-      ).replaceAll("export function", "function"),
+      readFileSync(new URL("../web/reproduce.ts", import.meta.url), "utf8")
+        .replaceAll("export function", "function")
+        .replace(
+          'import { prop } from "./properties";',
+          readFileSync(
+            new URL("../web/properties.ts", import.meta.url),
+            "utf8",
+          ).replaceAll("export ", ""),
+        ),
       {
         compilerOptions: {
           module: ModuleKind.None,

@@ -1262,21 +1262,38 @@ test("frontend Book redirects, revision links and nested comment deletion", asyn
     )
     .replace(/import \{ legal \} from "\.\/legal";/, "")
     .replace(
+      'import { prop } from "./properties";',
+      readFileSync(
+        new URL("../web/properties.ts", import.meta.url),
+        "utf8",
+      ).replaceAll("export ", ""),
+    )
+    .replace(
       /import \{ renderAPICatalog \} from "\.\/api-catalog";/,
       "const renderAPICatalog = (() => {" +
-        readFileSync(
-          new URL("../web/api-catalog.ts", import.meta.url),
-          "utf8",
-        ).replaceAll("export ", "") +
+        readFileSync(new URL("../web/api-catalog.ts", import.meta.url), "utf8")
+          .replaceAll("export ", "")
+          .replace(
+            'import { prop } from "./properties";',
+            readFileSync(
+              new URL("../web/properties.ts", import.meta.url),
+              "utf8",
+            ).replaceAll("export ", ""),
+          ) +
         "; return renderAPICatalog; })();",
     )
     .replace(
       /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
       "const {reproduceSection,bindReproduce}=(()=>{" +
-        readFileSync(
-          new URL("../web/reproduce.ts", import.meta.url),
-          "utf8",
-        ).replaceAll("export function", "function") +
+        readFileSync(new URL("../web/reproduce.ts", import.meta.url), "utf8")
+          .replaceAll("export function", "function")
+          .replace(
+            'import { prop } from "./properties";',
+            readFileSync(
+              new URL("../web/properties.ts", import.meta.url),
+              "utf8",
+            ).replaceAll("export ", ""),
+          ) +
         ";return {reproduceSection,bindReproduce};})();",
     );
   w.eval(
@@ -1798,21 +1815,38 @@ test("static page content renders before requests, remains usable, and survives 
     )
     .replace(/import \{ legal \} from "\.\/legal";/, "")
     .replace(
+      'import { prop } from "./properties";',
+      readFileSync(
+        new URL("../web/properties.ts", import.meta.url),
+        "utf8",
+      ).replaceAll("export ", ""),
+    )
+    .replace(
       /import \{ renderAPICatalog \} from "\.\/api-catalog";/,
       "const renderAPICatalog = (() => {" +
-        readFileSync(
-          new URL("../web/api-catalog.ts", import.meta.url),
-          "utf8",
-        ).replaceAll("export ", "") +
+        readFileSync(new URL("../web/api-catalog.ts", import.meta.url), "utf8")
+          .replaceAll("export ", "")
+          .replace(
+            'import { prop } from "./properties";',
+            readFileSync(
+              new URL("../web/properties.ts", import.meta.url),
+              "utf8",
+            ).replaceAll("export ", ""),
+          ) +
         "; return renderAPICatalog; })();",
     )
     .replace(
       /import \{ reproduceSection, bindReproduce \} from "\.\/reproduce";/,
       "const {reproduceSection,bindReproduce}=(()=>{" +
-        readFileSync(
-          new URL("../web/reproduce.ts", import.meta.url),
-          "utf8",
-        ).replaceAll("export function", "function") +
+        readFileSync(new URL("../web/reproduce.ts", import.meta.url), "utf8")
+          .replaceAll("export function", "function")
+          .replace(
+            'import { prop } from "./properties";',
+            readFileSync(
+              new URL("../web/properties.ts", import.meta.url),
+              "utf8",
+            ).replaceAll("export ", ""),
+          ) +
         ";return {reproduceSection,bindReproduce};})();",
     );
   try {

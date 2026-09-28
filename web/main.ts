@@ -1,3 +1,4 @@
+import { prop } from "./properties";
 import { renderAPICatalog } from "./api-catalog";
 import { reproduceSection, bindReproduce } from "./reproduce";
 import { legal } from "./legal";
@@ -20,8 +21,6 @@ const user = (id: string, name: string) =>
   id
     ? `<a class="user-link" href="#/user/${enc(id)}">${esc(name || "ghost")}</a>`
     : "ghost";
-const prop = (p: string) =>
-  p === "no_ub" ? "No undefined behavior" : "Panic contract";
 const notice =
   '<p class="meta">By publishing, you agree to the <a href="#/terms">Terms</a> and license your original contribution under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. See our <a href="#/privacy">Privacy Policy</a>.</p>';
 class NavigationChanged extends Error {}
@@ -462,16 +461,12 @@ function reportAPIs(c: any) {
               .get(api.id)!
               .filter((claim) => claim.property === property);
             if (!claims.length) return "";
-            const label =
-              property === "panic_contract"
-                ? "Panic contract"
-                : "No undefined behavior";
-            return `<p class="report-api-claim">${label}: ${claims
+            return `<p class="report-api-claim"><span class="claim-property">${esc(prop(property))}</span><span class="claim-links">${claims
               .map(
                 (claim) =>
                   `<a href="#/claim/${enc(claim.id)}?report_revision=${enc(String(claim.report_revision))}">Claim #${esc(claim.claim_number)}</a>`,
               )
-              .join(", ")}</p>`;
+              .join(", ")}</span></p>`;
           })
           .join("")}</div>`,
     },

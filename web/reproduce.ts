@@ -1,3 +1,4 @@
+import { prop } from "./properties";
 const esc = (s: unknown) =>
   String(s ?? "").replace(
     /[&<>"']/g,
@@ -111,7 +112,7 @@ export function bindReproduce(root: HTMLElement, report: any) {
                   } as any
                 )[r.kind] ||
                 r.kind;
-              return `<tr><td>${esc(r.message?.text || r.ruleId)}<div class="meta"><code>${esc(harness)}</code></div>${loc ? `<div class="meta"><code>${esc(loc)}</code></div>` : ""}</td><td>${esc(status)}</td><td>${claims.map((c: any) => `<a href="#/claim/${encodeURIComponent(c.id)}?report_revision=${report.revision_no}">${esc(c.property.replaceAll("_", "-"))}</a>`).join(" · ") || "—"}</td></tr>`;
+              return `<tr><td>${esc(r.message?.text || r.ruleId)}<div class="meta"><code>${esc(harness)}</code></div>${loc ? `<div class="meta"><code>${esc(loc)}</code></div>` : ""}</td><td>${esc(status)}</td><td>${claims.map((c: any) => `<a href="#/claim/${encodeURIComponent(c.id)}?report_revision=${report.revision_no}">${esc(prop(c.property))}</a>`).join(" · ") || "—"}</td></tr>`;
             })
             .join("");
           const item = (label: string, value: any) =>
