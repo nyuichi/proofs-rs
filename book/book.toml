@@ -4,6 +4,8 @@ language = "en"
 src = "src"
 
 [output.html]
+additional-js = ["../public/account-navigation.js", "theme/account.js", "theme/sidebar-state.js"]
+additional-css = ["theme/site-header.css"]
 default-theme = "light"
 preferred-dark-theme = "light"
 site-url = "/book/"

@@ -1,0 +1,125 @@
+/* Standard header.hbs slot: reserve a site-wide row above mdBook's layout. */
+:root {
+  --proofs-header-height: 68px;
+}
+.proofs-site-header {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 300;
+  box-sizing: border-box;
+  height: var(--proofs-header-height);
+  display: flex;
+  align-items: baseline;
+  gap: 20px;
+  padding: 16px 24px 10px;
+  border-bottom: 1px solid #999;
+  color: #000;
+  background: #fff;
+  font:
+    16px/1.45 "Times New Roman",
+    Times,
+    serif;
+}
+.proofs-site-header a {
+  color: #0000ee;
+  text-decoration: underline;
+}
+.proofs-site-header a:visited {
+  color: #551a8b;
+}
+.proofs-site-header .proofs-site-brand {
+  font-size: 28px;
+  font-weight: bold;
+}
+.proofs-site-header nav {
+  display: flex;
+  gap: 14px;
+  margin-left: 24px;
+}
+.proofs-site-header .proofs-site-account {
+  margin-left: auto;
+}
+#body-container {
+  padding-top: var(--proofs-header-height);
+}
+.sidebar {
+  top: var(--proofs-header-height);
+}
+#menu-bar.sticky,
+#menu-bar-hover-placeholder:hover + #menu-bar,
+#menu-bar:hover,
+html.sidebar-visible #menu-bar,
+#menu-bar-hover-placeholder {
+  top: var(--proofs-header-height) !important;
+}
+.nav-chapters {
+  top: var(--proofs-header-height);
+}
+:target {
+  scroll-margin-top: calc(
+    var(--proofs-header-height) + var(--menu-bar-height) + 8px
+  );
+}
+@media (max-width: 619px) {
+  /* A transformed ancestor would move the fixed site header with the drawer. */
+  #sidebar-toggle-anchor:checked ~ .page-wrapper {
+    transform: none;
+  }
+  #sidebar-toggle-anchor:checked ~ .sidebar {
+    z-index: 200;
+    top: calc(var(--proofs-header-height) + var(--menu-bar-height));
+  }
+}
+@media (max-width: 600px) {
+  :root {
+    --proofs-header-height: 109px;
+  }
+  .proofs-site-header {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px;
+  }
+  .proofs-site-header nav {
+    order: 3;
+    width: 100%;
+    margin: 0;
+  }
+}
+.proofs-site-account {
+  position: relative;
+}
+.proofs-site-account summary {
+  cursor: pointer;
+  list-style: none;
+  text-decoration: underline;
+  color: #0000ee;
+}
+.proofs-site-account summary::-webkit-details-marker {
+  display: none;
+}
+.proofs-site-account .profile-menu {
+  position: absolute;
+  right: 0;
+  z-index: 1;
+  min-width: 155px;
+  background: #fff;
+  border: 1px solid #999;
+  padding: 10px;
+}
+.proofs-site-account .profile-menu a {
+  display: block;
+  margin-bottom: 6px;
+}
+.proofs-site-account button {
+  font-size: 16px;
+  cursor: pointer;
+}
+.proofs-site-account [role="alert"] {
+  font-size: 14px;
+}
+
+/* Loading a page is not a sidebar toggle. Keep manual toggle animations. */
+html:not(.proofs-sidebar-ready) .sidebar,
+html:not(.proofs-sidebar-ready) .page-wrapper {
+  transition: none !important;
+}

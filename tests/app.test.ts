@@ -1274,6 +1274,13 @@ test("frontend Book redirects, revision links and nested comment deletion", asyn
   ).replace("export const legal", "const legal");
   const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
     .replace(
+      'import "../public/account-navigation.js";',
+      readFileSync(
+        new URL("../public/account-navigation.js", import.meta.url),
+        "utf8",
+      ),
+    )
+    .replace(
       "location.replace(target)",
       "document.body.dataset.bookRedirect = target",
     )
@@ -1809,6 +1816,13 @@ test("static page content renders before requests, remains usable, and survives 
     "utf8",
   ).replace("export const legal", "const legal");
   const main = readFileSync(new URL("../web/main.ts", import.meta.url), "utf8")
+    .replace(
+      'import "../public/account-navigation.js";',
+      readFileSync(
+        new URL("../public/account-navigation.js", import.meta.url),
+        "utf8",
+      ),
+    )
     .replace(
       "location.replace(target)",
       "document.body.dataset.bookRedirect = target",
