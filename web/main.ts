@@ -1,3 +1,4 @@
+import "../public/account-navigation.js";
 import { renderAPICatalog } from "./api-catalog";
 import { reproduceSection, bindReproduce } from "./reproduce";
 import { legal } from "./legal";
@@ -93,19 +94,19 @@ function navigate(path: string) {
 }
 async function refreshMe() {
   me = await request("/me", "GET", undefined, undefined, false);
-  document.querySelector("#account-nav")!.innerHTML = me.user
-    ? `<details><summary>${esc(me.user.username)}</summary><div class="profile-menu"><a href="#/account">My activity (${me.karma} karma)</a><a href="#/my-reports">My reports</a><a href="#/my-comments">My comments</a><a href="#/my-starred-reports">Starred reports</a><a href="#/my-starred-claims">Starred claims</a><a href="#/settings">Settings</a>${me.user.role === "admin" ? '<a href="#/admin/catalogs">Catalogs</a>' : ""}<button id="logout">Sign out</button></div></details>`
-    : '<div class="signin"><a href="/auth/github">Sign in with GitHub</a></div>';
-  document.querySelector("#logout")?.addEventListener("click", async () => {
-    try {
+  window.proofsAccountNavigation(
+    document.querySelector("#account-nav")!,
+    me,
+    "",
+    async () => {
       await request("/auth/logout", "POST", {});
       await refreshMe();
       navigate("/");
-    } catch (e) {
-      error(e);
-    }
-  });
+    },
+    error,
+  );
 }
+
 async function signup() {
   root.innerHTML = `<h1>Sign up</h1>${loading}`;
   let pending;
