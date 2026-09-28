@@ -1692,17 +1692,38 @@ test("staging fixture is repeatable and exposes report catalogue without importe
   );
   db.exec(sql);
   db.exec(sql);
-  assert.equal(db.prepare("SELECT COUNT(*) n FROM reports").get()!.n, 9);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM reports").get()!.n, 13);
+  const layout = db
+    .prepare("SELECT id FROM reports WHERE create_key='staging-layout-v1-full'")
+    .get()!;
+  const layoutReport = (await request("/reports/" + layout.id)).body;
+  assert.equal(layoutReport.revision_no, 55);
+  assert.equal(layoutReport.claims.length, 15);
+  assert.equal(layoutReport.run_ids.length, 2);
+  assert.equal(layoutReport.comment_count, 55);
+  assert.deepEqual(
+    [...new Set(layoutReport.claims.map((c: any) => c.category))].sort(),
+    ["associated", "function", "method", "trait"],
+  );
+  const envOnly = db
+    .prepare(
+      "SELECT id FROM reports WHERE create_key='staging-layout-v1-environment-only'",
+    )
+    .get()!;
+  const envReport = (await request("/reports/" + envOnly.id)).body;
+  assert.equal(envReport.run_ids.length, 0);
+  assert.ok(envReport.environment);
+
   const home = await request("/home");
   assert.equal(home.status, 200, JSON.stringify(home.body));
-  assert.equal(home.body.reports.length, 8);
+  assert.equal(home.body.reports.length, 11);
   assert.equal("crates" in home.body, false);
   const allCrates = await request("/crates");
   assert.equal(allCrates.status, 200, JSON.stringify(allCrates.body));
-  assert.equal(allCrates.body.total_count, 7);
-  assert.equal(allCrates.body.matching_count, 7);
+  assert.equal(allCrates.body.total_count, 8);
+  assert.equal(allCrates.body.matching_count, 8);
   const found = await request("/crates?q=array");
-  assert.equal(found.body.total_count, 7);
+  assert.equal(found.body.total_count, 8);
   assert.equal(found.body.matching_count, 1);
   assert.equal(found.body.items[0].api_count, 6);
   assert.equal(found.body.items[0].report_count, 2);

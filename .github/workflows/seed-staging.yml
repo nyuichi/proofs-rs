@@ -16,7 +16,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: '24'
+          node-version: "24"
+      - run: npm ci
       - name: Add demo data only to the existing staging database
         run: node scripts/seed-staging.mjs
         env:
