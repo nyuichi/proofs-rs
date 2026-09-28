@@ -93,6 +93,7 @@ test("report body removes redundant labels and groups claims by API with revisio
   const dom = new JSDOM("<main></main>", { runScripts: "outside-only" });
   const w = dom.window as any;
   w.renderAPICatalog = renderAPICatalog;
+  w.reproduceSection = (await import("../web/reproduce")).reproduceSection;
   w.c = {
     title: "Report",
     crate: "sample",
@@ -105,6 +106,7 @@ test("report body removes redundant labels and groups claims by API with revisio
     limitations: "Report limit",
     tool_limitations: "Tool limit",
     environment: "Machine details",
+    run_ids: ["run-1"],
     evidence_url: "https://example.test/evidence",
     claims: [1, 2, 3].map((n) => ({
       id: "claim-" + n,
@@ -143,7 +145,16 @@ test("report body removes redundant labels and groups claims by API with revisio
   );
   assert.equal(d.querySelector("script"), null);
   assert.equal(d.querySelector("dt"), null);
-  assert.equal(d.querySelector(".report-environment").tagName, "SECTION");
+  assert.equal(d.querySelector(".report-environment").tagName, "DETAILS");
+  assert.equal(d.querySelector(".report-environment").open, false);
+  assert.equal(
+    d.querySelector("#reproduce").nextElementSibling.className,
+    "report-environment",
+  );
+  assert.equal(
+    d.querySelector("#reproduce").parentElement.className,
+    "report-section report-evidence",
+  );
   assert.equal(
     d
       .querySelector(".report-explanation")

@@ -1,8 +1,10 @@
 /* Plain document layout; native links and form controls. */
-.reproduce {
+.reproduce,
+.report-environment {
   margin: 16px 0;
 }
-.reproduce summary {
+.reproduce summary,
+.report-environment summary {
   text-decoration: underline;
 }
 .reproduce pre {
