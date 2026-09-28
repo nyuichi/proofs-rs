@@ -61,21 +61,19 @@ test("claim layout preserves scoped content, escaping, and revision context", ()
   for (const value of [
     "Valid pointer",
     "Claim <script>text</script>",
-    "Report context text",
     "Report trust",
     "Claim trust",
     "Report limit",
     "Claim limit",
     "Tool limit",
-    "Environment text",
   ])
     assert.ok(d.body.textContent.includes(value), value);
   assert.equal(d.querySelector("script"), null);
-  assert.equal(d.querySelectorAll('a[target="_blank"]').length, 2);
-  assert.equal(
-    d.querySelector('a[href="#/report/8?v=2"]').textContent,
-    "Reproduction details in report v2",
-  );
+  assert.equal(d.querySelectorAll('a[target="_blank"]').length, 1);
+  assert.equal(d.querySelector('a[href="#/report/8?v=2"]'), null);
+  assert.equal(d.querySelector('a[href="https://example.com/report"]'), null);
+  assert(!d.body.textContent.includes("Report context text"));
+  assert(!d.body.textContent.includes("Environment text"));
   assert.equal(d.querySelectorAll("h2").length, 4);
   assert.equal(d.querySelector("dl"), null);
   const trust = [...d.querySelectorAll("section")].find(

@@ -481,14 +481,12 @@ function claimScope(shared: string, individual: string, links = false) {
   return `${individual ? content(individual) : ""}${shared ? `<details class="claim-report-context"><summary>From the report</summary>${content(shared)}</details>` : ""}`;
 }
 function claimContent(c: any, stars = false) {
-  const reportURL = `#/report/${enc(String(c.report_id))}?v=${enc(String(c.report_revision))}`;
   return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}
     <p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${esc(prop(c.property))}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p>
     <pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>
     <section class="report-section"><h2>Preconditions</h2><p class="plain-text code">${esc(c.precondition || "None stated")}</p></section>
     ${c.explanation ? `<div class="report-explanation plain-text">${esc(c.explanation)}</div>` : ""}
-    ${c.shared_explanation ? `<details class="claim-report-context"><summary>Report context</summary><p class="plain-text">${esc(c.shared_explanation)}</p></details>` : ""}
-    <section class="report-section"><h2>Evidence</h2>${claimScope(c.shared_evidence_url, c.evidence_url, true)}<p><a href="${reportURL}">Reproduction details in report v${esc(c.report_revision)}</a></p>${c.environment ? `<details class="report-environment"><summary>Environment</summary><p class="plain-text">${esc(c.environment)}</p></details>` : ""}</section>
+    ${c.evidence_url ? `<section class="report-section"><h2>Evidence</h2><p><a href="${esc(c.evidence_url)}" target="_blank" rel="noopener noreferrer">${esc(c.evidence_url)}</a></p></section>` : ""}
     ${c.shared_trusted_assumptions || c.trusted_assumptions ? `<section class="report-section"><h2>What is trusted</h2>${claimScope(c.shared_trusted_assumptions, c.trusted_assumptions)}</section>` : ""}
     ${c.shared_limitations || c.limitations || c.tool_limitations ? `<section class="report-section report-limitations"><h2>Technical limitations</h2>${claimScope(c.shared_limitations, c.limitations)}${toolLimitations(c)}</section>` : ""}`;
 }
