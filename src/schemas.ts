@@ -195,7 +195,9 @@ export const claim = z
     visibility: string,
     report_title: string,
     shared_explanation: string,
-    shared_trusted_assumptions: string.describe("Displayed as What is trusted."),
+    shared_trusted_assumptions: string.describe(
+      "Displayed as What is trusted.",
+    ),
     shared_evidence_url: string,
     shared_limitations: string.describe("Displayed as Technical limitations."),
     environment: string,
