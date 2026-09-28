@@ -706,3 +706,10 @@ textarea {
 .claim-links a {
   white-space: nowrap;
 }
+
+.claim-report-context {
+  margin: 16px 0;
+}
+.claim-report-context summary {
+  text-decoration: underline;
+}
