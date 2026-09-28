@@ -473,15 +473,31 @@ function reportAPIs(c: any) {
     },
   )}</section>`;
 }
+function claimScope(shared: string, individual: string, links = false) {
+  const content = (value: string) =>
+    links
+      ? `<p><a href="${esc(value)}" target="_blank" rel="noopener noreferrer">${esc(value)}</a></p>`
+      : `<p class="plain-text">${esc(value)}</p>`;
+  return `${shared ? `<div class="claim-scope"><h3>From the report</h3>${content(shared)}</div>` : ""}${individual ? `<div class="claim-scope"><h3>For this claim</h3>${content(individual)}</div>` : ""}`;
+}
 function claimContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}<p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("What is trusted (report)", c.shared_trusted_assumptions)}${field("What is trusted (claim)", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Technical limitations (report)", c.shared_limitations)}${field("Technical limitations (claim)", c.limitations)}</dl>`;
+  const reportURL = `#/report/${enc(String(c.report_id))}?v=${enc(String(c.report_revision))}`;
+  return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}
+    <p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${esc(prop(c.property))}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p>
+    <pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>
+    <section class="report-section"><h2>Preconditions</h2><p class="plain-text code">${esc(c.precondition || "None stated")}</p></section>
+    ${c.explanation ? `<div class="report-explanation plain-text">${esc(c.explanation)}</div>` : ""}
+    ${c.shared_explanation ? `<details class="claim-report-context"><summary>Report context</summary><p class="plain-text">${esc(c.shared_explanation)}</p></details>` : ""}
+    <section class="report-section"><h2>Evidence</h2>${claimScope(c.shared_evidence_url, c.evidence_url, true)}<p><a href="${reportURL}">Reproduction details in report v${esc(c.report_revision)}</a></p>${c.environment ? `<details class="report-environment"><summary>Environment</summary><p class="plain-text">${esc(c.environment)}</p></details>` : ""}</section>
+    ${c.shared_trusted_assumptions || c.trusted_assumptions ? `<section class="report-section"><h2>What is trusted</h2>${claimScope(c.shared_trusted_assumptions, c.trusted_assumptions)}</section>` : ""}
+    ${c.shared_limitations || c.limitations || c.tool_limitations ? `<section class="report-section report-limitations"><h2>Technical limitations</h2>${claimScope(c.shared_limitations, c.limitations)}${toolLimitations(c)}</section>` : ""}`;
 }
 async function claimPage(id: string) {
   const n = current().searchParams.get("report_revision");
   const c = await request(
     "/claims/" + enc(id) + (n ? "?report_revision=" + enc(n) : ""),
   );
-  root.innerHTML = `${breadcrumbs(claimCrumbs(c))}${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c, true)}<p><a href="#/report/${c.report_id}?discussion=1">Read and join the discussion on the report →</a></p>`;
+  root.innerHTML = `${breadcrumbs(claimCrumbs(c))}${!c.in_current_report ? "<p><strong>This claim is not included in the current report.</strong></p>" : ""}${c.withdrawn_at ? "<p><strong>The report has been withdrawn.</strong></p>" : ""}${c.report_revision !== c.latest_report_revision ? `<p>From an earlier report revision. <a href="#/report/${c.report_id}">Current report →</a></p>` : ""}${claimContent(c, true)}<p><a href="#/report/${c.report_id}?v=${c.report_revision}&discussion=1">Read and join the discussion on the report →</a></p>`;
   bindStars();
 }
 let commentReply: any = null;
