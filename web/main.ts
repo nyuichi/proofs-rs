@@ -464,7 +464,7 @@ function reportAPIs(c: any) {
             if (!claims.length) return "";
             const label =
               property === "panic_contract"
-                ? "Panic contracts"
+                ? "Panic contract"
                 : "No undefined behavior";
             return `<p class="report-api-claim">${label}: ${claims
               .map(

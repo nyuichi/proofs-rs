@@ -73,7 +73,7 @@ export function renderAPICatalog(
   const link = (a: CatalogAPI, text: string) =>
     `<a class="api-name" href="#/api/${encodeURIComponent(a.id)}">${esc(text)}</a>`;
   const row = (a: CatalogAPI, text: string, keyword = "fn ") =>
-    `<div class="catalog-row"><span><span class="api-keyword">${keyword}</span>${link(a, text)}${unsafe(!!a.is_unsafe)}</span>${claimCounts(a)}</div>${options.details?.(a) || ""}`;
+    `<div class="catalog-row"><span><span class="api-keyword">${keyword}</span>${link(a, text)}${unsafe(!!a.is_unsafe)}</span>${options.details ? options.details(a) : claimCounts(a)}</div>`;
   const data = apis
     .map(describe)
     .sort(

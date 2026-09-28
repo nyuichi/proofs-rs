@@ -730,23 +730,17 @@ textarea {
 }
 .report-api-claims {
   margin: 0;
-  padding: 0 0 8px 20px;
-  border-bottom: 1px solid #ccc;
+  min-width: 0;
 }
 .report-api-claim {
-  margin: 2px 0;
+  margin: 0;
   overflow-wrap: anywhere;
 }
 .report-limitations .tool-limitations {
   margin-top: 12px;
 }
 
-.report-apis .catalog-row,
-.report-apis .api-family > summary {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-/* Share the catalogue hierarchy; a report row includes its claims. */
+/* Use the same API/claims row structure as the crate catalogue. */
 .report-apis {
   --api-category-gap: 16px;
   --api-impl-gap: 8px;
@@ -756,14 +750,17 @@ textarea {
   margin-bottom: 4px;
 }
 .report-apis .catalog-row {
-  border-bottom: 0;
-  padding: 6px 0 2px;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
 }
-.report-apis .api-impl > .report-api-claims {
-  margin-left: 20px;
+.report-apis .api-family > summary {
+  grid-template-columns: minmax(0, 1fr);
 }
 @media (max-width: 600px) {
-  .report-apis .api-impl > .report-api-claims {
-    margin-left: 8px;
+  .report-apis .catalog-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .report-api-claims {
+    padding-left: 20px;
   }
 }
