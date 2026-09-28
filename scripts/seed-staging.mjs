@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
 const origin = "https://proofs-rs-staging.proofs-rs.workers.dev";
 const config = JSON.parse(await readFile("wrangler.json", "utf8"));
@@ -49,8 +50,38 @@ if (
     .some((s) => s.trim() && !s.startsWith("INSERT OR IGNORE INTO "))
 )
   throw Error("Seed must be additive");
-const results = await api(`/d1/database/${db.uuid}/query`, { sql });
-if (results.some((r) => !r.success)) throw Error("Seed query failed");
+// Upload only the reserved synthetic fixture objects to the staging bucket.
+for (let n = 0; n < 2; n++) {
+  const filename = `fixtures/layout-run-${n}.sarif.json`;
+  const manifest = JSON.parse(
+    await readFile("fixtures/layout-runs.json", "utf8"),
+  );
+  execFileSync(
+    "npx",
+    [
+      "wrangler",
+      "r2",
+      "object",
+      "put",
+      `${config.r2_buckets[0].bucket_name}/${manifest[n]}`,
+      "--file",
+      filename,
+      "--remote",
+      "--config",
+      "wrangler.json",
+      "--content-type",
+      "application/sarif+json",
+    ],
+    { stdio: "inherit" },
+  );
+}
+const statements = sql.split("\n").filter(Boolean);
+for (let i = 0; i < statements.length; i += 100) {
+  const results = await api(`/d1/database/${db.uuid}/query`, {
+    sql: statements.slice(i, i + 100).join("\n"),
+  });
+  if (results.some((r) => !r.success)) throw Error("Seed query failed");
+}
 const stats = await api(`/d1/database/${db.uuid}/query`, {
   sql: "SELECT COUNT(*) AS demo_claims FROM claims WHERE report_id IN (SELECT id FROM reports WHERE create_key LIKE 'staging-demo-reports-v1-%'); SELECT COUNT(*) AS demo_users FROM users WHERE github_id BETWEEN -91004 AND -91001; PRAGMA foreign_key_check;",
 });
@@ -61,5 +92,5 @@ if (
 )
   throw Error("Seed verification failed");
 console.log(
-  "Staging demo ready: 7 crates, 9 reports, 16 claims, nested comments and independent stars.",
+  "Report layout cases added (report-layout-demo). Staging demo ready: 7 crates, 9 reports, 16 claims, nested comments and independent stars.",
 );

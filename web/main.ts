@@ -1,3 +1,4 @@
+import { prop } from "./properties";
 import "../public/account-navigation.js";
 import { renderAPICatalog } from "./api-catalog";
 import { reproduceSection, bindReproduce } from "./reproduce";
@@ -21,8 +22,6 @@ const user = (id: string, name: string) =>
   id
     ? `<a class="user-link" href="#/user/${enc(id)}">${esc(name || "ghost")}</a>`
     : "ghost";
-const prop = (p: string) =>
-  p === "no_ub" ? "No undefined behavior" : "Panic contract";
 const notice =
   '<p class="meta">By publishing, you agree to the <a href="#/terms">Terms</a> and license your original contribution under <a href="https://creativecommons.org/licenses/by/4.0/">CC BY 4.0</a>. See our <a href="#/privacy">Privacy Policy</a>.</p>';
 class NavigationChanged extends Error {}
@@ -313,16 +312,26 @@ async function cratePage(name: string) {
   async function load() {
     const data = await request(`/crates/${enc(name)}/${enc(version)}/apis`);
     box.innerHTML = renderAPICatalog(data.items, name);
+    root.querySelector("#apis-heading")!.textContent =
+      `APIs (${data.items.length})`;
   }
-  const results = await Promise.allSettled([
-    load(),
-    claimsList(
-      `/crates/${enc(name)}/${enc(version)}/reports`,
-      root.querySelector<HTMLElement>("#crate-reports")!,
-      0,
-      (report: any) => reportSummary(report, true),
-    ),
-  ]);
+  async function loadReports() {
+    const reports: any[] = [];
+    let cursor: string | number | null = 0;
+    do {
+      const page = await request(
+        `/crates/${enc(name)}/${enc(version)}/reports?cursor=${enc(String(cursor))}`,
+      );
+      reports.push(...page.items);
+      cursor = page.next_cursor ?? null;
+    } while (cursor !== null);
+    root.querySelector("#reports-heading")!.textContent =
+      `Reports (${reports.length})`;
+    root.querySelector("#crate-reports")!.innerHTML =
+      reports.map((report) => reportSummary(report, true)).join("") ||
+      "<p>No results.</p>";
+  }
+  const results = await Promise.allSettled([load(), loadReports()]);
   for (const result of results)
     if (result.status === "rejected") throw result.reason;
   if (section === "apis" || section === "reports") {
@@ -401,24 +410,71 @@ function toolLink(c: any) {
 }
 function toolLimitations(c: any) {
   if (!c.tool_limitations) return "";
-  return `<details class="tool-limitations"><summary>Tool limitations</summary><div class="tool-limitations-body"><p class="plain-text">${esc(c.tool_limitations)}</p>${c.tool_limitations_updated_at ? `<p class="meta">Updated ${date(c.tool_limitations_updated_at)}</p>` : ""}<p><a href="#/tool-version/${enc(c.tool_version_id)}">${esc(c.tool)} ${esc(c.tool_version)} — version details</a></p></div></details>`;
+  return `<details class="tool-limitations"><summary>Tool technical limitations</summary><div class="tool-limitations-body"><p class="plain-text">${esc(c.tool_limitations)}</p>${c.tool_limitations_updated_at ? `<p class="meta">Updated ${date(c.tool_limitations_updated_at)}</p>` : ""}<p><a href="#/tool-version/${enc(c.tool_version_id)}">${esc(c.tool)} ${esc(c.tool_version)} — version details</a></p></div></details>`;
 }
 async function toolVersionPage(id: string) {
   const v = await request("/tool-versions/" + enc(id));
   root.innerHTML = `${breadcrumbs([
     { label: "Tools", href: "#/tools" },
     { label: v.tool, href: `#/tool/${enc(v.tool_id)}` },
-  ])}<h1>${esc(v.tool)} ${esc(v.version)}</h1>${v.selectable ? "" : "<p>This version is retired from new submissions.</p>"}${v.limitations ? `<h2>Known limitations</h2><p class="plain-text">${esc(v.limitations)}</p>${v.limitations_updated_at ? `<p class="meta">Updated ${date(v.limitations_updated_at)}</p>` : ""}` : ""}<h2>Reports</h2><div id="items">${loading}</div>`;
+  ])}<h1>${esc(v.tool)} ${esc(v.version)}</h1>${v.selectable ? "" : "<p>This version is retired from new submissions.</p>"}${v.limitations ? `<h2>Technical limitations</h2><p class="plain-text">${esc(v.limitations)}</p>${v.limitations_updated_at ? `<p class="meta">Updated ${date(v.limitations_updated_at)}</p>` : ""}` : ""}<h2>Reports</h2><div id="items">${loading}</div>`;
   await claimsList(
     "/tool-versions/" + enc(id) + "/reports",
     root.querySelector("#items")!,
   );
 }
 function reportContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p><a href="${crateHref(c.crate, c.version)}">${esc(c.crate)} ${esc(c.version)}</a> · ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Explanation", c.explanation)}${field("Shared trusted assumptions", c.trusted_assumptions)}${field("Environment", c.environment)}${evidence("Shared evidence", c.evidence_url)}${field("Shared limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("report", c) : `<h1>${esc(c.title)}</h1>`}<p class="report-tool">${toolLink(c)}</p>`;
+}
+function reportBody(c: any) {
+  return `${c.explanation ? `<div class="report-explanation plain-text">${esc(c.explanation)}</div>` : ""}
+    ${c.evidence_url || c.run_ids?.length || c.environment ? `<section class="report-section report-evidence"><h2>Evidence</h2>${c.evidence_url ? `<p><a href="${esc(c.evidence_url)}" target="_blank" rel="noopener noreferrer">${esc(c.evidence_url)}</a></p>` : ""}${reproduceSection(c.run_ids, c.environment)}</section>` : ""}
+    ${c.trusted_assumptions ? `<section class="report-section"><h2>What is trusted</h2><p class="plain-text">${esc(c.trusted_assumptions)}</p></section>` : ""}
+    ${c.limitations || c.tool_limitations ? `<section class="report-section report-limitations"><h2>Technical limitations</h2>${c.limitations ? `<p class="plain-text">${esc(c.limitations)}</p>` : ""}${toolLimitations(c)}</section>` : ""}
+    `;
+}
+function reportAPIs(c: any) {
+  const groups = new Map<string, any[]>();
+  for (const claim of c.claims) {
+    if (!groups.has(claim.api_item_id)) groups.set(claim.api_item_id, []);
+    groups.get(claim.api_item_id)!.push(claim);
+  }
+  const apis = [...groups].map(([id, claims]) => ({
+    ...claims[0],
+    id,
+    kind:
+      claims[0].kind ||
+      (claims[0].signature?.startsWith("impl") ? "method" : "function"),
+    panic_count: claims.filter((c) => c.property === "panic_contract").length,
+    no_ub_count: claims.filter((c) => c.property === "no_ub").length,
+  }));
+  return `<section class="report-apis"><h2>Verified APIs (${apis.length})</h2>${renderAPICatalog(
+    apis,
+    c.crate,
+    {
+      hideEmpty: true,
+      hideCounts: true,
+      expandFamilies: true,
+      details: (api) =>
+        `<div class="report-api-claims">${["panic_contract", "no_ub"]
+          .map((property) => {
+            const claims = groups
+              .get(api.id)!
+              .filter((claim) => claim.property === property);
+            if (!claims.length) return "";
+            return `<p class="report-api-claim"><span class="claim-property">${esc(prop(property))}</span><span class="claim-links">${claims
+              .map(
+                (claim) =>
+                  `<a href="#/claim/${enc(claim.id)}?report_revision=${enc(String(claim.report_revision))}">Claim #${esc(claim.claim_number)}</a>`,
+              )
+              .join(", ")}</span></p>`;
+          })
+          .join("")}</div>`,
+    },
+  )}</section>`;
 }
 function claimContent(c: any, stars = false) {
-  return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}<p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("Shared trusted assumptions", c.shared_trusted_assumptions)}${field("Claim-specific trusted assumptions", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Shared limitations", c.shared_limitations)}${field("Claim-specific limitations", c.limitations)}</dl>`;
+  return `${stars ? titleWithStars("claim", c) : `<h1>Claim #${esc(c.claim_number)} — ${esc(c.title)}</h1>`}<p><a href="#/api/${enc(c.api_item_id)}"><code>${esc(c.display_path)}</code></a> · ${prop(c.property)}${c.is_unsafe ? " · <strong>unsafe</strong>" : ""}</p><pre class="signature">${esc(c.signature)}</pre><p>Tool: ${toolLink(c)}</p>${toolLimitations(c)}<dl>${field("Preconditions", c.precondition || "None stated", true)}${field("Report explanation", c.shared_explanation)}${field("Claim explanation", c.explanation)}${field("What is trusted (report)", c.shared_trusted_assumptions)}${field("What is trusted (claim)", c.trusted_assumptions)}${evidence("Shared evidence", c.shared_evidence_url)}${evidence("Claim-specific evidence", c.evidence_url)}${field("Environment", c.environment)}${field("Technical limitations (report)", c.shared_limitations)}${field("Technical limitations (claim)", c.limitations)}</dl>`;
 }
 async function claimPage(id: string) {
   const n = current().searchParams.get("report_revision");
@@ -439,7 +495,7 @@ async function reportPage(id: number) {
   const version = c.revision_no;
   const history = [{ revision_no: version }];
   commentReply = null;
-  root.innerHTML = `${breadcrumbs(crateCrumbs(c, "reports"))}${reportContent(c, true)}<p>${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p id="revision-history">Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== c.latest_revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reproduceSection(c.run_ids)}<h2>Claims (${c.claims.length})</h2>${c.claims.map(claimItem).join("")}<section class="discussion" id="discussion"><h2>Comments (${c.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
+  root.innerHTML = `${breadcrumbs(crateCrumbs(c, "reports"))}${reportContent(c, true)}<p class="meta">${user(c.author_id, c.username)} · ${c.author_karma} karma · ${date(c.created_at)}</p><p class="meta" id="revision-history">Revision ${history.map((v: any) => `<a href="#/report/${id}?v=${v.revision_no}">v${v.revision_no}</a>`).join(" · ")}${version !== c.latest_revision_no ? " · <strong>Past revision</strong>" : ""}</p>${c.withdrawn_at ? "<p><strong>Withdrawn by the author.</strong></p>" : ""}<div class="report-actions">${me.user?.id === c.author_id && !c.withdrawn_at ? ` · <button id="withdraw">Withdraw report</button>` : ""}</div>${reportBody(c)}${reportAPIs(c)}<section class="discussion" id="discussion"><h2>Comments (${c.comment_count})</h2><div class="thread-container" id="comments"></div><h3 id="reply-label">Add a comment</h3>${me.user ? `<form id="comment-form"><label>Report revision <select name="revision_no">${history.map((v: any) => `<option value="${v.revision_no}" ${v.revision_no === version ? "selected" : ""}>v${v.revision_no}</option>`).join("")}</select></label><textarea name="body" required maxlength="5000" aria-label="Comment"></textarea>${notice}<button>Post comment</button><button type="button" id="cancel-reply" hidden>Cancel reply</button></form>` : '<p><a href="/auth/github">Sign in to comment.</a></p>'}</section>`;
   const historyBox = root.querySelector<HTMLElement>("#revision-history")!;
   const revisionSelect = root.querySelector<HTMLSelectElement>(
     '[name="revision_no"]',
@@ -547,7 +603,8 @@ async function loadComments(
   }
   if (!parentID && !d.items.length && !cursor)
     container.insertAdjacentHTML("beforeend", "<p>No comments.</p>");
-  pager(d, (n) => loadComments(claimID, parentID, container, n), container);
+  if (d.next_cursor !== null && d.next_cursor !== undefined)
+    await loadComments(claimID, parentID, container, d.next_cursor);
 }
 function renderComment(cm: any, container: HTMLElement, claimID: number) {
   const article = document.createElement("article");

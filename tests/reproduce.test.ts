@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { JSDOM } from "jsdom";
 import { transpileModule, ModuleKind, ScriptTarget } from "typescript";
 
-test("Reproduce starts collapsed, loads on demand, links claims and safely renders output", async () => {
+test("Reproduce starts collapsed, loads immediately, links claims and safely renders output", async () => {
   const dom = new JSDOM('<main id="app"></main>', {
     url: "https://proofs.rs",
     runScripts: "outside-only",
@@ -80,10 +80,15 @@ test("Reproduce starts collapsed, loads on demand, links claims and safely rende
   };
   w.eval(
     transpileModule(
-      readFileSync(
-        new URL("../web/reproduce.ts", import.meta.url),
-        "utf8",
-      ).replaceAll("export function", "function"),
+      readFileSync(new URL("../web/reproduce.ts", import.meta.url), "utf8")
+        .replaceAll("export function", "function")
+        .replace(
+          'import { prop } from "./properties";',
+          readFileSync(
+            new URL("../web/properties.ts", import.meta.url),
+            "utf8",
+          ).replaceAll("export ", ""),
+        ),
       {
         compilerOptions: {
           module: ModuleKind.None,
@@ -95,7 +100,7 @@ test("Reproduce starts collapsed, loads on demand, links claims and safely rende
   );
   const section = w.document.querySelector("details")!;
   assert.equal(section.open, false);
-  assert.equal(calls.length, 0);
+  assert.equal(calls.length, 1);
   assert.equal(w.document.querySelector("button"), null);
   section.open = true;
   section.dispatchEvent(new w.Event("toggle"));

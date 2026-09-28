@@ -1,8 +1,10 @@
 /* Plain document layout; native links and form controls. */
-.reproduce {
+.reproduce,
+.report-environment {
   margin: 16px 0;
 }
-.reproduce summary {
+.reproduce summary,
+.report-environment summary {
   text-decoration: underline;
 }
 .reproduce pre {
@@ -570,7 +572,7 @@ textarea {
   overflow-wrap: anywhere;
 }
 .api-category {
-  margin-top: 24px;
+  margin-top: var(--api-category-gap, 24px);
 }
 .api-category h3 {
   font-size: 21px;
@@ -579,7 +581,7 @@ textarea {
 .api-impl h4 {
   border-bottom: 1px solid #bbb;
   padding: 10px 0 6px;
-  margin: 20px 0 0;
+  margin: var(--api-impl-gap, 20px) 0 0;
   font-weight: normal;
 }
 .api-impl > .catalog-row,
@@ -645,4 +647,62 @@ textarea {
   .api-family {
     margin-left: 8px;
   }
+}
+
+.report-explanation {
+  margin: 24px 0;
+}
+.report-section {
+  margin: 24px 0;
+}
+.report-section h2 {
+  margin-bottom: 8px;
+}
+.report-section > p {
+  margin: 8px 0;
+}
+.report-api-claims {
+  margin: 0;
+  min-width: 0;
+}
+.report-api-claim {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.report-limitations .tool-limitations {
+  margin-top: 12px;
+}
+
+/* Use the same API/claims row structure as the crate catalogue. */
+.report-apis {
+  --api-category-gap: 16px;
+  --api-impl-gap: 8px;
+}
+.report-apis .api-category h3 {
+  margin-top: 0;
+  margin-bottom: 4px;
+}
+.report-apis .catalog-row {
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+}
+.report-apis .api-family > summary {
+  grid-template-columns: minmax(0, 1fr);
+}
+@media (max-width: 600px) {
+  .report-apis .catalog-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 4px;
+  }
+  .report-api-claims {
+    padding-left: 20px;
+  }
+}
+
+.report-api-claim {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: 4px 12px;
+}
+.claim-links a {
+  white-space: nowrap;
 }

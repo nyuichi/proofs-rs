@@ -1,3 +1,4 @@
+import { prop } from "./properties";
 const esc = (s: unknown) =>
   String(s ?? "").replace(
     /[&<>"']/g,
@@ -8,23 +9,20 @@ const esc = (s: unknown) =>
   );
 const quote = (s: string) =>
   /^[a-zA-Z0-9_./:=+-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
-export function reproduceSection(runIds: string[]) {
-  return runIds?.length
-    ? '<details class="reproduce" id="reproduce"><summary>Reproduce</summary><div class="reproduce-body"></div></details>'
+export function reproduceSection(runIds: string[], environment?: string) {
+  return runIds?.length || environment
+    ? `<details class="reproduce" id="reproduce"><summary>Reproduce</summary><div class="reproduce-body"></div>${environment ? `<details class="report-environment"><summary>Environment</summary><p class="plain-text">${esc(environment)}</p></details>` : ""}</details>`
     : "";
 }
 export function bindReproduce(root: HTMLElement, report: any) {
   const section = root.querySelector<HTMLDetailsElement>("#reproduce");
   if (!section) return;
   const body = section.querySelector<HTMLElement>(".reproduce-body")!;
-  let loaded = false;
-  section.addEventListener("toggle", async () => {
-    if (!section.open || loaded) return;
-    loaded = true;
+  const load = async () => {
     body.textContent = "Loading recorded runs…";
     try {
       const rendered = await Promise.all(
-        report.run_ids.map(async (id: string, index: number) => {
+        (report.run_ids || []).map(async (id: string, index: number) => {
           const base = "/api/v1/runs/" + encodeURIComponent(id);
           const sarif = await getJSON(base + "/sarif");
           const entry = sarif.runs[0],
@@ -114,7 +112,7 @@ export function bindReproduce(root: HTMLElement, report: any) {
                   } as any
                 )[r.kind] ||
                 r.kind;
-              return `<tr><td>${esc(r.message?.text || r.ruleId)}<div class="meta"><code>${esc(harness)}</code></div>${loc ? `<div class="meta"><code>${esc(loc)}</code></div>` : ""}</td><td>${esc(status)}</td><td>${claims.map((c: any) => `<a href="#/claim/${encodeURIComponent(c.id)}?report_revision=${report.revision_no}">${esc(c.property.replaceAll("_", "-"))}</a>`).join(" · ") || "—"}</td></tr>`;
+              return `<tr><td>${esc(r.message?.text || r.ruleId)}<div class="meta"><code>${esc(harness)}</code></div>${loc ? `<div class="meta"><code>${esc(loc)}</code></div>` : ""}</td><td>${esc(status)}</td><td>${claims.map((c: any) => `<a href="#/claim/${encodeURIComponent(c.id)}?report_revision=${report.revision_no}">${esc(prop(c.property))}</a>`).join(" · ") || "—"}</td></tr>`;
             })
             .join("");
           const item = (label: string, value: any) =>
@@ -130,13 +128,18 @@ export function bindReproduce(root: HTMLElement, report: any) {
       body.innerHTML = rendered.join("");
     } catch (e) {
       body.textContent = String(e);
-      loaded = false;
+      const retry = document.createElement("button");
+      retry.textContent = "Retry";
+      retry.onclick = () => {
+        void load();
+      };
+      body.append(retry);
     }
-  });
+  };
+  return load();
 }
 async function getJSON(path: string) {
   const r = await fetch(path);
-  if (!r.ok)
-    throw Error("Unable to load recorded run. Close and reopen to retry.");
+  if (!r.ok) throw Error("Unable to load recorded run.");
   return r.json();
 }

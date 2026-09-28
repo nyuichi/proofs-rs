@@ -61,5 +61,38 @@ for index,(key,items) in enumerate(groups.items()):
         insert('report_comment_history',comment_id=uid('edited'),history_no=1,action='edit',body='Is the upper endpoint covered?',actor_id=uid('nora'),created_at=date(10))
         for name in ['emil','soren']:insert('report_comment_votes',comment_id=uid('edited'),user_id=uid(name),value=1,updated_at=date(10))
 insert('audit_events',id=uid('reports-seed-audit'),action='staging_demo_seed',target_id='staging-demo-reports-v1',reason='User-requested synthetic staging data based on the original Sites mock.',created_at=date(10))
+# Additive fixtures reserved for report-layout review.
+import hashlib
+c={'name':'report-layout-demo','v':'1.0.0'}
+insert('tools',id='layout-demo',name='Layout demo',description='Synthetic tool',official_url='https://example.com/layout-demo')
+insert('tool_versions',id=uid('layout/tool'),tool_id='layout-demo',version='1.0',limitations='Synthetic tool limitation for layout review.',limitations_updated_at=date(0))
+insert('crates',name=c['name'],description='Synthetic report layout cases; no verification was performed.')
+insert('releases',crate_id=expr("(SELECT id FROM crates WHERE name='report-layout-demo')"),version='1.0.0-demo.1',created_at=date(0))
+apis=[('decode','function',None,None,0),('decode_with_configuration_and_validate_the_entire_input','function',None,None,1),('Buffer::new','associated',None,'Buffer',0),('Buffer::read','method',None,'Buffer',0),('<Buffer as core::fmt::Display>::fmt','trait','core::fmt::Display','Buffer',0),('<View as core::fmt::Display>::fmt','trait','core::fmt::Display','View',0),('<T as core::convert::Into<T>>::into','trait','core::convert::Into<T>','T',0)]
+for name,cat,trait,selftype,unsafe in apis:
+    aid=uid('layout/api/'+name)
+    insert('api_items',id=aid,release_id=rel(c),canonical_key='layout:'+name,display_path=name if name.startswith('<') else 'report_layout_demo::'+name,kind='function' if cat=='function' else 'method',is_unsafe=unsafe,signature='pub '+('unsafe ' if unsafe else '')+'fn '+name.split('::')[-1]+'(/* synthetic */)',upstream_url='https://example.com/layout-demo')
+    insert('api_item_metadata',api_item_id=aid,category=cat,trait_path=trait,self_type=selftype,method_name=name.split('::')[-1],is_blanket=int(selftype=='T'))
+for mode in ['full','minimal','environment-only','withdrawn']:
+    key='staging-layout-v1-'+mode
+    reportid=expr('(SELECT id FROM reports WHERE create_key='+val(key)+')')
+    insert('reports',create_key=key,release_id=rel(c),author_id=uid('mira'),withdrawn_at=date(10) if mode=='withdrawn' else None,created_at=date(0),updated_at=date(10))
+    entries=[(name,p) for name,*_ in apis for p in ['panic_contract','no_ub']]+[('decode','panic_contract')] if mode=='full' else [('decode','panic_contract')]
+    for n,(name,prop) in enumerate(entries):
+        insert('claims',id=uid('layout/'+mode+'/'+str(n)),report_id=reportid,api_item_id=uid('layout/api/'+name),property=prop,created_at=date(0))
+    for rev in range(1,56 if mode=='full' else 2):
+        insert('report_revisions',report_id=reportid,revision_no=rev,title='Layout demo — '+mode,explanation='Synthetic display fixture. No verification was performed.' if mode!='minimal' else '',trusted_assumptions='Synthetic compiler and tool models.' if mode=='full' else '',environment='Synthetic Linux x86_64\nRust demo toolchain\nNo actual verification was run.' if mode in ['full','environment-only'] else '',evidence_url='https://example.com/layout-demo' if mode=='full' else '',limitations='Layout demonstration only.' if mode=='full' else '',tool_version_id=uid('layout/tool'),created_at=date(0))
+        for n,(name,prop) in enumerate(entries):
+            insert('claim_revisions',claim_id=uid('layout/'+mode+'/'+str(n)),report_id=reportid,report_revision=rev,position=n,title='Synthetic claim '+str(n+1),precondition='Demo input only',explanation='Synthetic claim explanation retained on the detail page.',trusted_assumptions='Synthetic claim trust',evidence_url='https://example.com/layout-demo',limitations='Not a real proof')
+    if mode=='full':
+        for n in range(55):insert('report_comments',id=uid('layout/comment/'+str(n)),report_id=reportid,sequence_no=n+1,revision_no=55,author_id=uid('nora'),body='Synthetic pagination comment '+str(n+1),created_at=date(0))
+        for n in range(2):
+            runid=uid('layout/run/'+str(n)); objectkey='staging-layout-v1/'+runid+'.sarif.json'
+            sarif={'version':'2.1.0','$schema':'https://json.schemastore.org/sarif-2.1.0.json','runs':[{'tool':{'driver':{'name':'Layout demo','version':'1.0'}},'invocations':[{'executableLocation':{'uri':'echo'},'arguments':['Synthetic fixture; no verification performed'],'workingDirectory':{'uri':'./'},'executionSuccessful':True,'exitCode':0,'startTimeUtc':date(0),'endTimeUtc':date(0),'environmentVariables':{},'stdout':{'index':0}}],'versionControlProvenance':[{'repositoryUri':'https://github.com/proofs-rs/proofs-rs','revisionId':'0'*40}],'properties':{'proofs':{'platform':'Synthetic platform','rustc':'Synthetic compiler','contracts':[{'harness':'demo','api_paths':['report_layout_demo::decode'],'properties':['panic_contract','no_ub']}]}},'artifacts':[{'contents':{'text':'Synthetic diagnostics <not HTML>. No verification performed.'}}],'results':[{'kind':'informational','message':{'text':'Synthetic example only'},'properties':{'harness':'demo'}}]}]}
+            data=json.dumps(sarif,indent=2)+'\n';Path('fixtures/layout-run-'+str(n)+'.sarif.json').write_text(data)
+            insert('verification_runs',id=runid,author_id=uid('mira'),crate=c['name'],version='1.0.0-demo.1',tool_version_id=uid('layout/tool'),sha256=hashlib.sha256(data.encode()).hexdigest(),size=len(data.encode()),r2_key=objectkey,created_at=date(0))
+            for rev in [1,55]:insert('report_runs',report_id=reportid,revision_no=rev,run_id=runid,position=n)
+
+Path('fixtures/layout-runs.json').write_text(json.dumps(['staging-layout-v1/'+uid('layout/run/'+str(n))+'.sarif.json' for n in range(2)],indent=2)+'\n')
 Path('fixtures/staging-demo.sql').write_text('\n'.join(Q)+'\n')
 print(f'{len(groups)} reports; {len(claims)} claims; {len(Q)} additive statements')
