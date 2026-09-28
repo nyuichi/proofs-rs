@@ -410,7 +410,7 @@ function toolLink(c: any) {
 }
 function toolLimitations(c: any) {
   if (!c.tool_limitations) return "";
-  return `<details class="tool-limitations"><summary>Tool technical limitations</summary><div class="tool-limitations-body"><p class="plain-text">${esc(c.tool_limitations)}</p>${c.tool_limitations_updated_at ? `<p class="meta">Updated ${date(c.tool_limitations_updated_at)}</p>` : ""}<p><a href="#/tool-version/${enc(c.tool_version_id)}">${esc(c.tool)} ${esc(c.tool_version)} — version details</a></p></div></details>`;
+  return `<details class="tool-limitations"><summary>Tool limitations</summary><div class="tool-limitations-body"><p class="plain-text">${esc(c.tool_limitations)}</p>${c.tool_limitations_updated_at ? `<p class="meta">Updated ${date(c.tool_limitations_updated_at)}</p>` : ""}<p><a href="#/tool-version/${enc(c.tool_version_id)}">${esc(c.tool)} ${esc(c.tool_version)} — version details</a></p></div></details>`;
 }
 async function toolVersionPage(id: string) {
   const v = await request("/tool-versions/" + enc(id));
@@ -478,7 +478,7 @@ function claimScope(shared: string, individual: string, links = false) {
     links
       ? `<p><a href="${esc(value)}" target="_blank" rel="noopener noreferrer">${esc(value)}</a></p>`
       : `<p class="plain-text">${esc(value)}</p>`;
-  return `${shared ? `<div class="claim-scope"><h3>From the report</h3>${content(shared)}</div>` : ""}${individual ? `<div class="claim-scope"><h3>For this claim</h3>${content(individual)}</div>` : ""}`;
+  return `${individual ? content(individual) : ""}${shared ? `<details class="claim-report-context"><summary>From the report</summary>${content(shared)}</details>` : ""}`;
 }
 function claimContent(c: any, stars = false) {
   const reportURL = `#/report/${enc(String(c.report_id))}?v=${enc(String(c.report_revision))}`;

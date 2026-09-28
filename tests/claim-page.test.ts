@@ -78,6 +78,20 @@ test("claim layout preserves scoped content, escaping, and revision context", ()
   );
   assert.equal(d.querySelectorAll("h2").length, 4);
   assert.equal(d.querySelector("dl"), null);
+  const trust = [...d.querySelectorAll("section")].find(
+    (s: any) => s.querySelector("h2")?.textContent === "What is trusted",
+  )!;
+  assert.equal(trust.children[1].textContent, "Claim trust");
+  assert.equal(trust.children[2].tagName, "DETAILS");
+  assert.equal(
+    trust.children[2].querySelector("summary").textContent,
+    "From the report",
+  );
+  assert.equal(
+    d.querySelector(".tool-limitations summary").textContent,
+    "Tool limitations",
+  );
+  assert(!d.body.textContent.includes("For this claim"));
   assert.equal(d.querySelector(".claim-report-context").open, false);
   dom.window.close();
 });

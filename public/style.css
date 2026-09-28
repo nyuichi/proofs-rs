@@ -707,14 +707,6 @@ textarea {
   white-space: nowrap;
 }
 
-.claim-scope h3 {
-  font-size: 16px;
-  margin: 12px 0 4px;
-}
-.claim-scope p {
-  margin: 4px 0;
-  overflow-wrap: anywhere;
-}
 .claim-report-context {
   margin: 16px 0;
 }
