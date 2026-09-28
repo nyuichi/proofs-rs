@@ -93,7 +93,21 @@ test("report body removes redundant labels and groups claims by API with revisio
   const dom = new JSDOM("<main></main>", { runScripts: "outside-only" });
   const w = dom.window as any;
   w.renderAPICatalog = renderAPICatalog;
-  w.reproduceSection = (await import("../web/reproduce")).reproduceSection;
+  const reproductionSource = ts.createSourceFile(
+    "reproduce.ts",
+    readFileSync(new URL("../web/reproduce.ts", import.meta.url), "utf8"),
+    ts.ScriptTarget.Latest,
+    true,
+  );
+  const reproductionSection = reproductionSource.statements.find(
+    (n) => ts.isFunctionDeclaration(n) && n.name?.text === "reproduceSection",
+  )!;
+  w.eval(
+    ts.transpileModule(
+      reproductionSection.getText(reproductionSource).replace("export ", ""),
+      { compilerOptions: { module: ts.ModuleKind.None } },
+    ).outputText,
+  );
   w.c = {
     title: "Report",
     crate: "sample",
