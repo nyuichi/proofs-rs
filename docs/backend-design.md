@@ -85,8 +85,9 @@ separate normalized tables. No token name or bio is stored.
 
 ## Public API
 
-All application endpoints use `/api/v1`. The checked-in OpenAPI 3.1 contract is
-served at `/openapi.json`; the two-column `/docs/api` reference renders it directly.
+Application APIs use `/api/v1`, with authentication routes under `/auth`.
+The Worker generates OpenAPI 3.1 at `/openapi.json` from the public Hono routes
+and shared schemas. Scalar renders the definition at `/api/docs`.
 Tests compare routes and methods with the specification. Administrative APIs are
 excluded from the public contract.
 

@@ -1,0 +1,24 @@
+<script>
+// Restore before the book controls/content are parsed. The following mdBook
+// initialization uses the same global sidebar value to set ARIA attributes.
+(() => {
+  let saved;
+  try { saved = localStorage.getItem("mdbook-sidebar"); } catch { return; }
+  if (saved !== "visible" && saved !== "hidden") return;
+  window.sidebar = saved;
+  document.getElementById("sidebar-toggle-anchor").checked = saved === "visible";
+  document.documentElement.classList.remove("sidebar-visible", "sidebar-hidden");
+  document.documentElement.classList.add(`sidebar-${saved}`);
+})();
+</script>
+<header class="proofs-site-header">
+  <a class="proofs-site-brand" href="/">proofs.rs</a>
+  <nav aria-label="Main navigation">
+    <a href="/#/crates">Crates</a>
+    <a href="/#/reports">Reports</a>
+    <a href="/#/tools">Tools</a>
+    <a href="/book/publish-a-report.html">Publish</a>
+    <a href="/book/">About</a>
+  </nav>
+  <div class="proofs-site-account" id="account-nav"><a href="/#/account">Account</a></div>
+</header>

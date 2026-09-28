@@ -1,3 +1,5 @@
+import { operation } from "./openapi";
+import * as S from "./schemas";
 import { Hono } from "hono";
 import {
   App,
@@ -16,11 +18,7 @@ import {
 export const runs = new Hono<App>();
 const SARIF_LIMIT = 8 * 1024 * 1024;
 const id = (s: string) => {
-  if (
-    typeof s !== "string" ||
-    !/^[a-f0-9]{8}(-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(s)
-  )
-    throw new Fault(400, "invalid_run_id");
+  if (!S.runId.safeParse(s).success) throw new Fault(400, "invalid_run_id");
   return s;
 };
 const relative = (s: unknown) =>
@@ -52,19 +50,8 @@ async function visibleRun(c: Ctx) {
   return run;
 }
 export function validateSarif(s: any) {
-  if (s?.version !== "2.1.0" || !Array.isArray(s.runs) || s.runs.length !== 1)
-    throw new Fault(400, "invalid_sarif");
+  if (!S.sarif.safeParse(s).success) throw new Fault(400, "invalid_sarif");
   const r = s.runs[0];
-  if (
-    typeof r?.tool?.driver?.name !== "string" ||
-    !r.tool.driver.name ||
-    !Array.isArray(r.invocations) ||
-    r.invocations.length !== 1 ||
-    typeof r.invocations[0]?.executionSuccessful !== "boolean" ||
-    !Array.isArray(r.results) ||
-    r.results.length > 50000
-  )
-    throw new Fault(400, "invalid_sarif");
   const artifacts = r.artifacts || [];
   if (!Array.isArray(artifacts)) throw new Fault(400, "invalid_sarif");
   const streams = new Set<number>();
@@ -92,19 +79,6 @@ export function validateSarif(s: any) {
     )
       throw new Fault(400, "embedded_source_not_allowed");
   }
-  for (const result of r.results)
-    if (
-      typeof result?.message?.text !== "string" ||
-      ![
-        "pass",
-        "fail",
-        "open",
-        "notApplicable",
-        "informational",
-        "review",
-      ].includes(result.kind)
-    )
-      throw new Fault(400, "invalid_sarif_result");
 }
 export function readRecord(sarif: any) {
   validateSarif(sarif);
@@ -210,100 +184,137 @@ async function readStored(c: Ctx, run: any) {
   if (!object) throw new Fault(503, "sarif_unavailable");
   return object;
 }
-runs.post("/:run/sarif", async (c) => {
-  const u = requireUser(c),
-    run = id(c.req.param("run") || "");
-  const bytes = await c.req.arrayBuffer();
-  if (!bytes.byteLength || bytes.byteLength > SARIF_LIMIT)
-    throw new Fault(413, "artifact_too_large");
-  const sha = await digest(bytes);
-  const existing = await one(
-    c.env.DB,
-    "SELECT * FROM verification_runs WHERE id=?",
-    run,
-  );
-  if (existing) {
-    if (existing.author_id !== u.id || existing.sha256 !== sha)
-      throw new Fault(409, "immutable_run");
-    return c.json({ id: run, sha256: sha }, 200);
-  }
-  let sarif;
-  try {
-    sarif = JSON.parse(new TextDecoder().decode(bytes));
-  } catch {
-    throw new Fault(400, "invalid_sarif");
-  }
-  const record = readRecord(sarif);
-  if (record.id !== run) throw new Fault(400, "run_id_mismatch");
-  const driver = sarif.runs[0].tool.driver;
-  const tv = await one(
-    c.env.DB,
-    "SELECT v.id FROM tool_versions v JOIN tools t ON t.id=v.tool_id WHERE lower(t.name)=lower(?) AND v.version=? AND v.selectable=1 AND t.active=1",
-    driver.name,
-    driver.version,
-  );
-  if (!tv) throw new Fault(400, "tool_version_unavailable");
-  // Each attempt owns its object, so compensation cannot delete a concurrent winner.
-  const key = `runs/${u.id}/${run}/${crypto.randomUUID()}.sarif.json`;
-  await c.env.ARCHIVE.put(key, bytes, {
-    httpMetadata: { contentType: "application/sarif+json" },
-  });
-  try {
-    await batch(c.env.DB, [
-      quota(c.env.DB, u.id, "verification_run", 90),
-      stmt(
-        c.env.DB,
-        "INSERT INTO verification_runs VALUES(?,?,?,?,?,?,?,?,?)",
-        run,
-        u.id,
-        record.crate,
-        record.version,
-        tv.id,
-        sha,
-        bytes.byteLength,
-        key,
-        now(),
-      ),
-    ]);
-  } catch (error) {
-    // A lost DB response may still have committed. Never delete that live object.
-    const saved = await one(
+runs.post(
+  "/:run/sarif",
+  ...operation("Upload a recorded verification run", S.uploadedRun, {
+    tags: ["Runs"],
+    params: { run: S.runId },
+    body: S.sarif,
+    raw: true,
+    media: "application/sarif+json",
+    status: 201,
+    additionalResponses: { 200: S.uploadedRun },
+    auth: "user",
+    write: true,
+    errors: [400, 404, 409, 413, 428, 429],
+    description:
+      "Uploads original SARIF bytes (maximum 8 MiB). Identical uploads return 200; new runs return 201. The run ID must match automationDetails.guid.",
+  }),
+  async (c) => {
+    const u = requireUser(c),
+      run = id(c.req.param("run") || "");
+    const bytes = await c.req.arrayBuffer();
+    if (!bytes.byteLength || bytes.byteLength > SARIF_LIMIT)
+      throw new Fault(413, "artifact_too_large");
+    const sha = await digest(bytes);
+    const existing = await one(
       c.env.DB,
       "SELECT * FROM verification_runs WHERE id=?",
       run,
     );
-    if (saved?.r2_key !== key) await c.env.ARCHIVE.delete(key);
-    if (saved?.author_id === u.id && saved.sha256 === sha)
-      return c.json({ id: run, sha256: sha });
-    if (saved) throw new Fault(409, "immutable_run");
-    throw error;
-  }
-  return c.json({ id: run, sha256: sha }, 201);
-});
-runs.get("/:run", async (c) => {
-  const r = await visibleRun(c);
-  return c.json({
-    id: r.id,
-    author_id: r.author_id,
-    crate: r.crate,
-    version: r.version,
-    tool_version_id: r.tool_version_id,
-    sha256: r.sha256,
-    size: r.size,
-    created_at: r.created_at,
-  });
-});
-runs.get("/:run/sarif", async (c) => {
-  const run = await visibleRun(c),
-    object = await readStored(c, run);
-  c.header("Content-Type", "application/sarif+json");
-  c.header(
-    "Content-Disposition",
-    `attachment; filename="${run.id}.sarif.json"`,
-  );
-  c.header("Content-Security-Policy", "default-src 'none'; sandbox");
-  return c.body(object.body);
-});
+    if (existing) {
+      if (existing.author_id !== u.id || existing.sha256 !== sha)
+        throw new Fault(409, "immutable_run");
+      return c.json({ id: run, sha256: sha }, 200);
+    }
+    let sarif;
+    try {
+      sarif = JSON.parse(new TextDecoder().decode(bytes));
+    } catch {
+      throw new Fault(400, "invalid_sarif");
+    }
+    const record = readRecord(sarif);
+    if (record.id !== run) throw new Fault(400, "run_id_mismatch");
+    const driver = sarif.runs[0].tool.driver;
+    const tv = await one(
+      c.env.DB,
+      "SELECT v.id FROM tool_versions v JOIN tools t ON t.id=v.tool_id WHERE lower(t.name)=lower(?) AND v.version=? AND v.selectable=1 AND t.active=1",
+      driver.name,
+      driver.version,
+    );
+    if (!tv) throw new Fault(400, "tool_version_unavailable");
+    // Each attempt owns its object, so compensation cannot delete a concurrent winner.
+    const key = `runs/${u.id}/${run}/${crypto.randomUUID()}.sarif.json`;
+    await c.env.ARCHIVE.put(key, bytes, {
+      httpMetadata: { contentType: "application/sarif+json" },
+    });
+    try {
+      await batch(c.env.DB, [
+        quota(c.env.DB, u.id, "verification_run", 90),
+        stmt(
+          c.env.DB,
+          "INSERT INTO verification_runs VALUES(?,?,?,?,?,?,?,?,?)",
+          run,
+          u.id,
+          record.crate,
+          record.version,
+          tv.id,
+          sha,
+          bytes.byteLength,
+          key,
+          now(),
+        ),
+      ]);
+    } catch (error) {
+      // A lost DB response may still have committed. Never delete that live object.
+      const saved = await one(
+        c.env.DB,
+        "SELECT * FROM verification_runs WHERE id=?",
+        run,
+      );
+      if (saved?.r2_key !== key) await c.env.ARCHIVE.delete(key);
+      if (saved?.author_id === u.id && saved.sha256 === sha)
+        return c.json({ id: run, sha256: sha });
+      if (saved) throw new Fault(409, "immutable_run");
+      throw error;
+    }
+    return c.json({ id: run, sha256: sha }, 201);
+  },
+);
+runs.get(
+  "/:run",
+  ...operation("Read verification run metadata", S.run, {
+    tags: ["Runs"],
+    params: { run: S.runId },
+    auth: "optional",
+    description: "Unpublished runs are visible only to their author.",
+    errors: [400, 404],
+  }),
+  async (c) => {
+    const r = await visibleRun(c);
+    return c.json({
+      id: r.id,
+      author_id: r.author_id,
+      crate: r.crate,
+      version: r.version,
+      tool_version_id: r.tool_version_id,
+      sha256: r.sha256,
+      size: r.size,
+      created_at: r.created_at,
+    });
+  },
+);
+runs.get(
+  "/:run/sarif",
+  ...operation("Download a verification run as SARIF", S.sarif, {
+    tags: ["Runs"],
+    params: { run: S.runId },
+    auth: "optional",
+    responseMedia: "application/sarif+json",
+    errors: [400, 404, 503],
+  }),
+  async (c) => {
+    const run = await visibleRun(c),
+      object = await readStored(c, run);
+    c.header("Content-Type", "application/sarif+json");
+    c.header(
+      "Content-Disposition",
+      `attachment; filename="${run.id}.sarif.json"`,
+    );
+    c.header("Content-Security-Policy", "default-src 'none'; sandbox");
+    return c.body(object.body);
+  },
+);
 // Reclaim crash leftovers only. Completed but unpublished runs remain valid records.
 export async function cleanupRunUploads(env: Env) {
   let cursor: string | undefined;
