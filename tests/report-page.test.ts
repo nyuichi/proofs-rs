@@ -141,6 +141,7 @@ test("report body removes redundant labels and groups claims by API with revisio
   w.eval(
     ts.transpileModule(
       setup +
+        reproductionSection.getText(reproductionSource).replace("export ", "") +
         functions +
         `;document.querySelector('main').innerHTML=reportContent(c)+reportBody(c)+reportAPIs(c);`,
       {
@@ -162,8 +163,8 @@ test("report body removes redundant labels and groups claims by API with revisio
   assert.equal(d.querySelector(".report-environment").tagName, "DETAILS");
   assert.equal(d.querySelector(".report-environment").open, false);
   assert.equal(
-    d.querySelector("#reproduce").nextElementSibling.className,
-    "report-environment",
+    d.querySelector(".report-environment").parentElement.id,
+    "reproduce",
   );
   assert.equal(
     d.querySelector("#reproduce").parentElement.className,

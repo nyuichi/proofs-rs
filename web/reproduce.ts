@@ -9,9 +9,9 @@ const esc = (s: unknown) =>
   );
 const quote = (s: string) =>
   /^[a-zA-Z0-9_./:=+-]+$/.test(s) ? s : `'${s.replace(/'/g, "'\\''")}'`;
-export function reproduceSection(runIds: string[]) {
-  return runIds?.length
-    ? '<details class="reproduce" id="reproduce"><summary>Reproduce</summary><div class="reproduce-body"></div></details>'
+export function reproduceSection(runIds: string[], environment?: string) {
+  return runIds?.length || environment
+    ? `<details class="reproduce" id="reproduce"><summary>Reproduce</summary><div class="reproduce-body"></div>${environment ? `<details class="report-environment"><summary>Environment</summary><p class="plain-text">${esc(environment)}</p></details>` : ""}</details>`
     : "";
 }
 export function bindReproduce(root: HTMLElement, report: any) {
@@ -22,7 +22,7 @@ export function bindReproduce(root: HTMLElement, report: any) {
     body.textContent = "Loading recorded runs…";
     try {
       const rendered = await Promise.all(
-        report.run_ids.map(async (id: string, index: number) => {
+        (report.run_ids || []).map(async (id: string, index: number) => {
           const base = "/api/v1/runs/" + encodeURIComponent(id);
           const sarif = await getJSON(base + "/sarif");
           const entry = sarif.runs[0],
