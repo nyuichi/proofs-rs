@@ -304,25 +304,15 @@ header {
 }
 #account-nav {
   margin-left: auto;
-  position: relative;
 }
-#account-nav summary {
-  cursor: pointer;
-  text-decoration: underline;
-  color: #0000ee;
+.account-links {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px 14px;
 }
-.profile-menu {
-  position: absolute;
-  right: 0;
-  z-index: 2;
-  min-width: 155px;
-  background: white;
-  border: 1px solid #999;
-  padding: 10px;
-}
-.profile-menu a {
-  display: block;
-  margin-bottom: 6px;
+.account-links > * {
+  white-space: nowrap;
 }
 @media (max-width: 600px) {
   header {
@@ -337,12 +327,6 @@ header {
   font-weight: bold;
 }
 
-#account-nav summary {
-  list-style: none;
-}
-#account-nav summary::-webkit-details-marker {
-  display: none;
-}
 main:has(> .home-search) {
   margin-inline: auto;
 }
