@@ -44,12 +44,21 @@ for (const signedIn of [false, true]) {
       await new Promise((resolve) => setTimeout(resolve, 20));
       if (signedIn) {
         assert.equal(w.document.querySelector("img"), null);
-        assert.equal(
-          w.document.querySelector("summary")?.textContent,
-          '<img src=x onerror="alert(1)">',
+        assert.equal(w.document.querySelector("details"), null);
+        assert.deepEqual(
+          Array.from(w.document.querySelectorAll("a"), (a) => [
+            a.getAttribute("href"),
+            a.textContent,
+          ]),
+          [
+            ["/#/account", "My activity (12 karma)"],
+            ["/#/settings", "Settings"],
+          ],
         );
-        assert.ok(w.document.querySelector('a[href="/#/account"]'));
-        assert.ok(w.document.querySelector('a[href="/#/admin/catalogs"]'));
+        assert.equal(
+          w.document.querySelector("#logout")?.textContent,
+          "Sign out",
+        );
         (w.document.querySelector("#logout") as HTMLButtonElement).click();
         await new Promise((resolve) => setTimeout(resolve, 20));
         assert.equal(logoutCalls, 1);

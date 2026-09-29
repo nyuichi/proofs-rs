@@ -706,24 +706,35 @@ async function termsUpdate(returnTo = "/account") {
     navigate(returnTo);
   });
 }
-async function activity(id: string) {
+async function activity(id: string, own = false) {
   const u = await request("/users/" + enc(id));
-  root.innerHTML = `<h1>${esc(u.username)}</h1><p><a href="https://github.com/${enc(u.username)}" rel="noopener noreferrer">GitHub profile</a></p><p>${u.karma} karma · joined ${date(u.created_at)}</p><h2>Reports</h2><div id="claims"></div><h2>Comments</h2><div id="activity-comments"></div>`;
+  root.innerHTML = `<h1>${esc(u.username)}</h1><p>${u.karma} karma · joined ${date(u.created_at)}</p><p><a href="https://github.com/${enc(u.username)}" rel="noopener noreferrer">GitHub profile</a></p><section id="reports"><h2>${own ? "My reports" : "Reports"}</h2><div id="claims"></div></section><section id="comments"><h2>${own ? "My comments" : "Comments"}</h2><div id="activity-comments"></div></section>${own ? '<section id="starred-reports"><h2>Starred reports</h2><div id="activity-starred-reports"></div></section><section id="starred-claims"><h2>Starred claims</h2><div id="activity-starred-claims"></div></section>' : ""}`;
   await claimsList(
-    "/users/" + enc(u.id) + "/reports",
+    own ? "/me/reports" : "/users/" + enc(u.id) + "/reports",
     root.querySelector("#claims")!,
   );
   await commentsList(
-    "/users/" + enc(u.id) + "/comments",
+    own ? "/me/comments" : "/users/" + enc(u.id) + "/comments",
     root.querySelector("#activity-comments")!,
   );
-}
-async function mine(kind: string) {
-  if (!needUser()) return;
-  root.innerHTML = `<h1>My ${esc(kind)}</h1><div id="items"></div>`;
-  const box = root.querySelector<HTMLElement>("#items")!;
-  if (kind !== "comments") return claimsList("/me/" + kind, box);
-  await commentsList("/me/comments", box);
+  if (own) {
+    await claimsList(
+      "/me/starred-reports",
+      root.querySelector("#activity-starred-reports")!,
+    );
+    await claimsList(
+      "/me/starred-claims",
+      root.querySelector("#activity-starred-claims")!,
+    );
+    const section = current().searchParams.get("section");
+    if (
+      section &&
+      ["reports", "comments", "starred-reports", "starred-claims"].includes(
+        section,
+      )
+    )
+      document.getElementById(section)?.scrollIntoView();
+  }
 }
 async function commentsList(path: string, box: HTMLElement, cursor = 0) {
   const d = await request(path + "?cursor=" + enc(String(cursor)));
@@ -742,7 +753,7 @@ async function settings() {
   if (!me.user) return login();
   const p = await request("/me/notification-preferences");
   const tokens = await request("/me/tokens");
-  root.innerHTML = `<h1>Settings</h1><h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Your GitHub username is refreshed when you sign in again.</p><h2>Email notifications</h2><p>Email: ${esc(me.email?.address || "Unavailable")}</p><p>This is the verified primary GitHub email. Your email is refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="report_comments" ${p.report_comments ? "checked" : ""}> Comments on my reports</label></p><button>Save preferences</button></form><h2>Tokens</h2>${tokens.items.length ? `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr></thead><tbody>${tokens.items.map((t: any) => `<tr><td><code>${esc(t.id)}</code></td><td>${date(t.created_at)}</td><td>${t.last_used_at ? date(t.last_used_at) : "Never"}</td><td>${date(t.expires_at)}</td><td><button data-revoke="${esc(t.id)}">Revoke</button></td></tr>`).join("")}</tbody></table></div>` : "<p>No tokens.</p>"}<div id="revoke-confirm"></div><h2>Delete my account</h2><p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>`;
+  root.innerHTML = `<h1>Settings</h1>${me.user.role === "admin" ? '<p><a href="#/admin/catalogs">Catalogs</a></p>' : ""}<h2>Account</h2><p>GitHub username: ${esc(me.user.username)}</p><p>Your GitHub username is refreshed when you sign in again.</p><h2>Email notifications</h2><p>Email: ${esc(me.email?.address || "Unavailable")}</p><p>This is the verified primary GitHub email. Your email is refreshed when you sign in again.</p>${current().searchParams.get("email") === "retry" ? "<p>GitHub email lookup failed. Please sign in again to refresh your email.</p>" : ""}${config.email_disabled ? "<p>Email notifications are currently disabled.</p>" : !config.email_configured ? "<p>Email delivery is currently unavailable.</p>" : ""}<form id="prefs"><p><label><input type="checkbox" name="replies" ${p.replies ? "checked" : ""}> Replies to my comments</label></p><p><label><input type="checkbox" name="report_comments" ${p.report_comments ? "checked" : ""}> Comments on my reports</label></p><button>Save preferences</button></form><h2>Tokens</h2>${tokens.items.length ? `<div class="table-wrap"><table><thead><tr><th>ID</th><th>Created</th><th>Last used</th><th>Expires</th><th></th></tr></thead><tbody>${tokens.items.map((t: any) => `<tr><td><code>${esc(t.id)}</code></td><td>${date(t.created_at)}</td><td>${t.last_used_at ? date(t.last_used_at) : "Never"}</td><td>${date(t.expires_at)}</td><td><button data-revoke="${esc(t.id)}">Revoke</button></td></tr>`).join("")}</tbody></table></div>` : "<p>No tokens.</p>"}<div id="revoke-confirm"></div><h2>Delete my account</h2><p>For account deletion, contact the operator through <a href="#/contact">Contact</a>.</p>`;
 
   bind("[data-revoke]", (e) => {
     const id = e.currentTarget.dataset.revoke;
@@ -974,10 +985,17 @@ async function route() {
     else if (p === "terms-update") await termsUpdate();
     else if (p === "user") await activity(id);
     else if (p === "account") {
-      if (me.user) await activity(me.user.id);
-      else login();
-    } else if (p.startsWith("my-")) await mine(p.slice(3));
-    else if (p === "admin" && id === "catalogs") await adminCatalogs();
+      if (needUser()) await activity(me.user.id, true);
+    } else if (
+      [
+        "my-reports",
+        "my-comments",
+        "my-starred-reports",
+        "my-starred-claims",
+      ].includes(p)
+    ) {
+      location.replace("#/account?section=" + p.slice(3));
+    } else if (p === "admin" && id === "catalogs") await adminCatalogs();
     else if (p === "settings") await settings();
     else if (p === "device") await devicePage();
     else if (p === "tool-version") await toolVersionPage(id);
