@@ -21,10 +21,11 @@
   ) => {
     const link = (path, label) => `<a href="${siteRoot}#/${path}">${label}</a>`;
     container.innerHTML = me.user
-      ? `<div class="account-links">${
+      ? `<details><summary>${escapeHTML(me.user.username)}</summary><div class="profile-menu">${
           link("account", `My activity (${escapeHTML(me.karma)} karma)`) +
-          link("settings", "Settings")
-        }<button class="link-button" id="logout">Sign out</button></div>`
+          link("settings", "Settings") +
+          (me.user.role === "admin" ? link("admin/catalogs", "Catalogs") : "")
+        }<button id="logout">Sign out</button></div></details>`
       : '<div class="signin"><a href="/auth/github">Sign in with GitHub</a></div>';
     container
       .querySelector("#logout")

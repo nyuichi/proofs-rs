@@ -44,7 +44,17 @@ for (const signedIn of [false, true]) {
       await new Promise((resolve) => setTimeout(resolve, 20));
       if (signedIn) {
         assert.equal(w.document.querySelector("img"), null);
-        assert.equal(w.document.querySelector("details"), null);
+        const menu = w.document.querySelector("details")!;
+        assert.ok(menu);
+        assert.equal(menu.open, false);
+        const summary = menu.querySelector("summary")!;
+        assert.equal(summary.textContent, '<img src=x onerror="alert(1)">');
+        summary.click();
+        assert.equal(menu.open, true);
+        assert.equal(menu.querySelectorAll(".profile-menu > *").length, 4);
+        summary.click();
+        assert.equal(menu.open, false);
+        summary.click();
         assert.deepEqual(
           Array.from(w.document.querySelectorAll("a"), (a) => [
             a.getAttribute("href"),
@@ -53,6 +63,7 @@ for (const signedIn of [false, true]) {
           [
             ["/#/account", "My activity (12 karma)"],
             ["/#/settings", "Settings"],
+            ["/#/admin/catalogs", "Catalogs"],
           ],
         );
         assert.equal(
@@ -67,6 +78,59 @@ for (const signedIn of [false, true]) {
         w.document.querySelector('a[href="/auth/github"]')?.textContent,
         "Sign in with GitHub",
       );
+    } finally {
+      w.close();
+    }
+  });
+}
+
+for (const role of ["user", "admin"]) {
+  test(`App account menu opens from username with role-specific items (${role})`, () => {
+    const dom = new JSDOM('<div id="account-nav"></div>', {
+      url: "https://example.test/",
+      runScripts: "outside-only",
+    });
+    const w = dom.window;
+    try {
+      w.eval(
+        readFileSync(
+          new URL("../public/account-navigation.js", import.meta.url),
+          "utf8",
+        ),
+      );
+      (w as any).proofsAccountNavigation(
+        w.document.querySelector("#account-nav"),
+        { user: { username: "nyuichi", role }, karma: 0 },
+        "",
+        async () => {},
+        assert.fail,
+      );
+      const menu = w.document.querySelector("details")!;
+      assert.ok(menu);
+      assert.equal(menu.open, false);
+      const summary = menu.querySelector("summary")!;
+      assert.equal(summary.textContent, "nyuichi");
+      summary.click();
+      assert.equal(menu.open, true);
+      assert.deepEqual(
+        Array.from(
+          menu.querySelectorAll(".profile-menu > *"),
+          (item) => item.textContent,
+        ),
+        [
+          "My activity (0 karma)",
+          "Settings",
+          ...(role === "admin" ? ["Catalogs"] : []),
+          "Sign out",
+        ],
+      );
+      assert.equal(menu.querySelector("a")?.getAttribute("href"), "#/account");
+      assert.equal(
+        menu.querySelectorAll("a")[1].getAttribute("href"),
+        "#/settings",
+      );
+      summary.click();
+      assert.equal(menu.open, false);
     } finally {
       w.close();
     }
