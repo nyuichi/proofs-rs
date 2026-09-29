@@ -51,7 +51,7 @@ for (const signedIn of [false, true]) {
         assert.equal(summary.textContent, '<img src=x onerror="alert(1)">');
         summary.click();
         assert.equal(menu.open, true);
-        assert.equal(menu.querySelectorAll(".profile-menu > *").length, 3);
+        assert.equal(menu.querySelectorAll(".profile-menu > *").length, 4);
         summary.click();
         assert.equal(menu.open, false);
         summary.click();
@@ -63,6 +63,7 @@ for (const signedIn of [false, true]) {
           [
             ["/#/account", "My activity (12 karma)"],
             ["/#/settings", "Settings"],
+            ["/#/admin/catalogs", "Catalogs"],
           ],
         );
         assert.equal(
@@ -84,7 +85,7 @@ for (const signedIn of [false, true]) {
 }
 
 for (const role of ["user", "admin"]) {
-  test(`App account menu opens from username with exactly three items (${role})`, () => {
+  test(`App account menu opens from username with role-specific items (${role})`, () => {
     const dom = new JSDOM('<div id="account-nav"></div>', {
       url: "https://example.test/",
       runScripts: "outside-only",
@@ -116,7 +117,12 @@ for (const role of ["user", "admin"]) {
           menu.querySelectorAll(".profile-menu > *"),
           (item) => item.textContent,
         ),
-        ["My activity (0 karma)", "Settings", "Sign out"],
+        [
+          "My activity (0 karma)",
+          "Settings",
+          ...(role === "admin" ? ["Catalogs"] : []),
+          "Sign out",
+        ],
       );
       assert.equal(menu.querySelector("a")?.getAttribute("href"), "#/account");
       assert.equal(

@@ -23,7 +23,8 @@
     container.innerHTML = me.user
       ? `<details><summary>${escapeHTML(me.user.username)}</summary><div class="profile-menu">${
           link("account", `My activity (${escapeHTML(me.karma)} karma)`) +
-          link("settings", "Settings")
+          link("settings", "Settings") +
+          (me.user.role === "admin" ? link("admin/catalogs", "Catalogs") : "")
         }<button id="logout">Sign out</button></div></details>`
       : '<div class="signin"><a href="/auth/github">Sign in with GitHub</a></div>';
     container
