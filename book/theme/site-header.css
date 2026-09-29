@@ -70,7 +70,7 @@ html.sidebar-visible #menu-bar,
     top: calc(var(--proofs-header-height) + var(--menu-bar-height));
   }
 }
-@media (max-width: 900px) {
+@media (max-width: 600px) {
   :root {
     --proofs-header-height: 109px;
   }
@@ -85,28 +85,34 @@ html.sidebar-visible #menu-bar,
     margin: 0;
   }
 }
-.proofs-site-account .account-links {
-  display: flex;
-  align-items: baseline;
-  flex-wrap: wrap;
-  gap: 6px 14px;
+.proofs-site-account {
+  position: relative;
 }
-.proofs-site-account .account-links > * {
-  white-space: nowrap;
-}
-.proofs-site-account .link-button {
-  border: 0;
-  padding: 0;
-  background: none;
-  color: #0000ee;
-  text-decoration: underline;
-  font: inherit;
+.proofs-site-account summary {
   cursor: pointer;
+  list-style: none;
+  text-decoration: underline;
+  color: #0000ee;
 }
-@media (max-width: 480px) {
-  :root:has(.account-links) {
-    --proofs-header-height: 145px;
-  }
+.proofs-site-account summary::-webkit-details-marker {
+  display: none;
+}
+.proofs-site-account .profile-menu {
+  position: absolute;
+  right: 0;
+  z-index: 1;
+  min-width: 155px;
+  background: #fff;
+  border: 1px solid #999;
+  padding: 10px;
+}
+.proofs-site-account .profile-menu a {
+  display: block;
+  margin-bottom: 6px;
+}
+.proofs-site-account button {
+  font-size: 16px;
+  cursor: pointer;
 }
 .proofs-site-account [role="alert"] {
   font-size: 14px;
